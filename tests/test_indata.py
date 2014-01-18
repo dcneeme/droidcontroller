@@ -36,3 +36,11 @@ class InDataTests(unittest.TestCase):
         self.assertEqual(val['value'], 30)
         val = buf2.read('testreg3')
         self.assertEqual(val['value'], 33)
+
+    def testCopy(self):
+        buf = InData()
+        buf.write('testreg4', 44)
+        buf2 = buf.copy()
+        buf.write('testreg5', 55)
+        self.assertEqual(buf2.read('testreg4')['value'], 44)
+        self.assertRaises(Exception, lambda: self.buf2.read('testreg5'))
