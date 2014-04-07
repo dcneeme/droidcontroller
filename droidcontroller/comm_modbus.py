@@ -1,6 +1,8 @@
-from droidcontroller.comm import Comm
+# additional modules by neeme in the end!
 
-from pymodbus.register_read_message import *
+from droidcontroller.comm import Comm
+from pymodbus import * # from pymodbus.register_read_message import *
+import traceback
 
 class CommModbus(Comm):
     ''' Implementation of Modbus communications
@@ -73,4 +75,92 @@ class CommModbus(Comm):
             self.on_error(id, **kwargs)
             return
 
-        self.on_data(id, res.registers, **kwargs)
+        self.on_data(id, res.registers, **kwargs) 
+        
+        
+    def read(self, mba, reg, count = 1, type = 'h'):
+        ''' Read Modbus register(s), either holding, iinput or coils
+
+        :param 'mba': Modbus device address
+        :param 'reg': Modbus register address
+        :param 'count': Modbus register count
+        :param 'type': Modbus register type, h = holding, i = input, c = coil
+        
+        '''
+        dummy=0
+        if type == 'h':
+            res = self.client.read_holding_registers(address=reg, count=count, unit=mba) 
+            try: #if (isinstance(res, ReadHoldingRegistersResponse)): # ei funka!
+                dummy=res.registers[0]
+                return res.registers
+            except:
+                print('modbus read failed from',mba,reg,count)
+                return None
+        elif type == 'i':
+            try:
+                res = self.client.read_input_registers(address=reg, count=count, unit=mba) 
+                return res.registers
+            except:
+                traceback.print_exc() # self.on_error(id, **kwargs)
+                return None
+        elif type == 'c':
+            try:
+                #FIXME #res = self.client.read_input_registers(address=reg, count=count, unit=mba) 
+                return res.registers
+            except:
+                traceback.print_exc() # self.on_error(id, **kwargs)
+                return None
+        else:
+            print('unknown type',type)
+            return None
+            
+
+            
+    def write(self, mba, reg, type = 'h', **kwargs):
+        ''' Write Modbus register(s), either holding or coils
+
+        :param 'mba': Modbus device address
+        :param 'reg': Modbus register address
+        :param 'type': Modbus register type, h = holding, c = coil
+        :param kwargs['count']: Modbus registers count for multiple register write
+        :param kwargs['value']: Modbus register value to write
+        :param kwargs['values']: Modbus registers values array to write
+        ''' 
+        try:
+            values = kwargs['values']
+            count = len(values)
+        except:
+            try:
+                value = kwargs['value']
+                count = 1
+            except:
+                print('write parameters problem')
+                return None
+            
+        if type == 'h': # holding
+            if count == 1:
+                try:
+                    self.client.write_register(address=reg, value=value, unit=mba) 
+                    return 0
+                except:
+                    traceback.print_exc() # self.on_error(id, **kwargs)
+                    return None
+            else:
+                try:
+                    res = self.client.write_registers(address=reg, count=count, unit=mba, values = values) 
+                    return 0
+                except:
+                    traceback.print_exc() # self.on_error(id, **kwargs)
+                    return 1
+            
+        elif type == 'c': # coil
+            try:
+                #FIXME #res = self.client.read_input_registers(address=reg, count=count, unit=mba) 
+                return 0
+            except:
+                traceback.print_exc() # self.on_error(id, **kwargs)
+                return 1
+        else:
+            print('unknown type',type)
+            return 2
+            

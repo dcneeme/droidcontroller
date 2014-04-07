@@ -15,7 +15,7 @@ class InData():
             self.data = {}
         self.lock = threading.Lock()
 
-    def write(self, key, value):
+    def write(self, key, value): 
         ''' Write value to the buffer
 
         :param key: The register id
@@ -61,10 +61,10 @@ class InData():
                 return res
             else:
                 self.lock.release()
-                raise Exception('previous data for key not exists')
+                raise Exception('previous data for key '+str(key)+' does not exist')
         else:
             self.lock.release()
-            raise Exception('key not exists')
+            raise Exception('key '+str(key)+' does not exist')
         self.lock.release()
 
     def copy(self):
