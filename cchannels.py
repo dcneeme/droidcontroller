@@ -8,11 +8,11 @@ from sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
 s=SQLgeneral() # init sisse?
 
 class Cchannels(SQLgeneral): # handles counters registers and tables
-    ''' Access to io by modbus analogue register addresses (and also via services?). 
+    ''' Access to io by modbus analogue register addresses (and also via services?).
         Modbus client must be opened before.
         Able to sync input and output channels and accept changes to service members by their sta_reg code
     '''
-    
+
     def __init__(self, in_sql = 'counters.sql', readperiod = 10, sendperiod = 30):
         self.setReadPeriod(readperiod)
         self.setSendPeriod(sendperiod)
@@ -30,60 +30,58 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
         ''' Set the refresh period, executes sync if time from last read was earlier than period ago '''
         self.sendperiod = invar
 
-        
-    def sqlread(table):
+
+    def sqlread(self, table):
         self.s.sqlread(table) # read dichannels
-        
-        
+
+
     def Initialize(self): # before using this create s=SQLgeneral()
         ''' initialize delta t variables, create tables and modbus connection '''
         self.ts = time.time()
         self.ts_read = self.ts # time of last read
         self.ts_send = self.ts -10 # time of last reporting
         self.sqlread(self.in_sql) # read dichannels
-        self.sqlread(self.out_sql) # read dochannels if exist
-        
-        
+
+
     def set_counter(self, value = 0, **kwargs): # mba,regadd,val_reg,member   # one counter to be set. check wcount from counters table
-        ''' sets ONE counter value, any wordlen (number of registers,must be defined in counters.sql) ''' 
+        ''' sets ONE counter value, any wordlen (number of registers,must be defined in counters.sql) '''
         #val_reg=''  # arguments to use a subset of them
         #member=0
         #mba=0
         #regadd=0
         #wcount=0
-        
+
         cur=conn.cursor()
         try:
             mba=kwargs['mba']
             regadd=kwargs['regadd']
-            Cmd="select val_reg,member,mba,regadd,wcount,x2,y2 from counters where mba='"+str(mba)+"' and regadd='"+str(regadd)+"'"
-            #print(Cmd) # debug            
+            Cmd="select val_reg,member,mba,regadd,wcount,x2,y2 from counters where mba='"+str(mba)+"' and regadd='"+str(regadd)+"' and mbi="+str(mbi)
+            #print(Cmd) # debug
         except:
             try:
                 kwargs.get('val_reg','C1V')
                 kwargs.get('member',1)
-                #Cmd="select val_reg,member,mba,regadd,wcount from counters where val_reg='"+val_reg+"' and member='"+str(member)+"' and mba<>'' and regadd<>''"  #
-                #print(Cmd) # debug
+                
             except:
                 print('invalid parameters for set_counter()')
                 return 2
-        
+
         try:
             cur.execute(Cmd)
-            for srow in cur:  
+            for srow in cur:
                 val_reg=srow[0]
                 member=int(srow[1]) # replaces if missing
                 mba=int(srow[2]) # replaces if missing
                 regadd=int(srow[3])
                 wcount=int(srow[4])
                 # x2 y2 for autoscale (5,6)
-                
+
             if wcount == 2: # normal counter
-                mb.write(mba,regadd,count=2, values=[value&4294901760,value&65535]) # 
+                mb[mbi].write(mba,regadd,count=2, values=[value&4294901760,value&65535]) #
                 return 0
             else:
                 if wcount == -2: # barionet counter, MSW must be written first
-                    mb.write(mba,address=regadd, count=2,values=[value&65535, value&4294901760])
+                    mb[mbi].write(mba,address=regadd, count=2,values=[value&65535, value&4294901760])
                     return 0
                 else:
                     print('unsupported counter configuration!',mba,regadd,wcount)
@@ -95,19 +93,19 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
             traceback.print_exc()
             return 1
 
-                                    
- 
- 
-    def read_counter_grp(self,mba,regadd,count,wcount): # using self,in_sql as the table to store in.
+
+
+
+    def read_counter_grp(self,mba,regadd,count,wcount,mbi): # using self,in_sql as the table to store in.
         ''' Read sequential register group, process numbers according to counter size and store raw into table self.in_sql. Inside transaction! '''
-        msg='reading data for counter group from mba '+str(mba)+' regadd '+str(regadd)+' count '+str(count)+' wcount '+str(wcount)
-        print(msg)
+        msg='reading data for counter group from mba '+str(mba)+', regadd '+str(regadd)+', count '+str(count)+', wcount '+str(wcount)+', mbi '+str(mbi)
+        #print(msg) # debug
         if count>0 and mba<>0 and wcount<>0:
-            result = mb.read(mba, regadd, count=count, type='h') # client.read_holding_registers(address=regadd, count=1, unit=mba)
+            result = mb[mbi].read(mba, regadd, count=count, type='h') # client.read_holding_registers(address=regadd, count=1, unit=mba)
         else:
-            print('invalid parameters for read_counter_grp()!',mba,regadd,count,wcount)
+            print('invalid parameters for read_counter_grp()!',mba,regadd,count,wcount,mbi)
             return 2
-            
+
         if result != None:
             try:
                 for i in range(count/abs(wcount)): # tuple to table rows. tuple len is twice count!
@@ -131,12 +129,12 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
             msg='counter data processing FAILED!'
             print(msg)
             return 1
-        
-        
-        
+
+
+
     def read_counters(self): # read all defined counters, usually 32 bit / 2 registers.
         ''' Must read the counter registers by sequential regadd blocks if possible (if regadd increment == wcount.
-            Also converts the raw data (incl member rows wo mba) into services and sends away to UDPchannel. 
+            Also converts the raw data (incl member rows wo mba) into services and sends away to UDPchannel.
             '''
         respcode=0
         mba=0
@@ -160,48 +158,52 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
         bcount=0
         tcpdata=0
         sent=0
-        
+
         try:
             Cmd="BEGIN IMMEDIATE TRANSACTION" # conn3
             conn.execute(Cmd)
-            Cmd="select mba,regadd,wcount from "+self.in_sql+" where mba<>'' and regadd<>'' group by mba,regadd" # tsykkel lugemiseks, tuleks regadd kasvavasse jrk grupeerida
-            cur.execute(Cmd) # selle paringu alusel raw update, hiljem teha value arvutused iga teenuseliikme jaoks eraldi 
+            Cmd="select mba,regadd,wcount,mbi from "+self.in_sql+" where mba<>'' and regadd<>'' group by mbi,mba,regadd" # tsykkel lugemiseks, tuleks regadd kasvavasse jrk grupeerida
+            cur.execute(Cmd) # selle paringu alusel raw update, hiljem teha value arvutused iga teenuseliikme jaoks eraldi
             for row in cur:
                 mba=int(row[0])
                 regadd=int(row[1])
                 wcount=int(row[2]) # step
+                mbi=int(row[3]) # step
+                #print 'mbi,mba,regadd,wcount',mbi,mba,regadd,wcount # debug
                 if bfirst == 0:
                     bfirst = regadd
                     blast = regadd
                     bwcount = wcount # fixed register size for the group
                     bcount=bwcount
                     bmba=mba
+                    bmbi=mbi
                     #print('counter group mba '+str(bmba)+' start ',bfirst) # debug
                 else: # not the first
-                    if mba == bmba and regadd == blast+abs(wcount) and wcount == bwcount: # sequential group still growing
+                    if mbi == bmbi and mba == bmba and regadd == blast+abs(wcount) and wcount == bwcount: # sequential group still growing
                         blast = regadd
                         bcount=bcount+abs(wcount)
                         #print('counter group end shifted to',blast) # debug
-                    else: # a new group started, make a query for previous 
+                    else: # a new group started, make a query for previous
                         #print('counter group end detected at regadd',blast,'bcount',bcount) # debugb
                         #print('going to read counter registers from',bmba,bfirst,'to',blast,'regcount',bcount) # debug
-                        self.read_counter_grp(bmba,bfirst,bcount,bwcount) # reads and updates table with previous data
+                        self.read_counter_grp(bmba,bfirst,bcount,bwcount,bmbi) # reads and updates table with previous data
                         bfirst = regadd # new grp starts immediately
                         blast = regadd
                         bwcount = wcount # fixed register size for the group
                         bcount=bwcount
                         bmba=mba
+                        bmbi=mbi
                         #print('counter group mba '+str(bmba)+' start ',bfirst) # debug
-                        
+
             if bfirst != 0: # last group yet unread
-                #print('counter group end detected at regadd',blast) # debugb
+                #print('counter group end detected at regadd',blast) # debug
                 #print('going to read counter registers from',bmba,bfirst,'to',blast,'regcount',bcount) # debug
-                self.read_counter_grp(bmba,bfirst,bcount,bwcount) # reads and updates table
-            
+                self.read_counter_grp(bmba,bfirst,bcount,bwcount,bmbi) # reads and updates table
+
             # raw sync done.
-            
+
             # now process raw -> value ja status teenuste kaupa. koigepealt tsykkel teenuste kohta, statuse leidmiseks
-            
+
             Cmd="select val_reg from "+self.in_sql+" group by val_reg" # process and report by services
             #print "Cmd=",Cmd
             cur.execute(Cmd) # getting services to be read and reported
@@ -241,7 +243,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                     desc='' # description for UI
                     comment='' # comment internal
                     result=[]
-                    
+
                     # 0       1     2     3     4   5  6  7  8  9    10     11  12    13   14   15    16  17   18
                     #mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,comment  # counters
                     if srow[0] != '':
@@ -297,18 +299,18 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                     # 64 - power to be counted based on count increase and time period between counts
                     # 128 reserv / lsw, msw jarjekord? nagu barix voi nagu android io
 
-                    
+
                     if x1 != x2 and y1 != y2: # seems like normal input data
                         value=(raw-x1)*(y2-y1)/(x2-x1)
                         value=int(y1+value) # integer values to be reported only
                     else:
                         print("read_counters val_reg",val_reg,"member",member,"ai2scale PARAMETERS INVALID:",x1,x2,'->',y1,y2,'conversion not used!')
                         # jaab selline value nagu oli
-        
+
 
                     if avg>1 and abs(value-ovalue)<value/2:  # averaging the readings. big jumps (more than 50% change) are not averaged.
                         value=int(((avg-1)*ovalue+value)/avg) # averaging with the previous value, works like RC low pass filter
-                        print('counter avg on, value became ',value) # debug
+                        #print('counter avg on, value became ',value) # debug
 
                    # print('end processing counter',val_reg,'member',member,'raw',raw,' value',value,' ovalue',ovalue,', avg',avg) # debug
 
@@ -321,9 +323,9 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                             power=float(value/(self.ts-ots)) # power reading
                             print('timeperiod',self.ts-ots,'power',power) # temporary
                             # end special processing for power
-                    
-                    
-                    
+
+
+
                     # STATUS SET. check limits and set statuses based on that
                     # returning to normal with hysteresis, take previous value into account
                     status=0 # initially for each member
@@ -358,11 +360,11 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                         print(msg)
                         value=ovalue # +value # restoring based on ovalue and new count
                         self.set_counter(value,mba,regadd)
-                    
-                    Cmd="update "+self.in_sql+" set value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'" 
+
+                    Cmd="update "+self.in_sql+" set value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
                     conn.execute(Cmd)
-                    
-                    
+
+
                     lisa=lisa+str(value) # members together into one string
 
 
@@ -370,13 +372,13 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                 if self.ts - self.ts_send>self.sendperiod:
                     sent=1
                     sendtuple=[sta_reg,status,val_reg,lisa]
-                    print('counter svc - going to report',sendtuple)  # debug
-                    udp.send(sendtuple) # to uniscada instance 
+                    #print('counter svc - going to report',sendtuple)  # debug
+                    udp.send(sendtuple) # to uniscada instance
             if sent == 1:
                 self.ts_send = self.ts
-            sent = 0    
+            sent = 0
             conn.commit() # counters transaction end
-            return 0 
+            return 0
 
         except: # end reading counters
             msg='problem with counters read or processing: '+str(sys.exc_info()[1])
@@ -389,15 +391,14 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
 
     #read_counters end #############
 
-    
-    
-    
+
+
+
     def doall(self): # do this regularly, executes only if time is is right
         ''' Reads and possibly reports counters on time if executed regularly '''
         self.ts = time.time()
         if self.ts - self.ts_read>self.readperiod:
             self.ts_read = self.ts
             self.read_counters() # also includes ts_sent test and reporting
-            
+
         return 0
-        

@@ -57,6 +57,57 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
         self.makebuff() # create buffer table for unsent messages
 
 
+    def setIP(self, invar):
+        ''' Set the monitoring server ip address '''
+        self.ip = invar
+
+
+    def setPort(self, invar):
+        ''' Set the monitoring server UDP port '''
+        self.port = invar
+
+        
+    def setID(self, invar):
+        ''' Set the host id '''
+        self.id = invar
+        
+    
+    def setRetryDelay(self, invar):
+        ''' Set the monitoring server UDP port '''
+        self.retrysend_delay = invar
+
+    
+    def get_ts(self):
+        '''returns timestamps for last send trial and successful receive '''
+        return self.ts_udpsent, self.ts_udpgot
+        
+
+    def get_traffic(self):
+        return self.traffic # tuple in, out
+        
+
+    def set_traffic(self, bytes_in = None, bytes_out = None): # set traffic counters (it is possible to update only one of them as well)
+        if bytes_in != None:
+            if not bytes_in < 0:
+                self.traffic[0] = bytes_in
+            else:
+                print('invalid bytes_in',bytes_in)
+
+        if bytes_out != None:
+            if not bytes_out < 0:
+                self.traffic[1] = bytes_out
+            else:
+                print('invalid bytes_out',bytes_out)
+                
+
+    def set_inum(self,inum = 0): # set message counter
+        self.inum=inum
+        
+
+    def get_inum(self):  #get message counter
+        return self.inum        
+        
+        
     def makebuff(self): # drops table and creates
         Cmd='drop table if exists '+self.table
         sql="CREATE TABLE "+self.table+"(sta_reg,status NUMERIC,val_reg,value,ts_created NUMERIC,inum NUMERIC,ts_tried NUMERIC);" # semicolon needed for NPE for some reason!
@@ -88,35 +139,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
             traceback.print_exc()
             
 
-    def get_ts(self):
-        '''returns timestamps for last send trial and successful receive '''
-        return self.ts_udpsent, self.ts_udpgot
-        
 
-    def get_traffic(self):
-        return self.traffic # tuple in, out
-        
-
-    def set_traffic(self, bytes_in = None, bytes_out = None): # set traffic counters (it is possible to update only one of them as well)
-        if bytes_in != None:
-            if not bytes_in < 0:
-                self.traffic[0] = bytes_in
-            else:
-                print('invalid bytes_in',bytes_in)
-
-        if bytes_out != None:
-            if not bytes_out < 0:
-                self.traffic[1] = bytes_out
-            else:
-                print('invalid bytes_out',bytes_out)
-                
-
-    def set_inum(self,inum = 0): # set message counter
-        self.inum=inum
-        
-
-    def get_inum(self):  #get message counter
-        return self.inum
         
 
     def send(self, servicetuple): # store service components to buffer for send and resend
@@ -130,7 +153,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
             value=str(servicetuple[3])
             self.ts = time.time()
             Cmd="INSERT into "+self.table+" values('"+sta_reg+"',"+str(status)+",'"+val_reg+"','"+value+"',"+str(self.ts)+",0,0)" # inum and ts_tried left initially empty
-            print(Cmd) # debug
+            #print(Cmd) # debug
             self.conn.execute(Cmd)
             return 0
         except:
@@ -214,7 +237,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
             cur = self.conn.cursor()
             cur.execute(Cmd)
             for srow in cur:
-                print(repr(srow)) # debug, what will be sent
+                #print(repr(srow)) # debug, what will be sent
                 if svc_count == 0: # on first row only increase the inum!
                     self.inum=self.inum+1 # increase the message number / WHY HERE? ACK WILL NOT DELETE THE ROWS!
                     if self.inum > 65535:
@@ -234,11 +257,11 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
                     sendstring=sendstring+sta_reg+":"+str(status)+"\n"
 
                 Cmd="update "+self.table+" set ts_tried="+str(int(self.ts))+",inum="+str(self.inum)+" where sta_reg='"+sta_reg+"' and status="+str(status)+" and ts_created="+str(ts_created)
-                print "update Cmd=",Cmd
+                #print "update Cmd=",Cmd # debug
                 self.conn.execute(Cmd)
 
             if svc_count>0: # there is something (changed services) to be sent!
-                print(svc_count,"services to send using inum",self.inum) # debug
+                #print(svc_count,"services to send using inum",self.inum) # debug
                 self.udpsend(sendstring) # sending away
 
             Cmd="SELECT count(inum) from "+self.table  # unsent service count in buffer
@@ -317,7 +340,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
             rdata,raddr = self.UDPSock.recvfrom(buf)
             data=rdata.decode("utf-8") # python3 related need due to mac in hex
         except:
-            print('no new udp data received') # debug
+            #print('no new udp data received') # debug
             #traceback.print_exc()
             return None
 
