@@ -2,10 +2,11 @@
 # 04.04.2014 OOP
 # 05.04.2014 OOP
 # 06.04.2014 counter grousp with sequential regadd range, optimized read done
-
+# 15.04.2014 added ask_counters()
 
 from sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
 s=SQLgeneral() # init sisse?
+from counter2power import *  # Counter2Power() handles power calculation based on pulse count increments
 
 class Cchannels(SQLgeneral): # handles counters registers and tables
     ''' Access to io by modbus analogue register addresses (and also via services?).
@@ -40,9 +41,29 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
         self.ts = time.time()
         self.ts_read = self.ts # time of last read
         self.ts_send = self.ts -10 # time of last reporting
-        self.sqlread(self.in_sql) # read dichannels
+        self.sqlread(self.in_sql) # read counters table
+        self.ask_counters() # ask server about the last known values of the counter related services
 
 
+    def ask_counters(self): # use on init, send ? to server
+        ''' Queries last counter service values from the server '''
+        Cmd="select val_reg from "+self.in_sql+" group by val_reg" # process and report by services
+        #print "Cmd=",Cmd
+        cur=conn.cursor()
+        cur.execute(Cmd) # getting services to be read and reported
+        for row in cur: # possibly multivalue service members
+            val_reg=row[0]
+            udp.udpsend(val_reg+':?\n') # wo status to uniscada server
+        conn.commit()
+        return 0
+        
+                
+    def restore_counter(self,register): # one at the time
+        ''' decode values from server for set_counter(). some values are counted, but some may be setup values! '''
+        #FIXME!
+        return 0
+    
+    
     def set_counter(self, value = 0, **kwargs): # mba,regadd,val_reg,member   # one counter to be set. check wcount from counters table
         ''' sets ONE counter value, any wordlen (number of registers,must be defined in counters.sql) '''
         #val_reg=''  # arguments to use a subset of them
@@ -202,7 +223,10 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
 
             # raw sync done.
 
-            # now process raw -> value ja status teenuste kaupa. koigepealt tsykkel teenuste kohta, statuse leidmiseks
+            
+            
+            # now process raw -> value and find status BY SERVICES. service loop begins. 
+            #power calcultions happens below too, for each service , not for each counter!
 
             Cmd="select val_reg from "+self.in_sql+" group by val_reg" # process and report by services
             #print "Cmd=",Cmd
@@ -220,6 +244,9 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                 #print Cmd3 # debug
                 cur3.execute(Cmd3)
 
+                if not cp: # counter2power instance chk
+                    cp=[]
+                cpi=0
                 for srow in cur3: # members for one counter svc
                     #print srow # debug
                     mba=0 # local here
@@ -246,39 +273,26 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
 
                     # 0       1     2     3     4   5  6  7  8  9    10     11  12    13   14   15    16  17   18
                     #mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,comment  # counters
-                    if srow[0] != '':
-                        mba=int(srow[0]) # modbus address
-                    if srow[1] != '':
-                        regadd=int(srow[1]) # must be int! can be missing
+                    mba=int(srow[0]) if srow[0] != '' else 0 # modbus address
+                    regadd=int(srow[1]) if srow[1] != ''  else 0 # must be int! can be missing
                     val_reg=srow[2] # string
-                    if srow[3] != '':
-                        member=int(srow[3])
-                    if srow[4] != '':
-                        cfg=int(srow[4]) # config byte
-                    if srow[5] != '':
-                        x1=int(srow[5])
-                    if srow[6] != '':
-                        x2=int(srow[6])
-                    if srow[7] != '':
-                        y1=int(srow[7])
-                    if srow[8] != '':
-                        y2=int(srow[8])
-                    if srow[9] != '':
-                        outlo=int(srow[9])
-                    if srow[10] != '':
-                        outhi=int(srow[10])
-                    if srow[11] != '':
-                        avg=int(srow[11])  #  averaging strength, effective from 2
+                    member=int(srow[3]) if srow[3] != ''  else 0
+                    cfg=int(srow[4]) if srow[4] != ''  else 0 # config byte
+                    x1=int(srow[5]) if srow[5] !=  else 0
+                    x2=int(srow[6]) if srow[6] != ''  else 0
+                    y1=int(srow[7]) if srow[7] != '' else 0
+                    y2=int(srow[8]) if srow[8] != '' else 0
+                    outlo=int(srow[9]) if srow[9] != '' else 0
+                    outhi=int(srow[10]) if srow[10] != '' else 0
+                    avg=int(srow[11]) if srow[11] != '' else 0 #  averaging strength, effective from 2
                     #if srow[12] != '': # block
-                    #    block=int(srow[12]) # block / error count
-                    if srow[13] != '': # updated before raw reading
-                        raw=int(srow[13])
-                    if srow[14] != '': # previous converted value
-                        ovalue=eval(srow[14]) # not updated above!
-                    if srow[15] != '':
-                        ostatus=int(srow[15])
-                    if srow[16] != '':
-                        ots=eval(srow[16])
+                    #  block=int(srow[12]) # block / error count
+                    # updated before raw reading
+                    raw=int(srow[13]) if srow[13] != '' else 0
+                    # previous converted value
+                    ovalue=eval(srow[14]) if srow[14] != '' else 0 # not updated above!
+                    ostatus=int(srow[15]) if srow[15] != '' else 0
+                    ots=eval(srow[16]) if srow[16] != '' else 0
                     #desc=srow[17]
                     #comment=srow[18]
                     #wcount=srow[19] # word count
@@ -294,11 +308,10 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                     # 4 - above outhi warning
                     # 8 - above outhi critical
 
-                    # 16 - to be zeroed regularly, see next bits for when
-                    # 32  - midnight if 1, month change if 0
+                    # 16 - to be zeroed regularly, see next bits for when NOT IN USE! done by server
+                    # 32  - midnight if 1, month change if 0   NOT IN USE
                     # 64 - power to be counted based on count increase and time period between counts
-                    # 128 reserv / lsw, msw jarjekord? nagu barix voi nagu android io
-
+                    # 128 - OFF-state not used in lolimit, OFF is equal to in-range??
 
                     if x1 != x2 and y1 != y2: # seems like normal input data
                         value=(raw-x1)*(y2-y1)/(x2-x1)
@@ -317,15 +330,15 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
 
                     #POWER?
                     if (cfg&16): # power, increment to be calculated! divide increment to time from the last reading to get the power
-                        if ots != self.ts: # avoid division by zero
-                            valuediff=value-ovalue # ei saa raw vaartustega tegelda
-                            print('counter value increment',value,) # temporary
-                            power=float(value/(self.ts-ots)) # power reading
-                            print('timeperiod',self.ts-ots,'power',power) # temporary
-                            # end special processing for power
-
-
-
+                        cpi=cpi+1 # counter2power index
+                        if len(cp)<ci: # counter2power instances not yet created
+                            cp.append(Counter2Power(val_reg,member,outlo,outhi)) # another instance
+                            print('Counter2Power() instance cp['+str(cpi-1)+'] created')
+                        value=cp[cpi].calc(value, ots) # power calc
+                        print('got value from cp['+str(cpi-1)+']: '+str(value))  # debug
+                        
+                        
+                        
                     # STATUS SET. check limits and set statuses based on that
                     # returning to normal with hysteresis, take previous value into account
                     status=0 # initially for each member

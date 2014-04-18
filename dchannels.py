@@ -186,7 +186,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             #  bit values updated for all dichannels
             
             conn.commit()  # dichannel-bits transaction end
-
+            print '.', # debug, to mark di polling interval
             return 0
 
         except: # Exception,err:  # python3 ei taha seda viimast

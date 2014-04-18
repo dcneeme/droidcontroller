@@ -3,7 +3,7 @@
 # 04.04.2014 it works, without periodical executuoin and without acces by svc reg 
 # 06.04.2014 seguential register read for optimized reading, done
 # 14.04.2014 mb[mbi] (multiple modbus connections) support. NOT READY!
-
+# 16.04.2014 fixed mts problem, service messaging ok
 
 from sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
 s=SQLgeneral() # sql connection
@@ -60,7 +60,7 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
             try:
                 for i in range(count): # tuple to table rows. tuple len is twice count!
                     Cmd="UPDATE "+self.in_sql+" set raw='"+str(result[i])+"', ts='"+str(self.ts)+"' where mba='"+str(mba)+"' and mbi="+str(mbi)+" and regadd='"+str(regadd+i)+"'" # koigile korraga
-                    #print('i',i,Cmd) # debug
+                    #print(Cmd) # debug
                     conn.execute(Cmd)
                 return 0
             except:
@@ -452,6 +452,7 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
         #print Cmd3 # ajutine
         cur.execute(Cmd) # another cursor to read the same table
 
+        mts=0  # max timestamp for svc members. if too old, skip messaging to server
         for srow in cur: # service members
             #print repr(srow) # debug
             mba=-1 #
@@ -469,45 +470,28 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
             oraw=0
             ovalue=0 # previous (possibly averaged) value
             ots=0 # eelmine ts value ja status ja raw oma
-            mts=0 # max ts, if too old, skip the service reporting
             avg=0 # keskmistamistegur, mojub alates 2
             #desc=''
             #comment=''
             # 0       1     2     3     4   5  6  7  8  9    10     11  12    13  14   15     16  17    18
             #mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,comment  # aichannels
-            if srow[0] != '':
-                mba=int(srow[0]) # must be int! will be -1 if empty (setpoints)
-            if srow[1] != '':
-                regadd=int(srow[1]) # must be int! will be -1 if empty
+            mba=int(srow[0]) if srow[0] != '' else 0   # must be int! will be -1 if empty (setpoints)
+            regadd=int(srow[1]) if srow[1] != '' else 0  # must be int! will be -1 if empty
             val_reg=srow[2] # see on string
-            if srow[3] != '':
-                member=int(srow[3])
-            if srow[4] != '':
-                cfg=int(srow[4]) # konfibait nii ind kui grp korraga, esita hex kujul hiljem
-            if srow[5] != '':
-                x1=int(srow[5])
-            if srow[6] != '':
-                x2=int(srow[6])
-            if srow[7] != '':
-                y1=int(srow[7])
-            if srow[8] != '':
-                y2=int(srow[8])
-            if srow[9] != '':
-                outlo=int(srow[9])
-            if srow[10] != '':
-                outhi=int(srow[10])
-            if srow[11] != '':
-                avg=int(srow[11])  #  averaging strength, values 0 and 1 do not average!
-            #if srow[12] != '': # block - loendame siin vigu, kui kasvab yle 3? siis enam ei saada
-                #block=int(srow[12])  #
-            if srow[13] != '': #
-                oraw=int(srow[13])
-            if srow[14] != '':
-                value=float(srow[14]) # teenuseliikme vaartus
-            if srow[15] != '':
-                ostatus=int(srow[15]) # teenusekomponendi status - ei kasuta
-            if srow[16] != '':
-                ots=eval(srow[16])
+            member=int(srow[3]) if srow[3] != '' else 0
+            cfg=int(srow[4]) if srow[4] != '' else 0 # konfibait nii ind kui grp korraga, esita hex kujul hiljem
+            x1=int(srow[5]) if srow[5] != '' else 0
+            x2=int(srow[6]) if srow[6] != '' else 0
+            y1=int(srow[7]) if srow[7] != '' else 0
+            y2=int(srow[8]) if srow[8] != '' else 0
+            outlo=int(srow[9]) if srow[9] != '' else None
+            outhi=int(srow[10]) if srow[10] != '' else None
+            avg=int(srow[11]) if srow[11] != '' else 0  #  averaging strength, values 0 and 1 do not average!
+            #block=int(srow[12]) if srow[12] != '' else 0 # - loendame siin vigu, kui kasvab yle 3? siis enam ei saada
+            oraw=int(srow[13]) if srow[13] != '' else 0
+            value=float(srow[14]) if srow[14] != '' else 0 # teenuseliikme vaartus
+            ostatus=int(srow[15]) if srow[15] != '' else 0 # teenusekomponendi status - ei kasuta
+            ots=eval(srow[16]) if srow[16] != '' else 0
             #desc=srow[17]
             #comment=srow[18]
 
@@ -545,11 +529,11 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
                     #block=0
 
     #############                
-                            
-            if mba<>'' and regadd<>'':
+            #print 'make ai mba ots mts',mba,ots,mts # debug
+            if mba>0:
                 if ots>mts:
                     mts=ots # latest member timestamp for the current service
-
+                    
             if lisa != '': # not the first member
                 lisa=lisa+' ' # separator between member values
             lisa=lisa+str(value) # adding member values into one string
