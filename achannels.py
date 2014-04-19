@@ -39,7 +39,7 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
         
     def Initialize(self): # before using this create s=SQLgeneral()
         ''' initialize delta t variables, create tables and modbus connection '''
-        self.ts = time.time()
+        self.ts = round(time.time(),1)
         self.ts_read = self.ts # time of last read
         self.ts_send = self.ts -150 # time of last reporting
         self.sqlread(self.in_sql) # read aichannels
@@ -556,7 +556,7 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
         
     def doall(self): # do this regularly, executes only if time is is right
         ''' Does everything on time if executed regularly '''
-        self.ts = time.time()
+        self.ts = round(time.time(),1)
         if self.ts - self.ts_read > self.readperiod:
             self.ts_read = self.ts
             self.sync_ai() # 

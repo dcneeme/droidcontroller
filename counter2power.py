@@ -3,7 +3,7 @@
 # 17.4.2014 started
 
 
-class Count2Power(): # should it use cchannels as parent?
+class Counter2Power(): # should it use cchannels as parent?
     ''' Accepts input as raw counter value and returns value based on count and time increments since last execution.
         Parameter maxinc is pulse increment to be used for sliding window averaging. Only ON-state values are taken into account,
         zero increments will start off-state if time from last execution has been enough to detect drop below 1/3 of ON-state power.
@@ -23,6 +23,7 @@ class Count2Power(): # should it use cchannels as parent?
         self.ts_last=0
         self.count_last=0
         self.state=0 # OFF
+        self.decn=len(str(maxinc/3)) # trying to adjust the rounding of the output to the theoretical maximum precision
         self.inc_dict={} # averaging buffer for ON-state, {ts:count}
 
 
@@ -41,7 +42,7 @@ class Count2Power(): # should it use cchannels as parent?
         # check dictionary size, delete items based on state and value differencies
         #min(self.inc_d, key=d.get)
 
-        print self.inc_dict # debug
+        #print self.inc_dict # debug
 
         if len(self.inc_dict) == 0: # first execution
             self.inc_dict[ts]=count
@@ -50,28 +51,39 @@ class Count2Power(): # should it use cchannels as parent?
             return None,None,None,None # no data to calculate anything yet
 
         if len(self.inc_dict)>2: # possibly reduce the number of items if there is more than 2 items in it
-            self.inc_dict = {k: v for k, v in self.inc_dict.items() if v > (count - self.inc[self.state])} # reduce item count based on state
-            print('reduced inc_dict to:',self.inc_dict) # debug
+            #self.inc_dict = {k: v for k, v in self.inc_dict.items() if v > (count - self.inc[self.state])} # reduce item count based on state. does not work with 2.6.6!
+            dict={} # temporary dictionary
+            for key in self.inc_dict: # FIXME ara kustuta koiki ja tee seda alati alates vanematest. sordi key-d, 2 vanemat alati alles, siis uuri lopuni
+                if self.inc_dict[key] > (count - self.inc[self.state]): # include that value
+                    dict[key]=self.inc_dict[key]
+            self.inc_dict=dict # replace the dictionery with shortened version according to the count difference between the ends
+            #print('reduced inc_dict to:',self.inc_dict) # debug
 
         #find the item with minimum time (or count, no difference) from the dictionary
         timefrom=min(self.inc_dict, key=self.inc_dict.get) # ts with least count
         countfrom=self.inc_dict[timefrom] # min count in dict, to be used in power calculation
 
-        if count>self.count_last: # only add new items to the inc_dict if there was a count increase since last execution!
+        if count>self.count_last and (ts - timefrom) > 0: # only add new items to the inc_dict if there was a count increase since last execution!
             self.state = 1 # definitely ON
-            self.inc_dict[ts]=count # added new item
+            self.inc_dict[round(ts,2)]=count # added new item
             self.count_last=count
             self.ts_last=ts
 
-        elif count == self.count_last: # no count increase
+        elif count == self.count_last: # no count increase, thus no dict update
             # now is the time diff since last big enough to decide about OFF state?
             if count == countfrom: # no change since dict beginning
-                self.state=0
-                print('off1') # debug
+                if self.state>0:
+                    self.state=0
+                    print('OFF due to no change since dict begin') # debug
                 return 0,0,ts - timefrom, count-countfrom  # definitely OFF
             elif (count - countfrom)>0 and (ts - self.ts_last > 3.3*(ts-timefrom)/(count - countfrom)): # power drop below 1/3 avg verified
-                self.state=0
-                print('off2') # debug
+                if self.state >0:
+                    self.state=0
+                    print('OFF due to no count increase and waited enough to make sure power is below 1/3 of window average') # debug
                 return 0,0,ts - timefrom, count-countfrom  # definitely OFF
 
-        return 1.0*(count - countfrom)/(ts - timefrom), self.state, ts-timefrom, count-countfrom # average power over dict!
+        if (ts - timefrom) > 0: # avoid division by zero
+            return round(1.0*(count - countfrom)/(ts - timefrom),self.decn), self.state, ts-timefrom, count-countfrom # average power over dict!
+        else:
+            print 'zero time increment, no power output!'
+            return None, self.state, ts-timefrom, count-countfrom

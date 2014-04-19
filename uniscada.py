@@ -47,7 +47,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
 
     def Initialize(self):
         ''' initialize time/related variables and create buffer database with one table in memory '''
-        self.ts = time.time()
+        self.ts = round(time.time(),1)
         #self.ts_inum = self.ts # inum increase time, is it used at all? NO!
         self.ts_unsent = self.ts # last unsent chk
         self.ts_udpsent=self.ts
@@ -151,7 +151,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
             status=int(servicetuple[1])
             val_reg=str(servicetuple[2])
             value=str(servicetuple[3])
-            self.ts = time.time()
+            self.ts = round(time.time(),1)
             Cmd="INSERT into "+self.table+" values('"+sta_reg+"',"+str(status)+",'"+val_reg+"','"+value+"',"+str(self.ts)+",0,0)" # inum and ts_tried left initially empty
             #print(Cmd) # debug
             self.conn.execute(Cmd)
@@ -169,7 +169,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
         ''' Counts the non-acknowledged messages and removes older than 3 times retrysend_delay '''
         if self.ts - self.ts_unsent < self.retrysend_delay / 2: # no need to recheck too early
             return 0
-        self.ts = time.time()
+        self.ts = round(time.time(),1)
         self.ts_unsent = self.ts
         mintscreated=0
         maxtscreated=0
@@ -410,7 +410,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
 
     def comm(self): # do this regularly, blocks for the time of socket timeout!
         ''' Communicates with server, returns cmd and setup key:value'''
-        self.ts = time.time()
+        self.ts = round(time.time(),1)
         self.unsent()
         udpgot = self.udpread() # check for incoming udp data
         self.buff2server() # the ack for this is available on next comm() hopefully
