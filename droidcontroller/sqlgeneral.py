@@ -5,23 +5,15 @@ import sqlite3
 import traceback
 import sys
 from pymodbus import *
-from comm_modbus import *  # contains CommModbus, .read(), .write()
+from droidcontroller.comm_modbus import CommModbus  # contains CommModbus, .read(), .write()
 from uniscada import *
 
 try:
     if udp:
         print('uniscada connection already existing to',host,port)
 except:
-    udp=UDPchannel(ip='46.183.73.35')
+    udp=UDPchannel(ip='46.183.73.35', id='000101100001')
     print('created uniscada connection')
-
-
-try:
-    if mb:
-        print('modbus connection already existing to',host,port)
-except:
-    mb = CommModbus(host='127.0.0.1', port=502)
-    print('created modbus connection')
 
 
 try:
@@ -31,6 +23,25 @@ except:
     conn = sqlite3.connect(':memory:')
     print('created sqlite connection')
 
+
+try:
+    if mb:
+        print('modbus connection(s) already existing')
+except:
+    # several connections may be needed, tuple of modbus connections! also direct rtu, rtu via tcp-serial or tcp-modbustcp
+    sql=open('devices.sql').read() # (num integer,rtuaddr integer,tcpaddr)
+    conn.executescript(sql) # read table into database 
+    conn.commit()
+    mb=[]
+    Cmd="select mbi, tcpaddr from devices group by mbi"
+    cur=conn.cursor()
+    cur.execute(Cmd)
+    conn.commit()
+    for row in cur:
+        if ':' in row[1]:
+            mb.append(CommModbus(host=row[1].split(':')[0], port=int(row[1].split(':')[1]))) # tcp
+        #FIXME handle serial or xport connections too!
+    print('created modbus connection(s)')
 
 
 
@@ -53,9 +64,8 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
             print(repr(row))
 
 
-    def test_mbread(self, mba, reg, count = 1):
-        #return self.mb.read(mba,reg,count)
-        return mb.read(mba,reg,count)
+    def test_mbread(self, mba, reg, count = 1, mbi=0): # mbi only defines mb[] to be used
+        return mb[mbi].read(mba,reg,count)
 
 
     def sqlread(self,table): # drops table and reads from file table.sql that must exist
@@ -80,6 +90,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
             #self.conn.commit()
             msg='sqlread: successfully recreated table '+table
             print(msg)
+            #syslog(msg)
             #syslog(msg)
             time.sleep(0.5)
             return 0

@@ -47,12 +47,12 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
 
     def Initialize(self):
         ''' initialize time/related variables and create buffer database with one table in memory '''
-        self.ts = time.time()
+        self.ts = round(time.time(),1)
         #self.ts_inum = self.ts # inum increase time, is it used at all? NO!
         self.ts_unsent = self.ts # last unsent chk
         self.ts_udpsent=self.ts
         self.ts_udpgot=self.ts
-        self.conn = sqlite3.connect(':memory:')
+        self.conn = sqlite3.connect(':memory:') 
         #self.cur=self.conn.cursor() # cursors to read data from tables / cursor can be local
         self.makebuff() # create buffer table for unsent messages
 
@@ -66,25 +66,25 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
         ''' Set the monitoring server UDP port '''
         self.port = invar
 
-
+        
     def setID(self, invar):
         ''' Set the host id '''
         self.id = invar
-
-
+        
+    
     def setRetryDelay(self, invar):
         ''' Set the monitoring server UDP port '''
         self.retrysend_delay = invar
 
-
+    
     def get_ts(self):
         '''returns timestamps for last send trial and successful receive '''
         return self.ts_udpsent, self.ts_udpgot
-
+        
 
     def get_traffic(self):
         return self.traffic # tuple in, out
-
+        
 
     def set_traffic(self, bytes_in = None, bytes_out = None): # set traffic counters (it is possible to update only one of them as well)
         if bytes_in != None:
@@ -98,16 +98,16 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
                 self.traffic[1] = bytes_out
             else:
                 print('invalid bytes_out',bytes_out)
-
+                
 
     def set_inum(self,inum = 0): # set message counter
         self.inum=inum
-
+        
 
     def get_inum(self):  #get message counter
-        return self.inum
-
-
+        return self.inum        
+        
+        
     def makebuff(self): # drops table and creates
         Cmd='drop table if exists '+self.table
         sql="CREATE TABLE "+self.table+"(sta_reg,status NUMERIC,val_reg,value,ts_created NUMERIC,inum NUMERIC,ts_tried NUMERIC);" # semicolon needed for NPE for some reason!
@@ -137,10 +137,10 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
             print('buffer content deleted')
         except:
             traceback.print_exc()
+            
 
 
-
-
+        
 
     def send(self, servicetuple): # store service components to buffer for send and resend
         ''' adds service components into buffer to be sent as a string message
@@ -151,9 +151,9 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
             status=int(servicetuple[1])
             val_reg=str(servicetuple[2])
             value=str(servicetuple[3])
-            self.ts = time.time()
+            self.ts = round(time.time(),1)
             Cmd="INSERT into "+self.table+" values('"+sta_reg+"',"+str(status)+",'"+val_reg+"','"+value+"',"+str(self.ts)+",0,0)" # inum and ts_tried left initially empty
-            print(Cmd) # debug
+            #print(Cmd) # debug
             self.conn.execute(Cmd)
             return 0
         except:
@@ -169,7 +169,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
         ''' Counts the non-acknowledged messages and removes older than 3 times retrysend_delay '''
         if self.ts - self.ts_unsent < self.retrysend_delay / 2: # no need to recheck too early
             return 0
-        self.ts = time.time()
+        self.ts = round(time.time(),1)
         self.ts_unsent = self.ts
         mintscreated=0
         maxtscreated=0
@@ -237,7 +237,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
             cur = self.conn.cursor()
             cur.execute(Cmd)
             for srow in cur:
-                print(repr(srow)) # debug, what will be sent
+                #print(repr(srow)) # debug, what will be sent
                 if svc_count == 0: # on first row only increase the inum!
                     self.inum=self.inum+1 # increase the message number / WHY HERE? ACK WILL NOT DELETE THE ROWS!
                     if self.inum > 65535:
@@ -257,11 +257,11 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
                     sendstring=sendstring+sta_reg+":"+str(status)+"\n"
 
                 Cmd="update "+self.table+" set ts_tried="+str(int(self.ts))+",inum="+str(self.inum)+" where sta_reg='"+sta_reg+"' and status="+str(status)+" and ts_created="+str(ts_created)
-                print "update Cmd=",Cmd
+                #print "update Cmd=",Cmd # debug
                 self.conn.execute(Cmd)
 
             if svc_count>0: # there is something (changed services) to be sent!
-                print(svc_count,"services to send using inum",self.inum) # debug
+                #print(svc_count,"services to send using inum",self.inum) # debug
                 self.udpsend(sendstring) # sending away
 
             Cmd="SELECT count(inum) from "+self.table  # unsent service count in buffer
@@ -340,7 +340,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
             rdata,raddr = self.UDPSock.recvfrom(buf)
             data=rdata.decode("utf-8") # python3 related need due to mac in hex
         except:
-            print('no new udp data received') # debug
+            #print('no new udp data received') # debug
             #traceback.print_exc()
             return None
 
@@ -410,7 +410,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
 
     def comm(self): # do this regularly, blocks for the time of socket timeout!
         ''' Communicates with server, returns cmd and setup key:value'''
-        self.ts = time.time()
+        self.ts = round(time.time(),1)
         self.unsent()
         udpgot = self.udpread() # check for incoming udp data
         self.buff2server() # the ack for this is available on next comm() hopefully

@@ -2,7 +2,8 @@
 # 03.04.2014 neeme
 # 04.04.2014 it works, without periodical executuoin and without acces by svc reg 
 # 06.04.2014 seguential register read for optimized reading, done
-
+# 14.04.2014 mb[mbi] (multiple modbus connections) support. NOT READY!
+# 16.04.2014 fixed mts problem, service messaging ok
 
 from sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
 s=SQLgeneral() # sql connection
@@ -38,19 +39,19 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
         
     def Initialize(self): # before using this create s=SQLgeneral()
         ''' initialize delta t variables, create tables and modbus connection '''
-        self.ts = time.time()
+        self.ts = round(time.time(),1)
         self.ts_read = self.ts # time of last read
         self.ts_send = self.ts -150 # time of last reporting
         self.sqlread(self.in_sql) # read aichannels
         self.sqlread(self.out_sql) # read aochannels if exist
         
         
-    def read_ai_grp(self,mba,regadd,count): # using self,in_sql as the table to store in.
+    def read_ai_grp(self,mba,regadd,count,mbi=0): # using self,in_sql as the table to store in. mbi - modbus channel index
         ''' Read sequential register group and store raw into table self.in_sql. Inside transaction! '''
-        msg='reading data for aichannels group from mba '+str(mba)+' regadd '+str(regadd)+' count '+str(count)
-        print(msg)
+        msg='reading data for aichannels group from mbi '+str(mbi)+', mba '+str(mba)+', regadd '+str(regadd)+', count '+str(count)
+        #print(msg) # debug
         if count>0 and mba<>0:
-            result = mb.read(mba, regadd, count=count, type='h') # client.read_holding_registers(address=regadd, count=1, unit=mba)
+            result = mb[mbi].read(mba, regadd, count=count, type='h') # client.read_holding_registers(address=regadd, count=1, unit=mba)
         else:
             print('invalid parameters for read_ai_grp()!',mba,regadd,count)
             return 2
@@ -58,8 +59,8 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
         if result != None:
             try:
                 for i in range(count): # tuple to table rows. tuple len is twice count!
-                    Cmd="UPDATE "+self.in_sql+" set raw='"+str(result[i])+"', ts='"+str(self.ts)+"' where mba='"+str(mba)+"' and regadd='"+str(regadd+i)+"'" # koigile korraga
-                    #print('i',i,Cmd) # debug
+                    Cmd="UPDATE "+self.in_sql+" set raw='"+str(result[i])+"', ts='"+str(self.ts)+"' where mba='"+str(mba)+"' and mbi="+str(mbi)+" and regadd='"+str(regadd+i)+"'" # koigile korraga
+                    #print(Cmd) # debug
                     conn.execute(Cmd)
                 return 0
             except:
@@ -88,15 +89,17 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
         bfirst=0
         blast=0
         bmba=0
+        bmbi=0
         bcount=0
         
         try:
             Cmd="BEGIN IMMEDIATE TRANSACTION" # hoiab kinni kuni mb suhtlus kestab? teised seda ei kasuta samal ajal nagunii. iga tabel omaette.
             conn.execute(Cmd)
             #self.conn.execute(Cmd)
-            Cmd="select mba,regadd from "+self.in_sql+" where mba<>'' and regadd<>'' group by mba,regadd" # tsykkel lugemiseks, tuleks regadd kasvavasse jrk grupeerida
+            Cmd="select mba,regadd,mbi from "+self.in_sql+" where mba<>'' and regadd<>'' group by mbi,mba,regadd" # tsykkel lugemiseks, tuleks regadd kasvavasse jrk grupeerida
             cur.execute(Cmd) # selle paringu alusel raw update, hiljem teha value arvutused iga teenuseliikme jaoks eraldi 
             for row in cur:
+                mbi=int(row[2]) # niigi num
                 mba=int(row[0])
                 regadd=int(row[1])
                 if bfirst == 0:
@@ -104,26 +107,28 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
                     blast = regadd
                     bcount=1
                     bmba=mba
-                    #print('ai group mba '+str(bmba)+' start ',bfirst) # debug
+                    bmbi=mbi
+                    #print('ai group mba '+str(bmba)+' start ',bfirst,'mbi',mbi) # debug
                 else: # not the first
-                    if mba == bmba and regadd == blast+1: # sequential group still growing
+                    if mbi == bmbi and mba == bmba and regadd == blast+1: # sequential group still growing
                         blast = regadd
                         bcount=bcount+1
                         #print('ai group end shifted to',blast) # debug
                     else: # a new group started, make a query for previous 
                         #print('ai group end detected at regadd',blast,'bcount',bcount) # debugb
-                        #print('going to read ai registers from',bmba,bfirst,'to',blast,'regcount',bcount) # debug
-                        self.read_ai_grp(bmba,bfirst,bcount) # reads and updates table with previous data
+                        #print('going to read ai registers from',bmbi,bmba,bfirst,'to',blast,'regcount',bcount) # debug
+                        self.read_ai_grp(bmba,bfirst,bcount,bmbi) # reads and updates table with previous data
                         bfirst = regadd # new grp starts immediately
                         blast = regadd
                         bcount=1
                         bmba=mba
+                        bmbi=mbi
                         #print('ai group mba '+str(bmba)+' start ',bfirst) # debug
                         
             if bfirst != 0: # last group yet unread
                 #print('ai group end detected at regadd',blast) # debugb
                 #print('going to read ai registers from',bmba,bfirst,'to',blast,'regcount',bcount) # debug
-                self.read_ai_grp(bmba,bfirst,bcount) # reads and updates table
+                self.read_ai_grp(bmba,bfirst,bcount,bmbi) # reads and updates table
             
             #  raw updated for all aichannels
             
@@ -199,7 +204,7 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
                         value=(raw-x1)*(y2-y1)/(x2-x1) # lineaarteisendus
                         value=y1+value
                         msg=val_reg
-                        print 'raw',raw,', value',value, # debug
+                        #print 'raw',raw,', value',value, # debug
                         if avg>1 and abs(value-ovalue)<value/2: # keskmistame, hype ei ole suur
                         #if avg>1:  # lugemite keskmistamine vajalik, kusjures vaartuse voib ju ka komaga sailitada!
                             value=((avg-1)*ovalue+value)/avg # averaging
@@ -217,7 +222,7 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
             
                     #print 'status for AI val_reg, member',val_reg,member,status,'due to cfg',cfg,'and value',value,'while limits are',outlo,outhi # debug
                     #"+self.in_sql+"  update with new value and sdatus
-                    Cmd="UPDATE "+self.in_sql+"  set status='"+str(status)+"', value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'" # meelde
+                    Cmd="UPDATE "+self.in_sql+"  set status='"+str(status)+"', value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"' and mbi='"+str(mbi)+"'" # meelde
                     #print Cmd
                     conn.execute(Cmd)
                     
@@ -260,7 +265,9 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
             # 0      1   2    3        4      5    6      7
             #mba,regadd,bit,bootvalue,value,rule,desc,comment
 
-            Cmd="select aochannels.mba,aochannels.regadd,aochannels.value from aochannels left join aichannels on aochannels.mba = aichannels.mba AND aochannels.regadd = aichannels.regadd where aochannels.value != aichannels.value" # 
+            Cmd="select aochannels.mba,aochannels.regadd,aochannels.value,aochannels.mbi from aochannels left join aichannels \
+                on aochannels.mba = aichannels.mba AND aochannels.mbi = aichannels.mbi AND aochannels.regadd = aichannels.regadd \
+                where aochannels.value != aichannels.value" # 
             # the command above retrieves mba, regadd and value where values do not match in aichannels and aochannels 
             #print "Cmd=",Cmd
             cur.execute(Cmd)
@@ -288,7 +295,7 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
                 :param kwargs['value']: Modbus register value to write
                 :param kwargs['values']: Modbus registers values array to write
                 ''' 
-                respcode=respcode+mb.write(mba=mba, reg=regadd,value=value) 
+                respcode=respcode+mb[mbi].write(mba=mba, reg=regadd,value=value) 
    
             conn.commit()  #  transaction end - why?
             return 0
@@ -445,6 +452,7 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
         #print Cmd3 # ajutine
         cur.execute(Cmd) # another cursor to read the same table
 
+        mts=0  # max timestamp for svc members. if too old, skip messaging to server
         for srow in cur: # service members
             #print repr(srow) # debug
             mba=-1 #
@@ -462,45 +470,28 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
             oraw=0
             ovalue=0 # previous (possibly averaged) value
             ots=0 # eelmine ts value ja status ja raw oma
-            mts=0 # max ts, if too old, skip the service reporting
             avg=0 # keskmistamistegur, mojub alates 2
             #desc=''
             #comment=''
             # 0       1     2     3     4   5  6  7  8  9    10     11  12    13  14   15     16  17    18
             #mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,comment  # aichannels
-            if srow[0] != '':
-                mba=int(srow[0]) # must be int! will be -1 if empty (setpoints)
-            if srow[1] != '':
-                regadd=int(srow[1]) # must be int! will be -1 if empty
+            mba=int(srow[0]) if srow[0] != '' else 0   # must be int! will be -1 if empty (setpoints)
+            regadd=int(srow[1]) if srow[1] != '' else 0  # must be int! will be -1 if empty
             val_reg=srow[2] # see on string
-            if srow[3] != '':
-                member=int(srow[3])
-            if srow[4] != '':
-                cfg=int(srow[4]) # konfibait nii ind kui grp korraga, esita hex kujul hiljem
-            if srow[5] != '':
-                x1=int(srow[5])
-            if srow[6] != '':
-                x2=int(srow[6])
-            if srow[7] != '':
-                y1=int(srow[7])
-            if srow[8] != '':
-                y2=int(srow[8])
-            if srow[9] != '':
-                outlo=int(srow[9])
-            if srow[10] != '':
-                outhi=int(srow[10])
-            if srow[11] != '':
-                avg=int(srow[11])  #  averaging strength, values 0 and 1 do not average!
-            #if srow[12] != '': # block - loendame siin vigu, kui kasvab yle 3? siis enam ei saada
-                #block=int(srow[12])  #
-            if srow[13] != '': #
-                oraw=int(srow[13])
-            if srow[14] != '':
-                value=float(srow[14]) # teenuseliikme vaartus
-            if srow[15] != '':
-                ostatus=int(srow[15]) # teenusekomponendi status - ei kasuta
-            if srow[16] != '':
-                ots=eval(srow[16])
+            member=int(srow[3]) if srow[3] != '' else 0
+            cfg=int(srow[4]) if srow[4] != '' else 0 # konfibait nii ind kui grp korraga, esita hex kujul hiljem
+            x1=int(srow[5]) if srow[5] != '' else 0
+            x2=int(srow[6]) if srow[6] != '' else 0
+            y1=int(srow[7]) if srow[7] != '' else 0
+            y2=int(srow[8]) if srow[8] != '' else 0
+            outlo=int(srow[9]) if srow[9] != '' else None
+            outhi=int(srow[10]) if srow[10] != '' else None
+            avg=int(srow[11]) if srow[11] != '' else 0  #  averaging strength, values 0 and 1 do not average!
+            #block=int(srow[12]) if srow[12] != '' else 0 # - loendame siin vigu, kui kasvab yle 3? siis enam ei saada
+            oraw=int(srow[13]) if srow[13] != '' else 0
+            value=float(srow[14]) if srow[14] != '' else 0 # teenuseliikme vaartus
+            ostatus=int(srow[15]) if srow[15] != '' else 0 # teenusekomponendi status - ei kasuta
+            ots=eval(srow[16]) if srow[16] != '' else 0
             #desc=srow[17]
             #comment=srow[18]
 
@@ -538,11 +529,11 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
                     #block=0
 
     #############                
-                            
-            if mba<>'' and regadd<>'':
+            #print 'make ai mba ots mts',mba,ots,mts # debug
+            if mba>0:
                 if ots>mts:
                     mts=ots # latest member timestamp for the current service
-
+                    
             if lisa != '': # not the first member
                 lisa=lisa+' ' # separator between member values
             lisa=lisa+str(value) # adding member values into one string
@@ -550,7 +541,7 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
         # service done
         if self.ts-mts < 3*self.readperiod and status<3: # data fresh enough to be sent
             sendtuple=[sta_reg,status,val_reg,lisa] # sending service to buffer
-            print('ai svc - going to report',sendtuple)  # debug
+           # print('ai svc - going to report',sendtuple)  # debug
             udp.send(sendtuple) # to uniscada instance 
 
         else:
@@ -565,7 +556,7 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
         
     def doall(self): # do this regularly, executes only if time is is right
         ''' Does everything on time if executed regularly '''
-        self.ts = time.time()
+        self.ts = round(time.time(),1)
         if self.ts - self.ts_read > self.readperiod:
             self.ts_read = self.ts
             self.sync_ai() # 
