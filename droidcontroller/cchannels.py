@@ -10,6 +10,7 @@
 from sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
 s=SQLgeneral() # init sisse?
 from counter2power import *  # Counter2Power() handles power calculation based on pulse count increments
+import time
 
 class Cchannels(SQLgeneral): # handles counters registers and tables
     ''' Access to io by modbus analogue register addresses (and also via services?).
@@ -360,7 +361,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                         except:
                             self.cp.append(Counter2Power(val_reg,member,off_tout = 120)) # another Count2Power instance. 120S  = 30W threshold if 1WS per pulse
                             print('Counter2Power() instance cp['+str(cpi)+'] created')
-                        res=self.cp[cpi].calc(ots,value) # power calculation based on counter increase
+                        res=self.cp[cpi].calc(ots, value, ts_now = self.ts) # power calculation based on counter increase
                         value=res[0]
                         print('got result from cp['+str(cpi)+']: '+str(res))  # debug
                     else: # normal counter

@@ -26,7 +26,7 @@ class Counter2Power():
         return self.svc_name, self.svc_member, self.min, self.max
 
 
-    def calc(self, ts, count):
+    def calc(self, ts, count, ts_now = None):
         ''' Try to output a sane value based on count and time increments.
             If count increment is small, the precision is heavily affected. Use sliding window averaging
             and remember the maximum values, avoiding spikes during startup of the input pulse flow.
@@ -38,9 +38,13 @@ class Counter2Power():
             self.count_last=count
             return None,None,None,None # no data to calculate anything yet
 
+        if ts_now == None:
+            ts_now=time.time() # time in s now, for testing external time in fictional units can be given
+            
         count_inc = count - self.count_last if count > self.count_last else 0
         ts_inc = ts - self.ts_last if ts - self.ts_last > 0 else 0
         power_last = 0
+        
         
         if ts_inc > 0:
             if (count_inc > 0) : # count increase since last execution!
@@ -54,7 +58,7 @@ class Counter2Power():
 
             elif count_inc == 0: # no count increase
                 if self.state>0:
-                    if (ts_inc > self.off_tout): # time with no delay indicates at least 3 times drop in power
+                    if (ts_now - ts > self.off_tout): # time with no delay indicates at least 3 times drop in power
                         if self.state >0:
                             self.state=0
                             print('OFF due to no count increase in',ts_inc,'s') # debug
