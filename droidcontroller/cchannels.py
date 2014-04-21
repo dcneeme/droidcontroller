@@ -3,6 +3,9 @@
 # 05.04.2014 OOP
 # 06.04.2014 counter grousp with sequential regadd range, optimized read done
 # 15.04.2014 added ask_counters()
+# 19.05.2014 counters.sql ts tohib muuta ainult siis, kui raw muutus! niisama lugemine ei muuda ts!!!
+#            siis saab voimsust arvestada aja alusel ka yhe impulsilise kasvu alusel, kui piisavalt tihti lugeda!
+
 
 from sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
 s=SQLgeneral() # init sisse?
@@ -57,14 +60,14 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
             udp.udpsend(val_reg+':?\n') # wo status to uniscada server
         conn.commit()
         return 0
-        
-                
+
+
     def restore_counter(self,register): # one at the time
         ''' decode values from server for set_counter(). some values are counted, but some may be setup values! '''
         #FIXME!
         return 0
-    
-    
+
+
     def set_counter(self, value = 0, **kwargs): # mba,regadd,val_reg,member   # one counter to be set. check wcount from counters table
         ''' sets ONE counter value, any wordlen (number of registers,must be defined in counters.sql) '''
         #val_reg=''  # arguments to use a subset of them
@@ -83,7 +86,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
             try:
                 kwargs.get('val_reg','C1V')
                 kwargs.get('member',1)
-                
+
             except:
                 print('invalid parameters for set_counter()')
                 return 2
@@ -119,12 +122,16 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
 
 
     def read_counter_grp(self,mba,regadd,count,wcount,mbi=0): # using self,in_sql as the table to store in.
-        ''' Read sequential register group, process numbers according to counter size and store raw into table self.in_sql. Inside transaction! '''
+        ''' Reads sequential register group, process numbers according to counter size and store raw into table self.in_sql. Inside transaction!
+            Compares the now value from mobdbus register with old value in the table. If changed, ts is set to the modbus readout time self.ts.
+        '''
         step=abs(wcount)
+        cur=conn.cursor()
+        oraw=0
         if step == 0:
             print('illegal wcount',wcount,'in read_counter_grp()')
             return 2
-            
+
         msg='reading data for counter group from mba '+str(mba)+', regadd '+str(regadd)+', count '+str(count)+', wcount '+str(wcount)+', mbi '+str(mbi)
         #print(msg) # debug
         if count>0 and mba<>0 and wcount<>0:
@@ -137,7 +144,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
 
         if result != None:
             try:
-                for i in range(count/step): # tuple to table rows. tuple len is twice count!
+                for i in range(count/step): # counter processing loop. tuple to table rows. tuple len is twice count!
                     tcpdata=0
                     if wcount == 2:
                         tcpdata = 65536*result[step*i]+result[step*i+1]
@@ -148,9 +155,16 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                     else: # something else
                         print('unsupported counter word size',wcount)
                         return 1
-                    Cmd="UPDATE "+self.in_sql+" set raw='"+str(tcpdata)+"', ts='"+str(self.ts)+"' where mba='"+str(mba)+"' and regadd='"+str(regadd+i*step)+"'" # koigile korraga
-                    #print('i',i,Cmd) # debug
-                    conn.execute(Cmd)
+
+                    Cmd="select raw from "+self.in_sql+" where mbi="+str(mbi)+" and mba='"+str(mba)+"' and regadd='"+str(regadd+i*step)+"' group by mbi,mba,regadd"
+                    # get the old value to compare with new. can be multiple rows, group to single
+                    cur.execute(Cmd)
+                    for row in cur:
+                        oraw=int(row[0]) if row[0] !='' else 0
+                    if tcpdata != oraw:
+                        Cmd="UPDATE "+self.in_sql+" set raw='"+str(tcpdata)+"', ts='"+str(self.ts)+"' where mba='"+str(mba)+"' and regadd='"+str(regadd+i*step)+"'" # koigile korraga
+                        #print('i',i,Cmd) # debug
+                        conn.execute(Cmd)
                 return 0
             except:
                 traceback.print_exc()
@@ -177,7 +191,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
         comment=''
         #mcount=0
         Cmd1=''
-        self.ts = round(time.time(),1)
+        self.ts = round(time.time(),2)
         ts_created=self.ts # selle loeme teenuse ajamargiks
         cur=conn.cursor()
         cur3=conn.cursor()
@@ -234,9 +248,9 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
 
             # raw sync done.
 
-            
-            
-            # now process raw -> value and find status BY SERVICES. service loop begins. 
+
+
+            # now process raw -> value and find status BY SERVICES. service loop begins.
             #power calcultions happens below too, for each service , not for each counter!
 
             Cmd="select val_reg from "+self.in_sql+" group by val_reg" # process and report by services
@@ -344,7 +358,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                             if self.cp[cpi]:
                                 pass # instance already exists
                         except:
-                            self.cp.append(Counter2Power(val_reg,member,outlo,outhi)) # another Count2Power instance
+                            self.cp.append(Counter2Power(val_reg,member,off_tout = 120)) # another Count2Power instance. 120S  = 30W threshold if 1WS per pulse
                             print('Counter2Power() instance cp['+str(cpi)+'] created')
                         res=self.cp[cpi].calc(ots,value) # power calculation based on counter increase
                         value=res[0]
@@ -357,11 +371,11 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                             value=ovalue # +value # restoring based on ovalue and new count
                             self.set_counter(value,mba,regadd)
 
-                            
+
                     Cmd="update "+self.in_sql+" set value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
                     conn.execute(Cmd) # new value set in sql table
-                    
-                        
+
+
                     # STATUS SET. check limits and set statuses based on that
                     # returning to normal with hysteresis, take previous value into account
                     status=0 # initially for each member
@@ -390,7 +404,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                     #print('status for counter svc',val_reg,status,'due to cfg',cfg,'and value',value,'while limits are',outlo,outhi) # debug
 
                     #if value<ovalue and ovalue < 4294967040: # this will restore the count increase during comm break
-                    
+
 
 
                     lisa=lisa+str(value) # members together into one string
