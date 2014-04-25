@@ -53,7 +53,7 @@ class Counter2Power():
                 power=round(1.0*(count - self.count_last)/(ts - self.ts_last),3)
                 self.count_last=count
                 self.ts_last=ts
-                return power, self.state, ts_inc, count_inc
+                return power, self.state, round(ts_inc,2), count_inc
 
         elif count_inc == 0: # no count increase
             if (ts_now - ts > 1.01*self.off_tout): # hysteresis plus-minus 1% added

@@ -5,7 +5,7 @@
 # 15.04.2014 added ask_counters()
 # 19.05.2014 counters.sql ts tohib muuta ainult siis, kui raw muutus! niisama lugemine ei muuda ts!!!
 #            siis saab voimsust arvestada aja alusel ka yhe impulsilise kasvu alusel, kui piisavalt tihti lugeda!
-
+# 25.4.2014 power metering ok. need to add on/off svc
 
 # use do_read_all() and report_all() for external use after importing. or doall()
 
@@ -55,13 +55,15 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
 
     def ask_counters(self): # use on init, send ? to server
         ''' Queries last counter service values from the server '''
-        Cmd="select val_reg from "+self.in_sql+" group by val_reg" # process and report by services
+        Cmd="select val_reg,cfg from "+self.in_sql+" group by val_reg" # process and report by services
         #print "Cmd=",Cmd
         cur=conn.cursor()
         cur.execute(Cmd) # getting services to be read and reported
         for row in cur: # possibly multivalue service members
             val_reg=row[0]
-            udp.udpsend(val_reg+':?\n') # wo status to uniscada server
+            cfg=int(row[1]) if row[1] != '' else 0
+            if not (cfg&64) and not (cfg&128): # exclude the services that are not cumulative counters
+                udp.udpsend(val_reg+':?\n') # wo status to uniscada server
         conn.commit()
         return 0
 
@@ -171,10 +173,11 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
             print('invalid parameters for read_counter_grp()!',mba,regadd,count,wcount,mbi)
             return 2
 
-        if result != None:
+        if result != None: # got something from modbus register
             try:
                 for i in range(count/step): # counter processing loop. tuple to table rows. tuple len is twice count!
                     tcpdata=0
+                    print('counter_grp debug: i',i,'step',step,'results',result[step*i],result[step*i+1]) # debug
                     if wcount == 2:
                         tcpdata = 65536*result[step*i]+result[step*i+1]
                         #print('normal counter',str(i),'result',tcpdata) # debug
@@ -189,17 +192,17 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                     # get the old value to compare with new. can be multiple rows, group to single
                     cur.execute(Cmd)
                     for row in cur:
-                        oraw=int(row[0]) if row[0] !='' else 0
-                    if tcpdata != oraw:
+                        oraw=int(row[0]) if row[0] !='' else -1
+                    if tcpdata != oraw or oraw == -1: # update only if change needed or empty so far
                         Cmd="UPDATE "+self.in_sql+" set raw='"+str(tcpdata)+"', ts='"+str(self.ts)+"' where mba='"+str(mba)+"' and regadd='"+str(regadd+i*step)+"'" # koigile korraga
-                        #print('i',i,Cmd) # debug
+                        print('counters i',i,Cmd) # debug
                         conn.execute(Cmd)
                 return 0
             except:
                 traceback.print_exc()
                 return 1
         else:
-            msg='counter data processing FAILED for mbi,mba,regadd,count '+str(mbi)+', '+str(mba)+', '+str(regadd)+', '+str(count)
+            msg='counter grp data processing FAILED for mbi,mba,regadd,count '+str(mbi)+', '+str(mba)+', '+str(regadd)+', '+str(count)
             print(msg)
             return 1
 
@@ -339,7 +342,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                     outhi=int(srow[10]) if srow[10] != '' else 0
                     avg=int(srow[11]) if srow[11] != '' else 0 #  averaging strength, effective from 2
                     #if srow[12] != '': # block
-                    #  block=int(srow[12]) # block / error count
+                    block=int(srow[12]) if srow[12] != '' else 0  # threshold in s for OFF state
                     # updated before raw reading
                     raw=int(srow[13]) if srow[13] != '' else None
                     # previous converted value
@@ -376,32 +379,51 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                                 if self.cp[cpi]:
                                     pass # instance already exists
                             except:
-                                self.cp.append(Counter2Power(val_reg,member,off_tout = 120)) # another Count2Power instance. 120S  = 30W threshold if 1WS per pulse
-                                print('Counter2Power() instance cp['+str(cpi)+'] created')
+                                self.cp.append(Counter2Power(val_reg,member,off_tout = block)) # another Count2Power instance. 100s  = 36W threshold if 1000 imp per kWh
+                                print('Counter2Power() instance cp['+str(cpi)+'] created for pwr svc '+val_reg+' member '+str(member))
                             res=self.cp[cpi].calc(ots, raw, ts_now = self.ts) # power calculation based on raw counter increase
                             raw=res[0]
-                            print('got result from cp['+str(cpi)+']: '+str(res))  # debug
+                            print('got result[0] from cp['+str(cpi)+']: '+str(res))  # debug
                  
+                        # on-off?
+                        #if (cfg&128): # 
+                        if (cfg&128) > 0: # 
+                            cpi=cpi+1 # counter2power index on /off jaoks
+                            try:
+                                if self.cp[cpi]:
+                                    pass # instance already exists
+                            except:
+                                self.cp.append(Counter2Power(val_reg,member,off_tout = block)) # another Count2Power instance. 10s tout = 360W threshold if 1000 imp per kWh
+                                print('Counter2Power() instance cp['+str(cpi)+'] created for state svc '+val_reg+' member '+str(member))
+                            res=self.cp[cpi].calc(ots, raw, ts_now = self.ts) # power calculation based on raw counter increase
+                            raw=res[1]
+                            print('got result[1] from cp['+str(cpi)+']: '+str(res))  # debug
+                 
+                        
+                        
+                        
                         # SCALING
                         if raw != None and x1 != x2 and y1 != y2: # seems like normal input data
                             value=(raw-x1)*(y2-y1)/(x2-x1)
-                            value=int(y1+value) # integer values to be reported only
+                            value=int(round(y1+value)) # integer values to be reported only
                         else:
                             #print("read_counters val_reg",val_reg,"member",member,"raw",raw,"ai2scale PARAMETERS INVALID:",x1,x2,'->',y1,y2,'conversion not used!') # debug
                             value=None
                             
 
                         if value != None:
-                            if avg>1 and abs(value-ovalue)<value/2:  # averaging the readings. big jumps (more than 50% change) are not averaged.
+                            if avg>1: #  and abs(value-ovalue)<value/2:  # averaging the readings. big jumps (more than 50% change) are not averaged.
                                 value=int(((avg-1)*ovalue+value)/avg) # averaging with the previous value, works like RC low pass filter
                                 #print('counter avg on, value became ',value) # debug
-
+                            print('updating',self.in_sql,'val_reg,member,ovalue,value,avg',val_reg,member,ovalue,value,avg) # debug
                             Cmd="update "+self.in_sql+" set value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
+                            #print(Cmd) # debug
                             conn.execute(Cmd) # new value set in sql table ONLY if there was a valid result
 
                             # print('end processing counter',val_reg,'member',member,'raw',raw,' value',value,' ovalue',ovalue,', avg',avg) # debug
 
-                   
+                    else:
+                        print('ERROR: raw None for svc',val_reg,member) # debug
                    
 
         # DO NOT SEND AWAY HERE
@@ -458,7 +480,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
 
                 if self.make_counter_svc(val_reg,sta_reg) == 0: # successful svc insertion into buff2server
                     pass
-                    #print('tried to report svc',val_reg,sta_reg)
+                    print('tried to report svc',val_reg,sta_reg)
                 else:
                     print('make_counters FAILED to report svc',val_reg,sta_reg)
                     return 1 #cancel
@@ -589,19 +611,12 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                     
             if lisa != '': # not the first member
                 lisa=lisa+' ' # separator between member values
-            lisa=lisa+str(value) # adding member values into one string
+            lisa=lisa+str(int(round(value))) # adding member values into one string
 
         # service done
-        if self.ts-mts < 3*self.readperiod and status<3: # data fresh enough to be sent
-            sendtuple=[sta_reg,status,val_reg,lisa] # sending service to buffer
-           # print('ai svc - going to report',sendtuple)  # debug
-            udp.send(sendtuple) # to uniscada instance 
-
-        else:
-            msg='skipping counters data send (buff2server wr) due to stale data, reg '+val_reg+',mts '+str(mts)+', ts '+str(self.ts)
-            #syslog(msg) # incl syslog
-            print(msg)
-            return 1
+        sendtuple=[sta_reg,status,val_reg,lisa] # sending service to buffer
+        print('cchannels going to send',sendtuple) # debug
+        udp.send(sendtuple) # to uniscada instance 
 
         return 0
         

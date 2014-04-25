@@ -35,11 +35,12 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
         self.host_id = id
         self.ip = ip
         self.port = port
+        self.saddr = (self.ip,self.port) # monitoring server
+        
         self.traffic = [0,0] # udp bytes in out
         self.UDPSock = socket(AF_INET,SOCK_DGRAM)
         self.UDPSock.settimeout(receive_timeout)
         self.retrysend_delay = retrysend_delay
-        self.saddr = (ip,port) # monitoring server
         self.inum = 0 # sent message counter
         print('init: created uniscada connection')
         self.table = 'buff2server' # can be anything, not accessible to other objects
@@ -60,16 +61,18 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
     def setIP(self, invar):
         ''' Set the monitoring server ip address '''
         self.ip = invar
+        self.saddr = (self.ip,self.port) # refresh needed
 
 
     def setPort(self, invar):
         ''' Set the monitoring server UDP port '''
         self.port = invar
+        self.saddr = (self.ip,self.port) # refresh needed
 
         
     def setID(self, invar):
         ''' Set the host id '''
-        self.id = invar
+        self.host_id = invar
         
     
     def setRetryDelay(self, invar):
@@ -77,11 +80,18 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
         self.retrysend_delay = invar
 
     
-    def get_ts(self):
+    def getTS(self):
         '''returns timestamps for last send trial and successful receive '''
         return self.ts_udpsent, self.ts_udpgot
         
-
+    def getID(self):
+        '''returns host id for this instance '''
+        return self.host_id
+    
+    def getIP(self):
+        '''returns server ip for this instance '''
+        return self.ip
+    
     def get_traffic(self):
         return self.traffic # tuple in, out
         
@@ -215,7 +225,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
 
 
 
-    def buff2server(self): # try to send the buffer content
+    def buff2server(self): # send the buffer content
         ''' UDP monitoring message creation and sending (using udpsend)
             based on already existing buff2server data, does the retransmits too if needed.
             buff2server rows successfully send will be deleted by udpread() based on in: contained in the received  message
@@ -410,10 +420,10 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
 
     def comm(self): # do this regularly, blocks for the time of socket timeout!
         ''' Communicates with server, returns cmd and setup key:value'''
-        self.ts = round(time.time(),1)
-        self.unsent()
+        self.ts = round(time.time(),1) # timestamp
+        self.unsent() # delete old records
         udpgot = self.udpread() # check for incoming udp data
-        self.buff2server() # the ack for this is available on next comm() hopefully
+        self.buff2server() # send away. the ack for this is available on next comm() hopefully
         return udpgot
 
 
