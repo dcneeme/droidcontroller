@@ -399,7 +399,7 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
             
             
             
-    def make_aichannels(self,svc = ''): # send the ai service messages to the monitoring server (only if fresh enough, not older than 2xappdelay). all or just one svc.
+    def report(self,svc = ''): # send the ai service messages to the monitoring server (only if fresh enough, not older than 2xappdelay). all or just one svc.
         mba=0 
         val_reg=''
         desc=''
@@ -443,6 +443,8 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
 
     def make_aichannel_svc(self,val_reg,sta_reg):  # 
         ''' make a single service record (with status chk) based on aichannel members and send it away to UDPchannel '''
+        #FIXME! we do not need to calc value here, that has to be made with aquiry of every new raw!
+
         status=0 # initially
         cur=conn.cursor()
         lisa=''
@@ -564,6 +566,6 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
             
         if self.ts - self.ts_send > self.sendperiod:
             self.ts_send = self.ts
-            self.make_aichannels() # compile services and send away
+            self.report() # compile services and send away
             
         return 0

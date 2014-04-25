@@ -2,6 +2,7 @@
 # accepts input as raw counter value and returns value based on count and time increments since last execution
 # 17.4.2014 started
 # 21.4.2014 simplified (dict off)
+# 24.4.2014 fix to power 0 when no increment in off state
 
 
 class Counter2Power(): 
@@ -12,7 +13,7 @@ class Counter2Power():
         
     '''
 
-    def __init__(self, svc_name = '', svc_member = 1, off_tout = 120):  # 120s corresponds to 30W if 1Ws per pulse
+    def __init__(self, svc_name = '', svc_member = 1, off_tout = 100):  # 100s corresponds to 36W threshold if 1000 pulses per kWh
         self.svc_name=svc_name
         self.svc_member=svc_member
         self.ts_last=0
@@ -43,29 +44,23 @@ class Counter2Power():
             
         count_inc = count - self.count_last if count > self.count_last else 0
         ts_inc = ts - self.ts_last if ts - self.ts_last > 0 else 0
-        power_last = 0
-        
-        
-        if ts_inc > 0:
-            if (count_inc > 0) : # count increase since last execution!
-                self.state = 1 # definitely ON
+                
+        if (count_inc > 0) : # count increase since last execution! that means ts change too. 1 pulse is not enough!
+            if (ts_now - ts < 0.99*self.off_tout): # hysteresis plus-minus 1% added
+                if self.state == 0:
+                    self.state=1
+                    #print('ON due to count increase since',ts_inc,'s') # debug
                 power=round(1.0*(count - self.count_last)/(ts - self.ts_last),3)
                 self.count_last=count
                 self.ts_last=ts
-                power_last=power_last
                 return power, self.state, ts_inc, count_inc
 
+        elif count_inc == 0: # no count increase
+            if (ts_now - ts > 1.01*self.off_tout): # hysteresis plus-minus 1% added
+                if self.state >0:
+                    self.state=0
+                    #print('OFF due to no count increase since',ts_inc,'s') # debug
+                return 0,0,round(ts_now - ts,2), 0  # definitely OFF
 
-            elif count_inc == 0: # no count increase
-                if self.state>0:
-                    if (ts_now - ts > self.off_tout): # time with no delay indicates at least 3 times drop in power
-                        if self.state >0:
-                            self.state=0
-                            print('OFF due to no count increase in',ts_inc,'s') # debug
-                        return 0,0,ts_inc, count_inc  # definitely OFF
+        return None, self.state, round(ts_now - ts,2), 0  # no new power reading returned, no change in state
 
-                return None, self.state, ts_inc, count_inc  # no power returned, no change in state
-
-        else:
-            print 'zero time increment, no power output!'
-            return None, self.state, ts_inc, count_inc

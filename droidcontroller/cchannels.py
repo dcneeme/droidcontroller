@@ -7,6 +7,9 @@
 #            siis saab voimsust arvestada aja alusel ka yhe impulsilise kasvu alusel, kui piisavalt tihti lugeda!
 
 
+# use do_read_all() and report_all() for external use after importing. or doall()
+
+
 from sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
 s=SQLgeneral() # init sisse?
 from counter2power import *  # Counter2Power() handles power calculation based on pulse count increments
@@ -69,48 +72,64 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
         return 0
 
 
-    def set_counter(self, value = 0, **kwargs): # mba,regadd,val_reg,member   # one counter to be set. check wcount from counters table
+    def set_counter(self, value = 0, **kwargs): # value, mba,regadd,mbi,val_reg,member   # one counter to be set. check wcount from counters table
         ''' sets ONE counter value, any wordlen (number of registers,must be defined in counters.sql) '''
-        #val_reg=''  # arguments to use a subset of them
-        #member=0
-        #mba=0
-        #regadd=0
-        #wcount=0
-        value=(int(value)&0xFFFFFFFF) # to make sure the value to write is 32 bit integer
+        val_reg=''  # arguments to use a subset of them
+        member=0
+        mba=0
+        mbi=0
+        regadd=0
+        wcount=0
+        #value=value
         cur=conn.cursor()
-        try:
+        x2=0
+        y2=0
+        Cmd=''
+        try: # is is mba or val_reg based addressing in use?
             mba=kwargs['mba']
             regadd=kwargs['regadd']
-            Cmd="select val_reg,member,mba,regadd,wcount,x2,y2 from counters where mba='"+str(mba)+"' and regadd='"+str(regadd)+"' and mbi="+str(mbi)
-            #print(Cmd) # debug
+            mbi=kwargs['mbi']
+            wcount=kwargs['wcount']
+            x2=kwargs['x2']
+            y2=kwargs['y2']
+            # if this fails, svc_name and member must be given as parameters
         except:
             try:
-                kwargs.get('val_reg','C1V')
-                kwargs.get('member',1)
-
+                kwargs.get('val_reg')
+                kwargs.get('member')
+                Cmd="select mbi,mba,regadd,wcount,x2,y2 from "+self.in_sql+" where val_reg='"+val_reg+"' and member='"+str(member)+"'"
+                print(Cmd) # debug
+                cur.execute(Cmd) # what about commit()? FIXME
+                for row in cur:
+                    print(row) # debug
+                    mbi=row[0]
+                    mba=int(row[1]) if row[1] != '' else 0
+                    regadd=int(row[2]) if row[2] != '' else 0
+                    wcount=int(row[3]) if row[3] != '' else 0
+                    x2==int(row[4]) if row[4] != '' else 0
+                    y2==int(row[5]) if row[5] != '' else 0
+                    
             except:
-                print('invalid parameters for set_counter()')
+                print('invalid parameters for set_counter()',kwargs)
                 return 2
-
+        
+        print('mbi,mba,regadd,wcount,x2,y2',mbi,mba,regadd,wcount,x2,y2) # debug
+        if x2<>0 and y2<>0: #convert
+            value=round(1.0*value*x2/y2)
+        else:
+            print('invalid scaling x2,y2',x2,y2)
+        
+        value=(int(value)&0xFFFFFFFF) # to make sure the value to write is 32 bit integer    
         try:
-            cur.execute(Cmd)
-            for srow in cur:
-                val_reg=srow[0]
-                member=int(srow[1]) # replaces if missing
-                mba=int(srow[2]) # replaces if missing
-                regadd=int(srow[3])
-                wcount=int(srow[4])
-                # x2 y2 for autoscale (5,6)
-
-            if wcount == 2: # normal counter
-                mb[mbi].write(mba,regadd,count=2, values=[value&4294901760,value&65535]) #
+            if wcount == 2: # normal counter, type h
+                mb[mbi].write(mba, regadd, values=[(value&0xFFFF0000)>>16,(value&0xFFFF)]) #
                 return 0
             else:
                 if wcount == -2: # barionet counter, MSW must be written first
-                    mb[mbi].write(mba,address=regadd, count=2,values=[value&65535, value&4294901760])
+                    mb[mbi].write(mba, regadd, values=[(value&0xFFFF), (value&0xFFFF0000)>>16])
                     return 0
                 else:
-                    print('unsupported counter configuration!',mba,regadd,wcount)
+                    print('unsupported counter configuration! mba,regadd,wcount',mba,regadd,wcount)
                     return 1
         except:  # set failed
             msg='failed restoring counter register '+str(mba)+'.'+str(regadd)
@@ -118,13 +137,22 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
             print(msg)
             traceback.print_exc()
             return 1
-
+        # no need for commit, this method is used in transaction
 
 
 
     def read_counter_grp(self,mba,regadd,count,wcount,mbi=0): # using self,in_sql as the table to store in.
         ''' Reads sequential register group, process numbers according to counter size and store raw into table self.in_sql. Inside transaction!
             Compares the now value from mobdbus register with old value in the table. If changed, ts is set to the modbus readout time self.ts.
+
+            Add here counter state recovery if suddenly zeroed
+            #    if value == 0 and ovalue >0: # possible pic reset. perhaps value <= 100?
+            #        msg='restoring lost content for counter '+str(mba)+'.'+str(regadd)+':2 to become '+str(ovalue)+' again instead of '+str(value)
+            #        #syslog(msg)
+            #        print(msg)
+            #        self.set_counter(value=ovalue, mba=mba, regadd=regadd, mbi=mbi, wcount=wcount, x2=x2, y2=y2) # does not contain commit()!
+            #this above should be fixed. value is already saved, put it there!
+   
         '''
         step=abs(wcount)
         cur=conn.cursor()
@@ -177,7 +205,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
 
 
 
-    def read_counters(self): # read all defined counters, usually 32 bit / 2 registers.
+    def read_all(self): # read all defined modbus counters to sql, usually 32 bit / 2 registers.
         ''' Must read the counter registers by sequential regadd blocks if possible (if regadd increment == wcount.
             Also converts the raw data (incl member rows wo mba) into services and sends away to UDPchannel.
             '''
@@ -232,7 +260,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                     else: # a new group started, make a query for previous
                         #print('counter group end detected at regadd',blast,'bcount',bcount) # debugb
                         #print('going to read counter registers from',bmba,bfirst,'to',blast,'regcount',bcount) # debug
-                        self.read_counter_grp(bmba,bfirst,bcount,bwcount,bmbi) # reads and updates table with previous data
+                        self.read_counter_grp(bmba,bfirst,bcount,bwcount,bmbi) # reads and updates table with previous data #####################  READ MB  ######
                         bfirst = regadd # new grp starts immediately
                         blast = regadd
                         #bwcount = wcount # does not change inside group
@@ -245,9 +273,9 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
             if bfirst != 0: # last group yet unread
                 #print('counter group end detected at regadd',blast) # debug
                 #print('going to read counter registers from',bmba,bfirst,'to',blast,'regcount',bcount) # debug
-                self.read_counter_grp(bmba,bfirst,bcount,bwcount,bmbi) # reads and updates table
+                self.read_counter_grp(bmba,bfirst,bcount,bwcount,bmbi) # reads and updates table with previous data #####################  READ MB  ######
 
-            # raw sync done.
+            # raw sync (from modbus to sql) done.
 
 
 
@@ -273,6 +301,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
 
                 for srow in cur3: # members for one counter svc
                     #print srow # debug
+                    mbi=0
                     mba=0 # local here
                     regadd=0
                     member=0
@@ -312,14 +341,15 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                     #if srow[12] != '': # block
                     #  block=int(srow[12]) # block / error count
                     # updated before raw reading
-                    raw=int(srow[13]) if srow[13] != '' else 0
+                    raw=int(srow[13]) if srow[13] != '' else None
                     # previous converted value
                     ovalue=eval(srow[14]) if srow[14] != '' else 0 # not updated above!
                     ostatus=int(srow[15]) if srow[15] != '' else 0
                     ots=eval(srow[16]) if srow[16] != '' else self.ts
                     #desc=srow[17]
                     #comment=srow[18]
-                    #wcount=srow[19] # word count
+                    wcount=int(srow[19]) if srow[19] != '' else 0  # word count
+                    mbi=srow[20] # int
                     #print('got from '+self.in_sql+' raw,ovalue',raw,ovalue) # debug
 
                     if lisa != '':
@@ -337,90 +367,59 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                     # 64 - power to be counted based on count increase and time period between counts
                     # 128 - OFF-state not used in lolimit, OFF is equal to in-range??
 
-                    if x1 != x2 and y1 != y2: # seems like normal input data
-                        value=(raw-x1)*(y2-y1)/(x2-x1)
-                        value=int(y1+value) # integer values to be reported only
-                    else:
-                        print("read_counters val_reg",val_reg,"member",member,"ai2scale PARAMETERS INVALID:",x1,x2,'->',y1,y2,'conversion not used!')
-                        # jaab selline value nagu oli
+                    
+                    if raw != None: # valid data for either energy or power value
+                        #POWER?
+                        if (cfg&64): # power, increment to be calculated! divide increment to time from the last reading to get the power
+                            cpi=cpi+1 # counter2power index
+                            try:
+                                if self.cp[cpi]:
+                                    pass # instance already exists
+                            except:
+                                self.cp.append(Counter2Power(val_reg,member,off_tout = 120)) # another Count2Power instance. 120S  = 30W threshold if 1WS per pulse
+                                print('Counter2Power() instance cp['+str(cpi)+'] created')
+                            res=self.cp[cpi].calc(ots, raw, ts_now = self.ts) # power calculation based on raw counter increase
+                            raw=res[0]
+                            print('got result from cp['+str(cpi)+']: '+str(res))  # debug
+                 
+                        # SCALING
+                        if raw != None and x1 != x2 and y1 != y2: # seems like normal input data
+                            value=(raw-x1)*(y2-y1)/(x2-x1)
+                            value=int(y1+value) # integer values to be reported only
+                        else:
+                            #print("read_counters val_reg",val_reg,"member",member,"raw",raw,"ai2scale PARAMETERS INVALID:",x1,x2,'->',y1,y2,'conversion not used!') # debug
+                            value=None
+                            
 
+                        if value != None:
+                            if avg>1 and abs(value-ovalue)<value/2:  # averaging the readings. big jumps (more than 50% change) are not averaged.
+                                value=int(((avg-1)*ovalue+value)/avg) # averaging with the previous value, works like RC low pass filter
+                                #print('counter avg on, value became ',value) # debug
 
-                    if avg>1 and abs(value-ovalue)<value/2:  # averaging the readings. big jumps (more than 50% change) are not averaged.
-                        value=int(((avg-1)*ovalue+value)/avg) # averaging with the previous value, works like RC low pass filter
-                        #print('counter avg on, value became ',value) # debug
+                            Cmd="update "+self.in_sql+" set value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
+                            conn.execute(Cmd) # new value set in sql table ONLY if there was a valid result
 
-                   # print('end processing counter',val_reg,'member',member,'raw',raw,' value',value,' ovalue',ovalue,', avg',avg) # debug
+                            # print('end processing counter',val_reg,'member',member,'raw',raw,' value',value,' ovalue',ovalue,', avg',avg) # debug
 
+                   
+                   
 
-                    #POWER?
-                    if (cfg&64): # power, increment to be calculated! divide increment to time from the last reading to get the power
-                        cpi=cpi+1 # counter2power index
-                        try:
-                            if self.cp[cpi]:
-                                pass # instance already exists
-                        except:
-                            self.cp.append(Counter2Power(val_reg,member,off_tout = 120)) # another Count2Power instance. 120S  = 30W threshold if 1WS per pulse
-                            print('Counter2Power() instance cp['+str(cpi)+'] created')
-                        res=self.cp[cpi].calc(ots, value, ts_now = self.ts) # power calculation based on counter increase
-                        value=res[0]
-                        print('got result from cp['+str(cpi)+']: '+str(res))  # debug
-                    else: # normal counter
-                        if value == 0 and ovalue >0: # possible pic reset. perhaps value <= 100?
-                            msg='restoring lost content for counter '+str(mba)+'.'+str(regadd)+':2 to become '+str(ovalue)+' again instead of '+str(value)
-                            #syslog(msg)
-                            print(msg)
-                            value=ovalue # +value # restoring based on ovalue and new count
-                            self.set_counter(value,mba,regadd)
+        # DO NOT SEND AWAY HERE
+        #            lisa=lisa+str(value) # value members together into one string. value member can also be None!
+        #            # FIXME! better to keep service cteation separarte, based on sql value, not to involve None into members.
+        #            # this also keep reading and reporting asynchronous, and we need to read as often as possible!
 
-
-                    Cmd="update "+self.in_sql+" set value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
-                    conn.execute(Cmd) # new value set in sql table
-
-
-                    # STATUS SET. check limits and set statuses based on that
-                    # returning to normal with hysteresis, take previous value into account
-                    status=0 # initially for each member
-                    if value>outhi: # yle ylemise piiri
-                        if (cfg&4) and status == 0: # warning if above the limit
-                            status=1
-                        if (cfg&8) and status<2: # critical if  above the limit
-                            status=2
-                        if (cfg&12) == 12: # unknown if  above the limit
-                            status=3
-                    else: # return to normal with hysteresis
-                        if value<outhi-0.05*(outhi-outlo):
-                            status=0 # normal again
-
-                    if value<outlo: # below lo limit
-                        if (cfg&1) and status == 0: # warning if below lo limit
-                            status=1
-                        if (cfg&2) and status<2: # warning  if below lo limit
-                            status=2
-                        if (cfg&3) == 3: # unknown  if below lo limit
-                            status=3
-                    else: # return
-                        if value>outlo+0.05*(outhi-outlo):
-                            status=0 # normal again
-
-                    #print('status for counter svc',val_reg,status,'due to cfg',cfg,'and value',value,'while limits are',outlo,outhi) # debug
-
-                    #if value<ovalue and ovalue < 4294967040: # this will restore the count increase during comm break
-
-
-
-                    lisa=lisa+str(value) # members together into one string
-
-
-                # sending service to buffer
-                if self.ts - self.ts_send>self.sendperiod:
-                    sent=1
-                    sendtuple=[sta_reg,status,val_reg,lisa]
-                    #print('counter svc - going to report',sendtuple)  # debug
-                    udp.send(sendtuple) # to uniscada instance
-            if sent == 1:
-                self.ts_send = self.ts
-            sent = 0
-            conn.commit() # counters transaction end
+        #        # sending service to buffer
+        #        if self.ts - self.ts_send>self.sendperiod:
+        #            sent=1
+        #            sendtuple=[sta_reg,status,val_reg,lisa]
+        #            #print('counter svc - going to report',sendtuple)  # debug
+        #            udp.send(sendtuple) # to uniscada instance
+        #    if sent == 1:
+        #        self.ts_send = self.ts
+        #    sent = 0
+        #    conn.commit() # counters transaction end
+        
             return 0
 
         except: # end reading counters
@@ -432,16 +431,191 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
             time.sleep(1)
             return 1
 
-    #read_counters end #############
+    #read_all end #############
+
+
+
+    def report_all(self,svc = ''): # send the ai service messages to the monitoring server (only if fresh enough, not older than 2xappdelay). all or just one svc.
+        ''' make all counter services (with status chk) based on counters members and send it away to UDPchannel '''
+        mba=0 
+        val_reg=''
+        desc=''
+        cur=conn.cursor()
+        ts_created=self.ts # selle loeme teenuse ajamargiks
+
+        try:
+            Cmd="BEGIN IMMEDIATE TRANSACTION" # conn3, kogu selle teenustegrupiga (aichannels) tegelemine on transaction
+            conn.execute(Cmd)
+            if svc == '':  # all services
+                Cmd="select val_reg from "+self.in_sql+" group by val_reg"
+            else: # just one
+                Cmd="select val_reg from "+self.in_sql+" where val_reg='"+svc+"'"
+            cur.execute(Cmd)
+
+            for row in cur: # services
+                val_reg=row[0] # teenuse nimi
+                sta_reg=val_reg[:-1]+"S" # nimi ilma viimase symbolita ja S - statuse teenuse nimi, analoogsuuruste ja temp kohta
+
+                if self.make_counter_svc(val_reg,sta_reg) == 0: # successful svc insertion into buff2server
+                    pass
+                    #print('tried to report svc',val_reg,sta_reg)
+                else:
+                    print('make_counters FAILED to report svc',val_reg,sta_reg)
+                    return 1 #cancel
+
+
+            conn.commit() # aichannels transaction end
+            
+        except:
+            msg='PROBLEM with counters reporting '+str(sys.exc_info()[1])
+            print(msg)
+            #syslog(msg)
+            traceback.print_exc()
+            sys.stdout.flush()
+            time.sleep(0.5)
+            return 1
 
 
 
 
-    def doall(self): # do this regularly, executes only if time is is right
-        ''' Reads and possibly reports counters on time if executed regularly '''
-        self.ts = round(time.time(),1)
-        if self.ts - self.ts_read>self.readperiod:
-            self.ts_read = self.ts
-            self.read_counters() # also includes ts_sent test and reporting
+    def make_counter_svc(self,val_reg,sta_reg):  # should be generic, suitable both for aichannels and counters
+        ''' make a single service record (with status chk) based on counters members and send it away to UDPchannel '''
+        #FIXME! we do not need to calc value here, that has to be made with aquiry of every new raw!
+
+        status=0 # initially
+        cur=conn.cursor()
+        lisa=''
+        #print 'reading counters values for val_reg',val_reg,'with',mcount,'members' # ajutine
+
+        Cmd="select * from "+self.in_sql+" where val_reg='"+val_reg+"'" # loeme yhe teenuse kogu info uuesti
+        #print Cmd3 # ajutine
+        cur.execute(Cmd) # another cursor to read the same table
+
+        mts=0  # max timestamp for svc members. if too old, skip messaging to server
+        for srow in cur: # service members
+            #print repr(srow) # debug
+            mba=-1 #
+            regadd=-1
+            member=0
+            cfg=0
+            x1=0
+            x2=0
+            y1=0
+            y2=0
+            outlo=0
+            outhi=0
+            ostatus=0 # eelmine
+            #tvalue=0 # test, vordlus
+            oraw=0
+            ovalue=0 # previous (possibly averaged) value
+            ots=0 # eelmine ts value ja status ja raw oma
+            avg=0 # keskmistamistegur, mojub alates 2
+            #desc=''
+            #comment=''
+            # 0       1     2     3     4   5  6  7  8  9    10     11  12    13  14   15     16  17    18
+            #mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,comment  # aichannels
+            mba=int(srow[0]) if srow[0] != '' else 0   # must be int! will be -1 if empty (setpoints)
+            regadd=int(srow[1]) if srow[1] != '' else 0  # must be int! will be -1 if empty
+            val_reg=srow[2] # see on string
+            member=int(srow[3]) if srow[3] != '' else 0
+            cfg=int(srow[4]) if srow[4] != '' else 0 # konfibait nii ind kui grp korraga, esita hex kujul hiljem
+            x1=int(srow[5]) if srow[5] != '' else 0
+            x2=int(srow[6]) if srow[6] != '' else 0
+            y1=int(srow[7]) if srow[7] != '' else 0
+            y2=int(srow[8]) if srow[8] != '' else 0
+            outlo=int(srow[9]) if srow[9] != '' else None
+            outhi=int(srow[10]) if srow[10] != '' else None
+            avg=int(srow[11]) if srow[11] != '' else 0  #  averaging strength, values 0 and 1 do not average!
+            #block=int(srow[12]) if srow[12] != '' else 0 # - loendame siin vigu, kui kasvab yle 3? siis enam ei saada
+            oraw=int(srow[13]) if srow[13] != '' else 0
+            value=float(srow[14]) if srow[14] != '' else 0 # teenuseliikme vaartus
+            ostatus=int(srow[15]) if srow[15] != '' else 0 # teenusekomponendi status - ei kasuta
+            ots=eval(srow[16]) if srow[16] != '' else 0
+            #desc=srow[17]
+            #comment=srow[18]
+            wcount=int(srow[19]) if srow[19] != '' else 0  # word count
+            mbi=srow[20] # int
+                    
+            
+            ################ sat
+            
+    
+            # svc STATUS CHK. check the value limits and set the status, according to configuration byte cfg bits values
+            # use hysteresis to return from non-zero status values
+            status=0 # initially for each member
+            if value>outhi: # above hi limit
+                if (cfg&4) and status == 0: # warning
+                    status=1
+                if (cfg&8) and status<2: # critical
+                    status=2
+                if (cfg&12) == 12: #  not to be sent
+                    status=3
+                    #block=block+1 # error count incr
+            else: # return with hysteresis 5%
+                if value>outlo and value<outhi-0.05*(outhi-outlo): # value must not be below lo limit in order for status to become normal
+                    status=0 # back to normal
+                   # block=0 # reset error counter
+
+            if value<outlo: # below lo limit
+                if (cfg&1) and status == 0: # warning
+                    status=1
+                if (cfg&2) and status<2: # critical
+                    status=2
+                if (cfg&3) == 3: # not to be sent, unknown
+                    status=3
+                    #block=block+1 # error count incr
+            else: # back with hysteresis 5%
+                if value<outhi and value>outlo+0.05*(outhi-outlo):
+                    status=0 # back to normal
+                    #block=0
+                    
+        # CONFIG BYTE BIT MEANINGS
+        # 1 - below outlo warning,
+        # 2 - below outlo critical,
+        # NB! 3 - not to be sent  if value below outlo
+        # 4 - above outhi warning
+        # 8 - above outhi critical
+
+        # 16 - to be zeroed regularly, see next bits for when NOT IN USE! done by server
+        # 32  - midnight if 1, month change if 0   NOT IN USE
+        # 64 - power to be counted based on count increase and time period between counts
+        # 128 - OFF-state not used in lolimit, OFF is equal to in-range??
+
+    #############                
+            #print 'make counter_svc mba ots mts',mba,ots,mts # debug
+            if mba>0:
+                if ots>mts:
+                    mts=ots # latest member timestamp for the current service
+                    
+            if lisa != '': # not the first member
+                lisa=lisa+' ' # separator between member values
+            lisa=lisa+str(value) # adding member values into one string
+
+        # service done
+        if self.ts-mts < 3*self.readperiod and status<3: # data fresh enough to be sent
+            sendtuple=[sta_reg,status,val_reg,lisa] # sending service to buffer
+           # print('ai svc - going to report',sendtuple)  # debug
+            udp.send(sendtuple) # to uniscada instance 
+
+        else:
+            msg='skipping counters data send (buff2server wr) due to stale data, reg '+val_reg+',mts '+str(mts)+', ts '+str(self.ts)
+            #syslog(msg) # incl syslog
+            print(msg)
+            return 1
 
         return 0
+        
+        
+    def doall(self): # do this regularly, executes only if time is is right
+        ''' Does everything on time if executed regularly '''
+        self.ts = round(time.time(),2)
+        if self.ts - self.ts_read > self.readperiod:
+            self.ts_read = self.ts
+            self.read_all() # koikide loendite lugemine
+            
+        if self.ts - self.ts_send > self.sendperiod:
+            self.ts_send = self.ts
+            self.report_all() # compile services and send away  / / raporteerimine, harvem
+            
+        return 0
+   
