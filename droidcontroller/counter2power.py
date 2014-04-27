@@ -3,7 +3,10 @@
 # 17.4.2014 started
 # 21.4.2014 simplified (dict off)
 # 24.4.2014 fix to power 0 when no increment in off state
+# 25.4.2014 prooviks libisevat akent uuesti
+# 27.04.2014 state change flag added to output
 
+import time
 
 class Counter2Power(): 
     ''' Accepts input as raw counter value and returns value based on count and time increments since last execution.
@@ -16,11 +19,11 @@ class Counter2Power():
     def __init__(self, svc_name = '', svc_member = 1, off_tout = 100):  # 100s corresponds to 36W threshold if 1000 pulses per kWh
         self.svc_name=svc_name
         self.svc_member=svc_member
-        self.ts_last=0
-        self.count_last=0
+        self.ts_last=0 # time stamp of last count increase
+        self.count_last=0 # last received count
         self.state=0 # OFF
         self.off_tout = off_tout
-
+        self.inc_dict={} # averaging buffer to be filled with count increment only, {ts:count}
 
     def get_svc(self):
         ''' Reports handled svc_name and member number as a tuple, adding also min and max limits '''
@@ -34,33 +37,67 @@ class Counter2Power():
             What happens if decrease is negative? Ignore, output None, do not change inc_dict!
         '''
 
+        chg=0 # change flag, 1 means on, -1 means off. 0 means no change.
         if self.ts_last == 0: # first execution
-            self.ts_last=ts
-            self.count_last=count
+            self.ts_last=ts # time of last change before the current one
+            self.count_last=count # last count before the current
+            self.timefrom=ts # earliest timestamp (as key) in self.inc_dict
+            self.countfrom=count
             return None,None,None,None # no data to calculate anything yet
 
         if ts_now == None:
-            ts_now=time.time() # time in s now, for testing external time in fictional units can be given
+            ts_now = time.time() # current time if not given
+        timedelta=round(ts_now - self.ts_last,2) # now since last count change, for debugging data returned
+        
+        dict={} # temporary dictionary
+        len_inc=len(self.inc_dict)
+        
+        # possibly reduce buffering dictionary into off_tout time window. only count changes are buffered!
+        if len_inc > 1:
+            for key in sorted(self.inc_dict): # 
+                #if key < self.ts_last - self.off_tout and len_inc>1: # at least last one must be kept
+                if key < ts_now - self.off_tout and len_inc>1: # at least last one must be kept
+                    pass
+                else:
+                    dict[key]=self.inc_dict[key]
+                len_inc=len_inc-1
+            self.inc_dict=dict # replace the dictionary with shortened version according to the count difference between the ends
+            #print('modified inc_dict:',self.inc_dict) # debug
+            #self.timefrom=min(self.inc_dict, key=self.inc_dict.get) # ts with least count
+            self.timefrom=min(self.inc_dict) # min ts
+            self.countfrom=self.inc_dict[self.timefrom] # min count in dict, to be used in power calculation
             
-        count_inc = count - self.count_last if count > self.count_last else 0
-        ts_inc = ts - self.ts_last if ts - self.ts_last > 0 else 0
-                
-        if (count_inc > 0) : # count increase since last execution! that means ts change too. 1 pulse is not enough!
-            if (ts_now - ts < 0.99*self.off_tout): # hysteresis plus-minus 1% added
+        # add new item into dictonary
+        if count>self.count_last and (ts - self.ts_last) > 0: # both count and ts must be monothonic
+            #print('consider_on: ts_now, ts_last, off_tout',int(round(ts_now)), int(round(self.ts_last)), self.off_tout) # debug
+            self.inc_dict[round(ts,2)]=count # added new item
+            count_inc = count - self.countfrom if count > self.countfrom else 0
+            ts_inc = ts - self.timefrom if ts - self.timefrom > 0 else 0
+            #print('counter: increase both in ts '+str(ts - self.ts_last)+' and count '+str(int(round(count-self.count_last)))+' since last chg, buffer span ts_inc,'+str(int(round(ts_inc)))+', count_inc, '+str(count_inc))  # debug
+            
+            if (ts - self.ts_last < 0.99*self.off_tout): # pulse increase below off_tout, hysteresis plus-minus 1% added
                 if self.state == 0:
-                    self.state=1
-                    #print('ON due to count increase since',ts_inc,'s') # debug
-                power=round(1.0*(count - self.count_last)/(ts - self.ts_last),3)
+                    self.state=1  # swithed ON #######################################################################
+                    chg=1
+                power=round(1.0*count_inc/ts_inc,3) # use buffer (with time-span close to off_tout) for increased precision
                 self.count_last=count
                 self.ts_last=ts
-                return power, self.state, round(ts_inc,2), count_inc
+                return power, self.state, chg, round(ts_inc,2), count_inc, 'sure ON'
+            else:
+                self.count_last=count
+                self.ts_last=ts
+                return None, self.state, chg, timedelta, 0, 'no switch ON or off yet' 
 
-        elif count_inc == 0: # no count increase
-            if (ts_now - ts > 1.01*self.off_tout): # hysteresis plus-minus 1% added
+        elif count == self.count_last: # no count increase, no change in count_last or ts_last!
+            if (ts_now - self.ts_last > 1.01*self.off_tout): # no new pulses, possible switfOFF with hysteresis 1%
+                #print('consider_off: ts_now, ts_last, off_tout',int(round(ts_now)), int(round(self.ts_last)), self.off_tout) # debug
                 if self.state >0:
-                    self.state=0
-                    #print('OFF due to no count increase since',ts_inc,'s') # debug
-                return 0,0,round(ts_now - ts,2), 0  # definitely OFF
+                    self.state=0 # swithed OFF #######################################################################
+                    chg=-1
+                return 0, 0, chg, round(ts_now - self.ts_last,2), 0, 'sure OFF'  # definitely OFF
+            else:
+                return None, self.state, chg, timedelta, 0, 'no switch OFF yet' 
 
-        return None, self.state, round(ts_now - ts,2), 0  # no new power reading returned, no change in state
+        else:
+            return None, self.state, chg, timedelta, 0, 'something must be wrong'  # no power can be calculated, no state change for now
 

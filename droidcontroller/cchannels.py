@@ -13,6 +13,7 @@
 from sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
 s=SQLgeneral() # init sisse?
 from counter2power import *  # Counter2Power() handles power calculation based on pulse count increments
+
 import time
 
 class Cchannels(SQLgeneral): # handles counters registers and tables
@@ -21,7 +22,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
         Able to sync input and output channels and accept changes to service members by their sta_reg code
     '''
 
-    def __init__(self, in_sql = 'counters.sql', readperiod = 10, sendperiod = 30):
+    def __init__(self, in_sql = 'counters.sql', readperiod = 1, sendperiod = 30):
         self.setReadPeriod(readperiod)
         self.setSendPeriod(sendperiod)
         self.in_sql = in_sql.split('.')[0]
@@ -177,7 +178,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
             try:
                 for i in range(count/step): # counter processing loop. tuple to table rows. tuple len is twice count!
                     tcpdata=0
-                    print('counter_grp debug: i',i,'step',step,'results',result[step*i],result[step*i+1]) # debug
+                    #print('counter_grp debug: i',i,'step',step,'results',result[step*i],result[step*i+1]) # debug
                     if wcount == 2:
                         tcpdata = 65536*result[step*i]+result[step*i+1]
                         #print('normal counter',str(i),'result',tcpdata) # debug
@@ -195,7 +196,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                         oraw=int(row[0]) if row[0] !='' else -1
                     if tcpdata != oraw or oraw == -1: # update only if change needed or empty so far
                         Cmd="UPDATE "+self.in_sql+" set raw='"+str(tcpdata)+"', ts='"+str(self.ts)+"' where mba='"+str(mba)+"' and regadd='"+str(regadd+i*step)+"'" # koigile korraga
-                        print('counters i',i,Cmd) # debug
+                        #print('counters i',i,Cmd) # debug
                         conn.execute(Cmd)
                 return 0
             except:
@@ -289,7 +290,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
             #print "Cmd=",Cmd
             cur.execute(Cmd) # getting services to be read and reported
             cpi=-1 # counter2power instance index, increase only if with cfg weight 64 true
-            for row in cur: # possibly multivalue service members
+            for row in cur: # SERVICES LOOP
                 lisa='' # string to put space-separated values in
                 val_reg=''
                 sta_reg=''
@@ -301,7 +302,8 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                 Cmd3="select * from "+self.in_sql+" where val_reg='"+val_reg+"' order by member asc" # chk all members, also virtual!
                 #print Cmd3 # debug
                 cur3.execute(Cmd3)
-
+                chg=0 # service change flag based on member state or value change
+                
                 for srow in cur3: # members for one counter svc
                     #print srow # debug
                     mbi=0
@@ -365,11 +367,10 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                     # 4 - above outhi warning
                     # 8 - above outhi critical
 
-                    # 16 - to be zeroed regularly, see next bits for when NOT IN USE! done by server
-                    # 32  - midnight if 1, month change if 0   NOT IN USE
+                    # 16 - - immediate notification on status change (USED FOR STATE FROM POWER)
+                    # 32  - limits to state inversion
                     # 64 - power to be counted based on count increase and time period between counts
-                    # 128 - OFF-state not used in lolimit, OFF is equal to in-range??
-
+                    # 128 -  state from power flag
                     
                     if raw != None: # valid data for either energy or power value
                         #POWER?
@@ -380,10 +381,10 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                                     pass # instance already exists
                             except:
                                 self.cp.append(Counter2Power(val_reg,member,off_tout = block)) # another Count2Power instance. 100s  = 36W threshold if 1000 imp per kWh
-                                print('Counter2Power() instance cp['+str(cpi)+'] created for pwr svc '+val_reg+' member '+str(member))
+                                print('Counter2Power() instance cp['+str(cpi)+'] created for pwr svc '+val_reg+' member '+str(member)+', off_tout '+str(block))
                             res=self.cp[cpi].calc(ots, raw, ts_now = self.ts) # power calculation based on raw counter increase
                             raw=res[0]
-                            print('got result[0] from cp['+str(cpi)+']: '+str(res))  # debug
+                            #print('got result[0] from cp['+str(cpi)+']: '+str(res))  # debug
                  
                         # on-off?
                         #if (cfg&128): # 
@@ -394,12 +395,12 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                                     pass # instance already exists
                             except:
                                 self.cp.append(Counter2Power(val_reg,member,off_tout = block)) # another Count2Power instance. 10s tout = 360W threshold if 1000 imp per kWh
-                                print('Counter2Power() instance cp['+str(cpi)+'] created for state svc '+val_reg+' member '+str(member))
+                                print('Counter2Power() instance cp['+str(cpi)+'] created for state svc '+val_reg+' member '+str(member)+', off_tout '+str(block))
                             res=self.cp[cpi].calc(ots, raw, ts_now = self.ts) # power calculation based on raw counter increase
                             raw=res[1]
-                            print('got result[1] from cp['+str(cpi)+']: '+str(res))  # debug
-                 
-                        
+                            #print('got result from cp['+str(cpi)+']: '+str(res))  # debug
+                            if res[2] != 0: # on/off change
+                                chg=1 # immediate notification needed due to state change
                         
                         
                         # SCALING
@@ -412,36 +413,27 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                             
 
                         if value != None:
-                            if avg>1: #  and abs(value-ovalue)<value/2:  # averaging the readings. big jumps (more than 50% change) are not averaged.
+                            if avg>1 and abs(value-ovalue) < value/2:  # averaging the readings. big jumps (more than 50% change) are not averaged.
                                 value=int(((avg-1)*ovalue+value)/avg) # averaging with the previous value, works like RC low pass filter
                                 #print('counter avg on, value became ',value) # debug
-                            print('updating',self.in_sql,'val_reg,member,ovalue,value,avg',val_reg,member,ovalue,value,avg) # debug
+                            #print('counter svc,val_reg,member,ovalue,value,avg,abs(value-ovalue),cfg',val_reg,member,ovalue,value,avg,abs(value-ovalue),cfg) # debug
                             Cmd="update "+self.in_sql+" set value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
                             #print(Cmd) # debug
                             conn.execute(Cmd) # new value set in sql table ONLY if there was a valid result
-
-                            # print('end processing counter',val_reg,'member',member,'raw',raw,' value',value,' ovalue',ovalue,', avg',avg) # debug
+                            if (cfg&256) and abs(value-ovalue) > value/10.0: # change more than 20% detected, use num w comma!
+                                print('value change of more than 10% detected in '+val_reg+'.'+str(member)+', need to notify') # debug
+                                chg=1
+                            
+                        # print('end processing counter',val_reg,'member',member,'raw',raw,' value',value,' ovalue',ovalue,', avg',avg) # debug
 
                     else:
                         print('ERROR: raw None for svc',val_reg,member) # debug
+
+                # END OF SERVICE PROCESSING
+                if chg == 1: # no matter up or down
+                    print('immediate counter/power/status notification due to svc '+val_reg+' status or value change!') # debug
+                    self.make_counter_svc(val_reg,sta_reg) # immediate notification due to state or value change
                    
-
-        # DO NOT SEND AWAY HERE
-        #            lisa=lisa+str(value) # value members together into one string. value member can also be None!
-        #            # FIXME! better to keep service cteation separarte, based on sql value, not to involve None into members.
-        #            # this also keep reading and reporting asynchronous, and we need to read as often as possible!
-
-        #        # sending service to buffer
-        #        if self.ts - self.ts_send>self.sendperiod:
-        #            sent=1
-        #            sendtuple=[sta_reg,status,val_reg,lisa]
-        #            #print('counter svc - going to report',sendtuple)  # debug
-        #            udp.send(sendtuple) # to uniscada instance
-        #    if sent == 1:
-        #        self.ts_send = self.ts
-        #    sent = 0
-        #    conn.commit() # counters transaction end
-        
             return 0
 
         except: # end reading counters
@@ -501,7 +493,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
 
 
     def make_counter_svc(self,val_reg,sta_reg):  # should be generic, suitable both for aichannels and counters
-        ''' make a single service record (with status chk) based on counters members and send it away to UDPchannel '''
+        ''' make a single service record WITH STATUS based on existing values of the counter members and send it away to UDPchannel '''
         #FIXME! we do not need to calc value here, that has to be made with aquiry of every new raw!
 
         status=0 # initially
@@ -590,20 +582,19 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                 if value<outhi and value>outlo+0.05*(outhi-outlo):
                     status=0 # back to normal
                     #block=0
-                    
-        # CONFIG BYTE BIT MEANINGS
-        # 1 - below outlo warning,
-        # 2 - below outlo critical,
-        # NB! 3 - not to be sent  if value below outlo
-        # 4 - above outhi warning
-        # 8 - above outhi critical
+                      
+            # CONFIG BYTE BIT MEANINGS
+            # 1 - below outlo warning,
+            # 2 - below outlo critical,
+            # NB! 3 - not to be sent  if value below outlo
+            # 4 - above outhi warning
+            # 8 - above outhi critical
 
-        # 16 - to be zeroed regularly, see next bits for when NOT IN USE! done by server
-        # 32  - midnight if 1, month change if 0   NOT IN USE
-        # 64 - power to be counted based on count increase and time period between counts
-        # 128 - OFF-state not used in lolimit, OFF is equal to in-range??
-
-    #############                
+            # 16 - - immediate notification on status change (USED FOR STATE FROM POWER)
+            # 32  - limits to state inversion
+            # 64 - power to be counted based on count increase and time period between counts
+            # 128 -  state from power flag
+        #############                
             #print 'make counter_svc mba ots mts',mba,ots,mts # debug
             if mba>0:
                 if ots>mts:
@@ -613,9 +604,17 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                 lisa=lisa+' ' # separator between member values
             lisa=lisa+str(int(round(value))) # adding member values into one string
 
+        if (cfg&32): # this must be done in service loop end, for the final status, not for each member!
+            print('status inversion enabled for val_reg',val_reg,'initial status',status,',cfg',cfg) # debug
+            if status == 0: 
+                status = (cfg&3) # normal becomes warning or critical
+            else:
+                status = 0 # not normal becomes normal
+            print('status inversion enabled for val_reg',val_reg,'final status',status) # debug
+          
         # service done
         sendtuple=[sta_reg,status,val_reg,lisa] # sending service to buffer
-        print('cchannels going to send',sendtuple) # debug
+        #print('cchannels going to send',sendtuple) # debug
         udp.send(sendtuple) # to uniscada instance 
 
         return 0
