@@ -11,6 +11,10 @@ import sqlite3
 import traceback
 from socket import *
 import sys
+import os
+import gzip
+import tarfile
+import requests 
 
 #UDPSock = socket(AF_INET,SOCK_DGRAM)
 
@@ -362,12 +366,12 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
             if (int(raddr[1]) < 1 or int(raddr[1]) > 65536):
                 msg='illegal source port '+str(raddr[1])+' in the message received from '+raddr[0]
                 print(msg)
-                syslog(msg)
+                #syslog(msg)
 
             if raddr[0] != self.ip:
                 msg='illegal sender '+str(raddr[0])+' of message: '+data+' at '+str(int(ts))  # ignore the data received!
                 print(msg)
-                syslog(msg)
+                #syslog(msg)
                 data='' # data destroy
 
             if "id:" in data: # first check based on host id existence in thge received message, must exist to be valid message!
@@ -427,5 +431,196 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
         return udpgot
 
 
+        
+class Commands:
+    ''' Checks and fullfills commands found in udp data from server '''
+    
+    def __init__(self, id, supporthost = 'www.itvilla.ee', directory = '/support/pyapp/', uploader='/upload.php', base64string='cHlhcHA6QkVMYXVwb2E='): 
+        self.host_id = id
+        self.supporthost = supporthost
+        self.directory=directory+id+'/'
+        self.uploader=uploader
+        self.base64string=base64string
+        
+        
+    def push(self, filename): # send (gzipped) file to supporthost
+        ''' push file filename to supporthost directory using uploader and base64string (for basic auth) '''
+        if os.path.isfile(filename):
+            pass
+        else:
+            msg='push: found no file '+filename
+            print(msg)
+            return 2 # no such file
+
+        if '.gz' in filename or '.tgz' in filename: # packed already
+            pass
+        else: # lets unpack too
+            f_in = open(filename, 'rb')
+            f_out = gzip.open(filename+'.gz', 'wb')
+            f_out.writelines(f_in)
+            f_out.close()
+            f_in.close()
+            filename = filename+'.gz' # new filename to send
+            dnsize=os.stat(filename)[6] # file size to be sent
+            msg='the file was gzipped to '+filename+' with size '+str(dnsize) # the original file is kept!
+            print(msg)
+            #syslog(msg)
+
+        try:
+            r = requests.post('http://'+self.supporthost+self.uploader,
+                                files={'file': open(filename, 'rb')},
+                                headers={'Authorization': 'Basic '+self.base64string},
+                                data={'mac': self.directory}
+                             )
+            print('post response:',r.text) # nothing?
+            msg='file '+filename+' with size '+str(dnsize)+' sent to '+self.directory
+            #syslog(msg)
+            print(msg)
+            return 0
+            
+        except:
+            msg='the file '+filename+' was NOT sent to '+self.directory+' '+str(sys.exc_info()[1])
+            syslog(msg)
+            print(msg)
+            #traceback.print_exc()
+            return 1
+
+
+
+
+    def pull(self, filename, filesize, start): # uncompressing too if filename contains .gz and succesfully retrieved. start=0 normally. higher with resume.
+        oksofar=1 # success flag
+        filename2='' # for uncompressed from the downloaded file
+        filepart=filename+'.part' # temporary, to be renamed to filename when complete
+        filebak=filename+'.bak'
+        dnsize=0 # size of downloaded file
+        if start>filesize:
+            msg='pull parameters: file '+filename+' start '+str(start)+' above filesize '+str(filesize)
+            print(msg)
+            #syslog(msg)
+            return 99, 0 # illegal parameters or file bigger than stated during download resume
+
+        req = 'http://'+self.supporthost+self.directory+filename
+        pullheaders={'Range': 'bytes=%s-' % (start)} # with requests
+        
+        msg='trying '+req+' from byte '+str(start)+' using '+repr(pullheaders)
+        print(msg)
+        #syslog(msg)
+        try:
+            response = requests.get(req, headers=pullheaders) # with python3
+            output = open(filepart,'wb')
+            output.write(response.content)
+            output.close()
+        except:
+            msg='pull: partial or failed download of temporary file '+filepart+' '+str(sys.exc_info()[1])
+            print(msg)
+            #syslog(msg)
+            #traceback.print_exc()
+            
+        try:
+            dnsize=os.stat(filepart)[6]  # int(float(subexec('ls -l '+filename,1).split(' ')[4]))
+        except:
+            msg='pull: got no size for file '+os.getcwd()+'/'+filepart+' '+str(sys.exc_info()[1])
+            print(msg)
+            #syslog(msg)
+            #traceback.print_exc()
+            oksofar=0
+
+        if dnsize == filesize: # ok
+            msg='pull: file '+filename+' download OK, size '+str(dnsize)
+            print(msg)
+            #syslog(msg)
+
+            try:
+                os.rename(filename, filebak) # keep the previous version if exists
+                #msg='renamed '+filename+' to '+filebak
+            except:
+                #traceback.print_exc()
+                msg='FAILED to rename '+filename+' to '+filebak+' '+str(sys.exc_info()[1])
+                print(msg)
+                #syslog(msg)
+                oksofar=0
+
+            
+            try:
+                os.rename(filepart, filename) #rename filepart to filename2
+                #msg='renamed '+filepart+' to '+filename
+            except:
+                msg='FAILED to rename '+filepart+' to '+filename+' '+str(sys.exc_info()[1])
+                print(msg)
+                #syslog(msg)
+                oksofar=0
+                #traceback.print_exc()
+            
+            if oksofar == 0: # trouble, exit
+                return 1, dnsize
+
+            if '.gz' in filename: # lets unpack too
+                filename2=filename.replace('.gz','')
+                try:
+                    os.rename(filename2, filename2+'.bak') # keep the previous versioon if exists
+                except:
+                    #traceback.print_exc()
+                    pass
+
+                try:
+                    f = gzip.open(filename,'rb')
+                    output = open(filename2,'wb')
+                    output.write(f.read());
+                    output.close() # file with filename2 created
+                    msg='pull: gz file '+filename+' unzipped to '+filename2+', previous file kept as '+filebak
+                    print(msg)
+                except:
+                    os.rename(filename2+'.bak', filename2) # restore the previous versioon if unzip failed
+                    msg='pull: file '+filename+' unzipping failure, previous file '+filename2+' restored. '+str(sys.exc_info()[1])
+                    #traceback.print_exc()
+                    print(msg)
+                    #syslog(msg)
+                    return 1, dnsize
+
+            if '.tgz' in filename: # possibly contains a directory
+                try:
+                    f = tarfile.open(filename,'r')
+                    f.extractall() # extract all into the current directory
+                    f.close()
+                    #msg='pull: tgz file '+filename+' successfully unpacked'
+                except:
+                    msg='pull: tgz file '+filename+' unpacking failure! '+str(sys.exc_info()[1])
+                    #traceback.print_exc()
+                    print(msg)
+                    #syslog(msg)
+                    return 1, dnsize
+
+            # temporarely switching off this chmod feature, failing!!
+            #if '.py' in filename2 or '.sh' in filename2: # make it executable, only works with gzipped files!
+            #    try:
+            #        st = os.stat('filename2')
+            #        os.chmod(filename2, st.st_mode | stat.S_IEXEC) # add +x for the owner
+            #        msg='made the pulled file executable'
+            #        print(msg)
+              #      syslog(msg)
+             #       return 0
+            #    except:
+            #        msg='FAILED to make pulled file executable!'
+            #        print(msg)
+            ##        syslog(msg)
+            #        traceback.print_exc()
+            #        return 99
+            
+            return 0, dnsize
+            
+        else:
+            if dnsize<filesize:
+                msg='pull: file '+filename+' received partially with size '+str(dnsize)
+                print(msg)
+                #syslog(msg)
+                return 1, dnsize # next try will continue 
+            else:
+                msg='pull: file '+filename+' received larger than unexpected, in size '+str(dnsize)
+                print(msg)
+                #syslog(msg)
+                return 99, dnsize
+
+    
 
 
