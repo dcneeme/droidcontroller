@@ -13,7 +13,9 @@ try:
         print('uniscada connection already existing to',host,port)
 except:
     udp=UDPchannel()
-    print('created uniscada connection instance')
+    print('created uniscada UDP connection instance')
+    tcp=TCPchannel()
+    print('created uniscada TCP connection instance')
 
 
 try:

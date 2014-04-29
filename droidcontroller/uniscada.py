@@ -5,6 +5,7 @@
 # 03.04.2013 UDPsock moved into UDPchannel __init__
 # 06.04.2014 send() takes tuple now
 # 07.04.2014 send() tuple members to string or int
+# 29.04.2014 added syslog() and TCPchannel class 
 
 import time, datetime
 import sqlite3
@@ -14,9 +15,8 @@ import sys
 import os
 import gzip
 import tarfile
-import requests 
-
-#UDPSock = socket(AF_INET,SOCK_DGRAM)
+import requests
+#from udp_commands import *
 
 
 class UDPchannel: # for one host only. if using 2 servers, create separate UDPchannels but a single MessageBuffer.. probably not necessary, can be separate too!
@@ -40,13 +40,18 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
         self.ip = ip
         self.port = port
         self.saddr = (self.ip,self.port) # monitoring server
-        
-        self.traffic = [0,0] # udp bytes in out
+
+        self.traffic = [0,0] # UDP bytes in, out
         self.UDPSock = socket(AF_INET,SOCK_DGRAM)
         self.UDPSock.settimeout(receive_timeout)
         self.retrysend_delay = retrysend_delay
         self.inum = 0 # sent message counter
-        print('init: created uniscada connection')
+
+        self.UDPlogSock = socket(AF_INET,SOCK_DGRAM)
+        self.UDPlogSock.settimeout(None) # for syslog
+        self.UDPlogSock.setsockopt(SOL_SOCKET, SO_BROADCAST, 1) # broadcast allowed
+
+        print('init: created uniscada and syslog connections')
         self.table = 'buff2server' # can be anything, not accessible to other objects
         self.Initialize()
 
@@ -57,7 +62,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
         self.ts_unsent = self.ts # last unsent chk
         self.ts_udpsent=self.ts
         self.ts_udpgot=self.ts
-        self.conn = sqlite3.connect(':memory:') 
+        self.conn = sqlite3.connect(':memory:')
         #self.cur=self.conn.cursor() # cursors to read data from tables / cursor can be local
         self.makebuff() # create buffer table for unsent messages
 
@@ -73,34 +78,35 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
         self.port = invar
         self.saddr = (self.ip,self.port) # refresh needed
 
-        
+
     def setID(self, invar):
         ''' Set the host id '''
         self.host_id = invar
-        
-    
+
+
     def setRetryDelay(self, invar):
         ''' Set the monitoring server UDP port '''
         self.retrysend_delay = invar
 
-    
+
     def getTS(self):
         '''returns timestamps for last send trial and successful receive '''
         return self.ts_udpsent, self.ts_udpgot
-        
+
     def getID(self):
         '''returns host id for this instance '''
         return self.host_id
-    
+
     def getIP(self):
         '''returns server ip for this instance '''
         return self.ip
+
     
     def get_traffic(self):
         return self.traffic # tuple in, out
-        
 
-    def set_traffic(self, bytes_in = None, bytes_out = None): # set traffic counters (it is possible to update only one of them as well)
+
+    def set_traffic(self, bytes_in = None, bytes_out = None): # set UDP traffic counters (it is possible to update only one of them as well)
         if bytes_in != None:
             if not bytes_in < 0:
                 self.traffic[0] = bytes_in
@@ -112,16 +118,16 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
                 self.traffic[1] = bytes_out
             else:
                 print('invalid bytes_out',bytes_out)
-                
+
 
     def set_inum(self,inum = 0): # set message counter
         self.inum=inum
-        
+
 
     def get_inum(self):  #get message counter
-        return self.inum        
-        
-        
+        return self.inum
+
+
     def makebuff(self): # drops table and creates
         Cmd='drop table if exists '+self.table
         sql="CREATE TABLE "+self.table+"(sta_reg,status NUMERIC,val_reg,value,ts_created NUMERIC,inum NUMERIC,ts_tried NUMERIC);" # semicolon needed for NPE for some reason!
@@ -151,10 +157,10 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
             print('buffer content deleted')
         except:
             traceback.print_exc()
-            
 
 
-        
+
+
 
     def send(self, servicetuple): # store service components to buffer for send and resend
         ''' adds service components into buffer to be sent as a string message
@@ -422,27 +428,77 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
         return data_dict # possible key:value pairs here for setup change or commands
 
 
+    def syslog(self, msg, loghost='255.255.255.255',logport = 514): # sending out syslog message. previously also appending a line to the log file
+        msg=msg+"\n" # add newline to the end
+        #print('syslog send to',logaddr) # debug
+        logaddr=(loghost,logport)
+        dnsize=0 
+        
+        try: #
+            self.UDPlogSock.sendto(msg.encode('utf-8'),logaddr)
+            if not '255.255.' in logaddr[0] and not '10.0.' in logaddr[0] and not '192.168.' in logaddr[0]: # sending syslog out of local network
+                dnsize=len(msg) # udp out increase, payload only
+        except:
+            pass # kui udp ei toimi, ei toimi ka syslog
+            print 'could NOT send syslog message to '+repr(logaddr)
+            traceback.print_exc()
+
+        self.traffic[1] += dnsize
+        return 0
+
+
     def comm(self): # do this regularly, blocks for the time of socket timeout!
         ''' Communicates with server, returns cmd and setup key:value'''
         self.ts = round(time.time(),1) # timestamp
         self.unsent() # delete old records
         udpgot = self.udpread() # check for incoming udp data
+        # parse_udp()
         self.buff2server() # send away. the ack for this is available on next comm() hopefully
         return udpgot
 
 
-        
-class Commands:
-    ''' Checks and fullfills commands found in udp data from server '''
-    
-    def __init__(self, id, supporthost = 'www.itvilla.ee', directory = '/support/pyapp/', uploader='/upload.php', base64string='cHlhcHA6QkVMYXVwb2E='): 
-        self.host_id = id
+
+class TCPchannel:
+    ''' Communication via TCP (pull, push)  '''
+
+    def __init__(self, id = '000000000000', supporthost = 'www.itvilla.ee', directory = '/support/pyapp/', uploader='/upload.php', base64string='cHlhcHA6QkVMYXVwb2E='):
         self.supporthost = supporthost
-        self.directory=directory+id+'/'
         self.uploader=uploader
         self.base64string=base64string
+        self.traffic = [0,0] # TCP bytes in, out
+        self.setID(id)
+        self.directory=directory
+    
+    def setID(self, invar):
+        ''' Set the host id '''
+        self.host_id = invar
         
-        
+
+    
+    def getID(self):
+        '''returns server ip for this instance '''
+        return self.host_id
+
+    
+    def get_traffic(self): # TCP traffic counter
+        return self.traffic # tuple in, out
+
+
+    def set_traffic(self, bytes_in = None, bytes_out = None): # set TCP traffic counters (it is possible to update only one of them as well)
+        if bytes_in != None:
+            if not bytes_in < 0:
+                self.traffic[0] = bytes_in
+            else:
+                print('invalid bytes_in',bytes_in)
+
+        if bytes_out != None:
+            if not bytes_out < 0:
+                self.traffic[1] = bytes_out
+            else:
+                print('invalid bytes_out',bytes_out)
+
+    
+    
     def push(self, filename): # send (gzipped) file to supporthost
         ''' push file filename to supporthost directory using uploader and base64string (for basic auth) '''
         if os.path.isfile(filename):
@@ -470,16 +526,17 @@ class Commands:
             r = requests.post('http://'+self.supporthost+self.uploader,
                                 files={'file': open(filename, 'rb')},
                                 headers={'Authorization': 'Basic '+self.base64string},
-                                data={'mac': self.directory}
+                                data={'mac': self.directory+self.host_id+'/'}
                              )
             print('post response:',r.text) # nothing?
-            msg='file '+filename+' with size '+str(dnsize)+' sent to '+self.directory
+            msg='file '+filename+' with size '+str(dnsize)+' sent to '+self.directory+self.host_id+'/'
             #syslog(msg)
             print(msg)
+            self.traffic[1] += dnsize
             return 0
-            
+
         except:
-            msg='the file '+filename+' was NOT sent to '+self.directory+' '+str(sys.exc_info()[1])
+            msg='the file '+filename+' was NOT sent to '+self.directory+self.host_id+'/ '+str(sys.exc_info()[1])
             syslog(msg)
             print(msg)
             #traceback.print_exc()
@@ -498,11 +555,11 @@ class Commands:
             msg='pull parameters: file '+filename+' start '+str(start)+' above filesize '+str(filesize)
             print(msg)
             #syslog(msg)
-            return 99, 0 # illegal parameters or file bigger than stated during download resume
+            return 99 # illegal parameters or file bigger than stated during download resume
 
-        req = 'http://'+self.supporthost+self.directory+filename
+        req = 'http://'+self.supporthost+self.directory+self.host_id+'/'+filename
         pullheaders={'Range': 'bytes=%s-' % (start)} # with requests
-        
+
         msg='trying '+req+' from byte '+str(start)+' using '+repr(pullheaders)
         print(msg)
         #syslog(msg)
@@ -516,7 +573,7 @@ class Commands:
             print(msg)
             #syslog(msg)
             #traceback.print_exc()
-            
+
         try:
             dnsize=os.stat(filepart)[6]  # int(float(subexec('ls -l '+filename,1).split(' ')[4]))
         except:
@@ -541,7 +598,7 @@ class Commands:
                 #syslog(msg)
                 oksofar=0
 
-            
+
             try:
                 os.rename(filepart, filename) #rename filepart to filename2
                 #msg='renamed '+filepart+' to '+filename
@@ -551,9 +608,10 @@ class Commands:
                 #syslog(msg)
                 oksofar=0
                 #traceback.print_exc()
-            
+
             if oksofar == 0: # trouble, exit
-                return 1, dnsize
+                self.traffic[0] += dnsize
+                return 1
 
             if '.gz' in filename: # lets unpack too
                 filename2=filename.replace('.gz','')
@@ -576,7 +634,8 @@ class Commands:
                     #traceback.print_exc()
                     print(msg)
                     #syslog(msg)
-                    return 1, dnsize
+                    self.traffic[0] += dnsize
+                    return 1
 
             if '.tgz' in filename: # possibly contains a directory
                 try:
@@ -589,7 +648,8 @@ class Commands:
                     #traceback.print_exc()
                     print(msg)
                     #syslog(msg)
-                    return 1, dnsize
+                    self.traffic[0] += dnsize
+                    return 1
 
             # temporarely switching off this chmod feature, failing!!
             #if '.py' in filename2 or '.sh' in filename2: # make it executable, only works with gzipped files!
@@ -606,21 +666,20 @@ class Commands:
             ##        syslog(msg)
             #        traceback.print_exc()
             #        return 99
-            
-            return 0, dnsize
-            
+            self.traffic[0] += dnsize
+            return 0
+
         else:
             if dnsize<filesize:
                 msg='pull: file '+filename+' received partially with size '+str(dnsize)
                 print(msg)
                 #syslog(msg)
-                return 1, dnsize # next try will continue 
+                self.traffic[0] += dnsize
+                return 1 # next try will continue
             else:
                 msg='pull: file '+filename+' received larger than unexpected, in size '+str(dnsize)
                 print(msg)
                 #syslog(msg)
-                return 99, dnsize
-
-    
-
+                self.traffic[0] += dnsize
+                return 99
 
