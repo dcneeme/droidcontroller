@@ -19,6 +19,9 @@ import requests
 #from udp_commands import *
 
 
+
+            
+            
 class UDPchannel: # for one host only. if using 2 servers, create separate UDPchannels but a single MessageBuffer.. probably not necessary, can be separate too!
     ''' Sends away the messages, combining different key:value pairs and adding host id and time. Listens for incoming commands and setup data.
     Several UDPchannel instances can be used in parallel, to talk with different servers.
@@ -35,12 +38,13 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
 
     '''
 
-    def __init__(self, id = '000000000000', ip = '127.0.0.1', port = 44445, receive_timeout = 0.1, retrysend_delay = 5): # delays in seconds
+    def __init__(self, id = '000000000000', ip = '127.0.0.1', port = 44445, receive_timeout = 0.1, retrysend_delay = 5, loghost = '0.0.0.0', logport=514): # delays in seconds
         self.host_id = id
         self.ip = ip
         self.port = port
-        self.saddr = (self.ip,self.port) # monitoring server
-
+        self.loghost = loghost
+        self.logport = logport
+        
         self.traffic = [0,0] # UDP bytes in, out
         self.UDPSock = socket(AF_INET,SOCK_DGRAM)
         self.UDPSock.settimeout(receive_timeout)
@@ -65,12 +69,19 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
         self.conn = sqlite3.connect(':memory:')
         #self.cur=self.conn.cursor() # cursors to read data from tables / cursor can be local
         self.makebuff() # create buffer table for unsent messages
+        self.setIP(self.ip)
+        self.setLogIP(self.loghost)
 
 
     def setIP(self, invar):
         ''' Set the monitoring server ip address '''
         self.ip = invar
         self.saddr = (self.ip,self.port) # refresh needed
+        
+    def setLogIP(self, invar):
+        ''' Set the syslog monitor ip address '''
+        self.loghost = invar
+        self.logaddr = (self.loghost,self.logport) # refresh needed
 
 
     def setPort(self, invar):
@@ -128,7 +139,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
         return self.inum
 
 
-    def makebuff(self): # drops table and creates
+    def makebuff(self): # drops buffer table and creates
         Cmd='drop table if exists '+self.table
         sql="CREATE TABLE "+self.table+"(sta_reg,status NUMERIC,val_reg,value,ts_created NUMERIC,inum NUMERIC,ts_tried NUMERIC);" # semicolon needed for NPE for some reason!
         try:
@@ -309,12 +320,12 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
 
 
     def udpsend(self, sendstring = ''): # actual udp sending, no resend. give message as parameter. used by buff2server too.
-        ''' sends data immediately  without sql buffer data in between! no inum inclusion! '''
+        ''' Sends UDP data immediately, adding self.inum if >0. '''
         if sendstring == '': # nothing to send
             print('udpsend(): nothing to send!')
             return 1
 
-
+        self.ts = round(time.time(),1)
         sendstring="id:"+self.host_id+"\n"+sendstring # loodame, et ts_created on enam-vahem yhine neil teenustel...
         if self.inum > 0: # "in:inum" to be added
             sendstring="in:"+str(self.inum)+","+str(round(self.ts))+"\n"+sendstring
@@ -428,22 +439,21 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
         return data_dict # possible key:value pairs here for setup change or commands
 
 
-    def syslog(self, msg, loghost='255.255.255.255',logport = 514): # sending out syslog message. previously also appending a line to the log file
+    def syslog(self, msg): # sending out syslog message to self.logaddr.
         msg=msg+"\n" # add newline to the end
-        #print('syslog send to',logaddr) # debug
-        logaddr=(loghost,logport)
+        #print('syslog send to',self.logaddr) # debug
         dnsize=0 
         
         try: #
-            self.UDPlogSock.sendto(msg.encode('utf-8'),logaddr)
-            if not '255.255.' in logaddr[0] and not '10.0.' in logaddr[0] and not '192.168.' in logaddr[0]: # sending syslog out of local network
+            self.UDPlogSock.sendto(msg.encode('utf-8'),self.logaddr)
+            if not '255.255.' in self.logaddr[0] and not '10.0.' in self.logaddr[0] and not '192.168.' in self.logaddr[0]: # sending syslog out of local network
                 dnsize=len(msg) # udp out increase, payload only
         except:
             pass # kui udp ei toimi, ei toimi ka syslog
-            print 'could NOT send syslog message to '+repr(logaddr)
+            print 'could NOT send syslog message to '+repr(self.logaddr)
             traceback.print_exc()
 
-        self.traffic[1] += dnsize
+        self.traffic[1] += dnsize  # udp traffic
         return 0
 
 

@@ -26,7 +26,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
         self.setReadPeriod(readperiod)
         self.setSendPeriod(sendperiod)
         self.in_sql = in_sql.split('.')[0]
-        self.s = SQLgeneral()
+        #self.s = SQLgeneral()
         self.cp=[] # possible counter2value calculation instances
         self.Initialize()
 
@@ -42,7 +42,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
 
 
     def sqlread(self, table):
-        self.s.sqlread(table) # read dichannels
+        s.sqlread(table) # read dichannels
 
 
     def Initialize(self): # before using this create s=SQLgeneral()
@@ -427,7 +427,8 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                         # print('end processing counter',val_reg,'member',member,'raw',raw,' value',value,' ovalue',ovalue,', avg',avg) # debug
 
                     else:
-                        print('ERROR: raw None for svc',val_reg,member) # debug
+                        if mba > 0 and member > 0:
+                            print('ERROR: raw None for svc',val_reg,member) # debug
 
                 # END OF SERVICE PROCESSING
                 if chg == 1: # no matter up or down
@@ -472,7 +473,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
 
                 if self.make_counter_svc(val_reg,sta_reg) == 0: # successful svc insertion into buff2server
                     pass
-                    print('tried to report svc',val_reg,sta_reg)
+                    #print('tried to report svc',val_reg,sta_reg)
                 else:
                     print('make_counters FAILED to report svc',val_reg,sta_reg)
                     return 1 #cancel

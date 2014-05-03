@@ -19,7 +19,7 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
         self.setSendPeriod(sendperiod)
         self.in_sql = in_sql.split('.')[0]
         self.out_sql = out_sql.split('.')[0]
-        self.s = SQLgeneral()
+        #self.s = SQLgeneral()
         self.Initialize()
 
 
@@ -34,7 +34,8 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
 
         
     def sqlread(self,table):
-        self.s.sqlread(table) # read dichannels
+        #self.s.sqlread(table) # read dichannels
+        s.sqlread(table)
         
         
     def Initialize(self): # before using this create s=SQLgeneral()
@@ -443,8 +444,6 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
 
     def make_aichannel_svc(self,val_reg,sta_reg):  # 
         ''' make a single service record (with status chk) based on aichannel members and send it away to UDPchannel '''
-        #FIXME! we do not need to calc value here, that has to be made with aquiry of every new raw!
-
         status=0 # initially
         cur=conn.cursor()
         lisa=''
@@ -461,10 +460,10 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
             regadd=-1
             member=0
             cfg=0
-            x1=0
-            x2=0
-            y1=0
-            y2=0
+            #x1=0
+            #x2=0
+            #y1=0
+            #y2=0
             outlo=0
             outhi=0
             ostatus=0 # eelmine
@@ -482,10 +481,10 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
             val_reg=srow[2] # see on string
             member=int(srow[3]) if srow[3] != '' else 0
             cfg=int(srow[4]) if srow[4] != '' else 0 # konfibait nii ind kui grp korraga, esita hex kujul hiljem
-            x1=int(srow[5]) if srow[5] != '' else 0
-            x2=int(srow[6]) if srow[6] != '' else 0
-            y1=int(srow[7]) if srow[7] != '' else 0
-            y2=int(srow[8]) if srow[8] != '' else 0
+            #x1=int(srow[5]) if srow[5] != '' else 0
+            #x2=int(srow[6]) if srow[6] != '' else 0
+            #y1=int(srow[7]) if srow[7] != '' else 0
+            #y2=int(srow[8]) if srow[8] != '' else 0
             outlo=int(srow[9]) if srow[9] != '' else None
             outhi=int(srow[10]) if srow[10] != '' else None
             avg=int(srow[11]) if srow[11] != '' else 0  #  averaging strength, values 0 and 1 do not average!
