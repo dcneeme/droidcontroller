@@ -2,6 +2,7 @@
 #instance udp should be created.
 
 import subprocess
+import sys
 
 from sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
 s=SQLgeneral() 
@@ -110,7 +111,8 @@ class Commands(SQLgeneral): # p
             
     def todo_proc(self, TODO = ''):        
         ''' Various commands execution based on TODO if set ''' 
-        global stop  # stops main loop if >0    
+        pulltry=0 
+        todocode=0
         sendstring=''
         if TODO != '': # seems there is something to do
             self.todocode=self.todocode+1 # try count
@@ -124,15 +126,13 @@ class Commands(SQLgeneral): # p
                     #TODO='' # do not do it here! see the if end
                     
             if TODO == 'REBOOT': # stop the application, not the system
-                stop=1 # main loop global stop flag
-                todocode=0
+                #todocode=0
                 msg='stopping, for possible script autorestart via appd.sh' # chk if appd.sh is alive?
                 print(msg)
                 udp.syslog(msg) 
                 sys.stdout.flush()
-                    
                 time.sleep(1)
-
+                sys.exit()  # STOPPING THE APPLICATION.
                         
             if TODO == 'GSMBREAK': # external router power break do8
                 msg='power cut for communication device due to command'
@@ -163,7 +163,8 @@ class Commands(SQLgeneral): # p
                     udp.syslog(msg)
                     print(msg)
                     print('going to reboot now!')
-                    returncode=subexec(['reboot'],0) # linux
+                    time.sleep(2)
+                    #returncode=self.subexec(['reboot'],0) # FIXME! error, no p??
                         
                 except:
                     todocode=1
@@ -326,7 +327,7 @@ class Commands(SQLgeneral): # p
             
      
 
-class RegularComm: # r
+class RegularComm(SQLgeneral): # r
     ''' Checks the incoming datagram members (key,value) for commands and setup variables. 
         Outputs TODO for execution and ... 
     '''
@@ -341,8 +342,9 @@ class RegularComm: # r
         
       
     def set_uptime(self):
-        self.uptime[0]=0 # int(p.subexec('cut -f1 -d. /proc/uptime',1)) # FIXME!
-        self.uptime[1]=int(self.ts - self.app_start)
+        self.uptime[0]=0 # 
+        #self.uptime=int(p.subexec('cut -f1 -d. /proc/uptime',1)) # FIXME!
+        self.uptime[1]=int(self.ts - self.app_start) # sys and app uptimes
         
         
     def regular_svc(self, svclist = ['ULW','UTW']): # default are uptime and traffic services
