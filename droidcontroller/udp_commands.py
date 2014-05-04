@@ -62,11 +62,6 @@ class Commands(SQLgeneral): # p
                             udp.set_traffic[member]=int(float(value.split(' ')[member]))
                             tcp.set_traffic[member]=int(float(value.split(' ')[member+2]))
                     msg='restored traffic volumes to udp '+str(udp.get_traffic)+' tcp '+str(udp.get_traffic)
-                    
-                elif key == 'ULW': # uptimes system and app
-                    if len(value.split(' ')) == 2: # valid message for sys and app uptimes
-                        r.set_uptime(sys_uptime=int(float(value.split(' ')[0]))) # 
-                    msg='restored sys uptime only (not app)'+str(self.uptime)
                 
                 elif key == 'LRW': # lighting state service. no dump to sql file needed.
                     if len(value.split(' ')) == 4: # valid message remote control via last member
@@ -338,22 +333,46 @@ class RegularComm(SQLgeneral): # r
         self.ts_regular=self.app_start - interval # for immediate sending on start
         self.ts=self.app_start
         self.uptime=[0,0]
-        self.set_uptime()
+        self.sync_uptime()
         
       
-    def set_uptime(self):
-        self.uptime[0]=0 # 
-        #self.uptime=int(p.subexec('cut -f1 -d. /proc/uptime',1)) # FIXME!
+    def subexec(self, exec_cmd, submode = 1): # submode 0 returns exit code only
+        ''' shell command execution. if submode 0-, return exit staus.. if 1, exit std output produced. 
+            FIXME: HAD TO COPY subexec HERE BECAUSE I CANNOT USE p.subexec() from here ...
+        '''
+        if submode == 0: # return exit status, 0 or more
+            returncode=subprocess.call(exec_cmd) # ootab kuni lopetab
+            return returncode  # return just the subprocess exit code
+        else: # return everything from sdout
+            proc=subprocess.Popen([exec_cmd], shell=True, stdout=subprocess.PIPE)
+            result = proc.communicate()[0]
+            return result
+        
+     
+    def sync_uptime(self):
+        #self.uptime[0]=0 # 
+        self.uptime[0]=int(self.subexec('cut -f1 -d. /proc/uptime',1))
         self.uptime[1]=int(self.ts - self.app_start) # sys and app uptimes
+        print('uptimes sys,app',self.uptime) # debug
         
-        
-    def regular_svc(self, svclist = ['ULW','UTW']): # default are uptime and traffic services
+
+    def set_host_ip(self, invar):
+        self.host_ip=invar
+    
+    
+    def get_host_ip(self):
+        #self.host_ip=p.subexec('./getnetwork.sh',1).split(' ')[1] # mac and ip from the system
+        self.host_ip=self.subexec('./getnetwork.sh',1).split(' ')[1] # mac and ip from the system
+        print('get_host_ip:',self.host_ip)
+    
+    
+    def regular_svc(self, svclist = ['ULW','UTW','ip']): # default are uptime and traffic services
         ''' sends regular service messages that are not related to aichannels, dichannels or counters  '''
         self.ts=time.time()
         if self.ts < self.ts_regular + self.interval: # break
             return None
             
-        self.set_uptime()
+        self.sync_uptime()
         sendstring=''
         for svc in svclist:
             if svc == 'UTW': # traffic
@@ -367,10 +386,13 @@ class RegularComm(SQLgeneral): # r
                 if (self.uptime[0] > 1800) or (self.uptime[0] > 1800):
                     sendstring=sendstring+'0\n' # ok
                 else:
-                    sendstring=sendstring+'1\n' # warning 
+                    sendstring=sendstring+'1\n' # warning
 
-        sendstring=sendstring+svc+':'+msg+'\n'
-        res=udp.udpsend(sendstring) # SEND AWAY        
+            elif svc == 'ip': # own ip
+                msg=str(self.host_ip) # refreshing from time to time? via set_host_ip()
+
+            sendstring=sendstring+svc+':'+msg+'\n'
+        res=udp.udpsend(sendstring) # loop over, SEND AWAY        
         self.ts_regular=self.ts
         return res # 0 is ok 
                     

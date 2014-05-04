@@ -447,10 +447,9 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
         status=0 # initially
         cur=conn.cursor()
         lisa=''
-        #print 'reading aichannels values for val_reg',val_reg,'with',mcount,'members' # ajutine
-
+       
         Cmd="select * from "+self.in_sql+" where val_reg='"+val_reg+"'" # loeme yhe teenuse kogu info uuesti
-        #print Cmd3 # ajutine
+        #print('make_aichannel_svc:',Cmd) # debug
         cur.execute(Cmd) # another cursor to read the same table
 
         mts=0  # max timestamp for svc members. if too old, skip messaging to server
@@ -537,9 +536,11 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
                     
             if lisa != '': # not the first member
                 lisa=lisa+' ' # separator between member values
-            lisa=lisa+str(value) # adding member values into one string
-
+            lisa=lisa+str(int(round(value,1))) # adding member values into one string, use values without decimal point
+            
         # service done
+        #print('ai svc '+val_reg+' - VALUE to use in sendtuple:',lisa)  # debug
+        
         if self.ts-mts < 3*self.readperiod and status<3: # data fresh enough to be sent
             sendtuple=[sta_reg,status,val_reg,lisa] # sending service to buffer
            # print('ai svc - going to report',sendtuple)  # debug

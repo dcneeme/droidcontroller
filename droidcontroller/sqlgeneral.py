@@ -81,7 +81,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
                 #os.chdir('/root/d4c') # OLINUXINO
                 #from droidcontroller.webserver import WebServer
                 
-            elif 'techbase' in os.environ['HOSTNAME']: # npe
+            elif 'techbase' in os.environ['HOSTNAME']: # npe, backgroundis ei ole kattesaadav!!!
                 self.OSTYPE='techbaselinux'
                 # kumb (rtu voi tcp) importida, on maaratud devices tabeliga!
                 
