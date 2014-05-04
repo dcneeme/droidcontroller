@@ -63,13 +63,25 @@ class Commands(SQLgeneral): # p
                             tcp.set_traffic[member]=int(float(value.split(' ')[member+2]))
                     msg='restored traffic volumes to udp '+str(udp.get_traffic)+' tcp '+str(udp.get_traffic)
                 
-                elif key == 'LRW': # lighting state service. no dump to sql file needed.
+                elif key == 'LRW': # lighting state service. no dump to sql file needed. SHOULD BE IN MAIN!
                     if len(value.split(' ')) == 4: # valid message remote control via last member
                         mval=value.split(' ')[3] #  last member
                         res=s.set_membervalue(key,4,mval,'dichannels') # svc,member,value,table='aichannels'. mval as string here!
                         #FIXME: allow any member with cfg true to be changed here, for any xxW key (to become universal)!!!
                         if res == 0: # success if 0
                             msg='set lighting state (value of LRW.3) to '+mval
+                        else:
+                            msg='set lighting state failure!'
+                    else:
+                        msg='invalid number of members in value for lighting state (LRW):'+str(len(value.split(' ')))
+                        
+                elif key == 'LSW': # lighting SENSOR SELECTION. SHOULD BE IN MAIN!
+                    if len(value.split(' ')) == 3: # valid message remote control via last member
+                        mval=value.split(' ')[3] #  last member
+                        res=s.set_membervalue(key,3,mval,'dichannels') # svc,member,value,table='aichannels'. mval as string here!
+                        #FIXME: allow any member with cfg true to be changed here, for any xxW key (to become universal)!!!
+                        if res == 0: # success if 0
+                            msg='set lighting sensdor selection value (LSW.3) to '+mval
                         else:
                             msg='set lighting state failure!'
                     else:

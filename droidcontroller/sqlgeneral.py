@@ -170,7 +170,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
         sendstring=''
         loghost=''
 
-        sendstring=sendstring+"AVV:"+self.APVER+"\nAVS:0\n"  
+        #sendstring=sendstring+"AVV:"+self.APVER+"\nAVS:0\n"  # main juba saadab
         udp.udpsend(sendstring) # sending directly to the monitoring server
         cur=conn.cursor()
         try:
