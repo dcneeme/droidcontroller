@@ -61,8 +61,10 @@ class Commands(SQLgeneral): # p
                         for member in range(2): # udp tcp
                             udp.set_traffic[member]=int(float(value.split(' ')[member]))
                             tcp.set_traffic[member]=int(float(value.split(' ')[member+2]))
-                    msg='restored traffic volumes to udp '+str(udp.get_traffic)+' tcp '+str(udp.get_traffic)
-                
+                        msg='restored traffic volumes to udp '+str(udp.get_traffic)+' tcp '+str(udp.get_traffic)
+                    else:
+                        msg='invalid number of members in value from server: '+key+':'+value
+                        
                 elif key == 'LRW': # lighting state service. no dump to sql file needed. SHOULD BE IN MAIN!
                     if len(value.split(' ')) == 4: # valid message remote control via last member
                         mval=value.split(' ')[3] #  last member
@@ -73,19 +75,19 @@ class Commands(SQLgeneral): # p
                         else:
                             msg='set lighting state failure!'
                     else:
-                        msg='invalid number of members in value for lighting state (LRW):'+str(len(value.split(' ')))
+                        msg='invalid number of members in value from server: '+key+':'+value
                         
                 elif key == 'LSW': # lighting SENSOR SELECTION. SHOULD BE IN MAIN!
                     if len(value.split(' ')) == 3: # valid message remote control via last member
-                        mval=value.split(' ')[3] #  last member
+                        mval=value.split(' ')[2] #  last member (0 1 2)
                         res=s.set_membervalue(key,3,mval,'dichannels') # svc,member,value,table='aichannels'. mval as string here!
                         #FIXME: allow any member with cfg true to be changed here, for any xxW key (to become universal)!!!
                         if res == 0: # success if 0
-                            msg='set lighting sensdor selection value (LSW.3) to '+mval
+                            msg='set lighting sensor selection value (LSW.3) to '+mval
                         else:
                             msg='set lighting state failure!'
                     else:
-                        msg='invalid number of members in value for lighting state (LRW):'+str(len(value.split(' ')))
+                        msg='invalid number of members in value from server: '+key+':'+value
                 
                 elif key == 'cmd': # commands
                     msg='remote command '+key+':'+value+' detected'

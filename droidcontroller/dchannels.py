@@ -66,7 +66,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             
         cur=conn.cursor()
         msg='reading data for dichannels group from mba '+str(mba)+' regadd '+str(regadd)+' count '+str(count)
-        print(msg) # debug
+        #print(msg) # debug
         if count>0 and mba<>0:
             result = mb[mbi].read(mba, regadd, count=count, type='h') # client.read_holding_registers(address=regadd, count=1, unit=mba)
             #print('di read result',result) # debug

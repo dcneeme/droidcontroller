@@ -35,13 +35,13 @@ except:
     for file in ['devices.sql','setup.sql']:
         sql=open(file).read() # (num integer,rtuaddr integer,tcpaddr)
         try:
-            conn.executescript(sql) # read table into database 
+            conn.executescript(sql) # read table into database
             conn.commit()
             print('created table from file',file)
         except:
             print('creating table from file',file,'FAILED!')
             traceback.print_exc()
-            
+
     mb=[]
     Cmd="select mbi, tcpaddr from devices group by mbi"
     cur=conn.cursor()
@@ -72,47 +72,49 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
             msg='running on android, current directory '+os.getcwd()
             print(msg)
             udp.syslog(msg)
-            
+
         except: # some linux
             import os
-            if 'ARCH' in os.uname()[2]:  # olinuxino 
+            if 'ARCH' in os.uname()[2]:  # olinuxino
                 self.OSTYPE='archlinux'
                 print('running on archlinux')
                 #os.chdir('/root/d4c') # OLINUXINO
                 #from droidcontroller.webserver import WebServer
-                
+
             elif 'techbase' in os.environ['HOSTNAME']: # npe, backgroundis ei ole kattesaadav!!!
                 self.OSTYPE='techbaselinux'
                 # kumb (rtu voi tcp) importida, on maaratud devices tabeliga!
-                
+
             else: # ei ole ei android, arch ega techbase
                 self.OSTYPE='linux' # generic
                 print('running on generic linux')   # sql failid olgu jooksvas kataloogis
 
-            
 
-    def set_apver(self, APVER): 
+
+    def set_apver(self, APVER):
         ''' Sets application version for reporting '''
         self.APVER=APVER
-        
-    def print_table(self, table):
-        ''' reads the content of the table, debugging needs only '''
-        ''' reads the content of the table, debugging needs only '''
-        Cmd ="SELECT * from "+table
+
+
+    def print_table(self, table, column = '*'):
+        ''' reads and returns he content of the table '''
+        output=[]
+        Cmd ="SELECT "+column+" from "+table
         cur = conn.cursor()
         cur.execute(Cmd)
         conn.commit()
         for row in cur:
-            print(repr(row))
+            output.append(row) # tuple one member per line
+        return output
 
-            
+
     def dump_table(self, table):
         ''' Writes a table into SQL-file '''
         msg='going to dump '+table+' into '+table+'.sql'
         print(msg)
         try:
             with open(table+'.sql', 'w') as f:
-                for line in conn.iterdump(): 
+                for line in conn.iterdump():
                     f.write('%s\n' % line)
             return 0
         except:
@@ -121,7 +123,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
             #syslog(msg)
             traceback.print_exc()
             return 1
-            
+
 
     def test_mbread(self, mba, reg, count = 1, mbi=0): # mbi only defines mb[] to be used
         return mb[mbi].read(mba,reg,count)
@@ -133,7 +135,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
         try:
             sql = open(filename).read()
         except:
-            msg='FAILURE in opening '+filename+': '+str(sys.exc_info()[1]) 
+            msg='FAILURE in opening '+filename+': '+str(sys.exc_info()[1])
             print(msg)
             #syslog(msg)
             #traceback.print_exc()
@@ -150,7 +152,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
             print(msg)
             udp.syslog(msg)
             return 0
-            
+
         except:
             msg='sqlread() problem for '+table+': '+str(sys.exc_info()[1])
             print(msg)
@@ -194,7 +196,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
                 #if val_reg[0] == 'W' and '272' in value: # power up value for do (setup register W1.272 and so on)
                 #    W272_dict.update({int(float(val_reg[1])) : int(float(value))}) # {mba:272value}
                 #    print ('updated W272_dict, became',W272_dict)
-                    
+
                 if val_reg == 'S514': # syslog ip address
                     if value == '0.0.0.0' or value == '':
                         loghost='255.255.255.255'
@@ -211,16 +213,16 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
                             msg='linux syslog redirection to '+loghost+' FAILED!'
                         udp.syslog(msg)
                         print(msg)
-                
+
                 sta_reg='' # configuration data
                 status=-1 # configuration data
                 sendtuple=[sta_reg,status,val_reg,value] # sending service to buffer
                 # print('ai svc - going to report',sendtuple)  # debug
-                udp.send(sendtuple) # to uniscada instance 
+                udp.send(sendtuple) # to uniscada instance
 
-       
+
             conn.commit() # buff2server trans lopp
-            
+
             msg='setup reported'
             print(msg)
             udp.syslog(msg) # log message to file
@@ -253,15 +255,15 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
             conn.commit() # end transaction
             print('setup change done for',sregister,svalue)
             return 0
-            
+
         except: #if not succcessful, then not a valid setup message - NO INSERT here, UPDATE ONLY!
             msg='setup change problem, the assumed setup register '+sregister+' not found in setup table! '+str(sys.exc_info()[1])
             print(msg)
             udp.syslog(msg)
-            
+
             return 1
-            
-            
+
+
     def channelconfig(self, table = 'setup'): # modbus slaves register writes for configuration if needed, based on setup.sql
         ''' Modbus slave register writes for configuration if needed, based on setup.sql '''
         mba=0
@@ -271,11 +273,11 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
         mba_array=[]
         cur=conn.cursor()
         try:
-            #Cmd="BEGIN IMMEDIATE TRANSACTION" # 
+            #Cmd="BEGIN IMMEDIATE TRANSACTION" #
             #conn.execute(Cmd)
             Cmd="select register,value from setup"
             cur.execute(Cmd) # read setup variables into cursor
-            
+
             for row in cur:
                 regok=0
                 msg='setup record '+str(repr(row))
@@ -283,7 +285,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
                 syslog(msg)
                 register=row[0] # contains W<mba>.<regadd> or R<mba>.<regadd>
                 # do not read value here, can be string as well
-                    
+
                 if '.' in register: # dot is needed
                     try:
                         mba=int(register[1:].split('.')[0])
@@ -304,7 +306,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
                                 value=0
                                 print(msg)
                                 udp.syslog(msg)
-                            
+
                             result = client.read_holding_registers(address=regadd, count=1, unit=mba) # actual value currently in slave modbus register
                             tcpdata = result.registers[0]
                             if register[0] == 'W': # writable
@@ -321,7 +323,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
                                         client.write_register(address=regadd, value=value, unit=mba) # only one regiter to write here
                                         respcode=0 #write_register(mba,regadd,value,0) # write_register sets MBsta[] as well
                                         #prepare data for the monitoring server = NOT HERE!
-                                        #sendstring=sendstring+"W"+str(mba)+"."+str(regadd)+":"+str(value)+"\n"  # data just written, not verified! 
+                                        #sendstring=sendstring+"W"+str(mba)+"."+str(regadd)+":"+str(value)+"\n"  # data just written, not verified!
                                     except:
                                         msg='error writing modbus register: '+str(sys.exc_info()[1])
                                         udp.syslog(msg)
@@ -345,7 +347,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
                                 #send the actual data to the monitoring server
                                 #sendstring=sendstring+"R"+str(mba)+"."+str(regadd)+":"+str(tcpdata)+"\n"  # register content reported as decimal
 
-                        except: 
+                        except:
                             msg=' - could not read the modbus register mba.reg '+str(mba)+'.'+str(regadd)+' '+str(sys.exc_info()[1])
                             print(msg)
                             udp.syslog(msg)
@@ -356,8 +358,8 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
 
                         time.sleep(0.1) # delay between registers
 
-            conn.commit()            
-            
+            conn.commit()
+
         except:
             msg='channelconfig FAILURE, '+str(sys.exc_info()[1])
             print(msg)
@@ -367,8 +369,26 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
         sys.stdout.flush()
         time.sleep(0.5)
         return 0
+
+
+    def get_column(self, table, column, like=''): # returns raw,value,lo,hi,status values based on service name and member number
+        ''' Returns member values as tuple from channel table (ai, di, counter) based on service name '''
+        cur=conn.cursor()
+        if like == '':
+            Cmd="select "+column+" from "+table+" order by "+column
+        else:
+            Cmd="select "+column+" from "+table+" where "+column+" like '"+like+"' order by "+column
+        #print(Cmd) # debug
+        cur.execute(Cmd)
+        value=[]
+        for row in cur: # one row per member
+            #print('get_value() row:', row) # debug
+            value.append(row[0])
         
-    
+        conn.commit()
+        return value # tuple from member values
+        
+        
     def get_value(self, svc, table='aichannels'): # returns raw,value,lo,hi,status values based on service name and member number
         ''' Returns member values as tuple from channel table (ai, di, counter) based on service name '''
         cur=conn.cursor()
@@ -389,11 +409,11 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
             msg='get_value() failure for '+svc+' from table '+table
             print(msg)
             udp.syslog(msg)
-        
+
         conn.commit()
         return value # tuple from member values
-    
-    
+
+
     def set_membervalue(self, svc, member, value, table='aichannels'): # setting value in table based on svc and member
         ''' Sets variables like setpoints or limits to be reported within services, based on service name and member number.
             Table can be either dichannels, aichannels or counters and must be known! FIXME: could be detected automatically!
@@ -401,7 +421,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
         Cmd="BEGIN IMMEDIATE TRANSACTION" # conn, fot setbit_dochannels in fact
         conn.execute(Cmd)
         Cmd="update "+table+" set value='"+str(value)+"' where val_reg='"+svc+"' and member='"+str(member)+"'"
-        print('set_membervalue',Cmd) # debug
+        #print('set_membervalue',Cmd) # debug
         try:
             conn.execute(Cmd)
             conn.commit()
@@ -411,15 +431,15 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
             print(msg)
             udp.syslog(msg)
             return 1  # update failure
-        
-        
+
+
     def setbit_do(self, bit, value, mba, regadd, mbi=0):  # to set a readable output channel by the physical addresses
         '''Sets the output channel by the physical addresses (mbi,mba,regadd,bit) '''
         if mba == '' or regadd == '':
             print('invalid parameters for setbit_do(), mba regadd',mba,regadd,'bit value mbi',bit,value,mbi)
             time.sleep(2)
             return 2
-            
+
         Cmd="update dochannels set value = '"+str(value)+"' where mba='"+str(mba)+"' and mbi="+str(mbi)+" and regadd='"+str(regadd)+"' and bit='"+str(bit)+"'"
         #print(Cmd) # debug
         try:
@@ -471,7 +491,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
                 print(msg)
                 udp.syslog(msg)
                 return 1
-        
+
 
 
     def bit_replace(self, word, bit, value): # changing word with single bit value

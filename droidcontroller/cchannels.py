@@ -56,15 +56,15 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
 
     def ask_counters(self): # use on init, send ? to server
         ''' Queries last counter service values from the server '''
-        Cmd="select val_reg,cfg from "+self.in_sql+" group by val_reg" # process and report by services
+        Cmd="select val_reg,max(cfg) from "+self.in_sql+" group by val_reg" # process and report by services
         #print "Cmd=",Cmd
         cur=conn.cursor()
         cur.execute(Cmd) # getting services to be read and reported
         for row in cur: # possibly multivalue service members
             val_reg=row[0]
             cfg=int(row[1]) if row[1] != '' else 0
-            if not (cfg&64) and not (cfg&128): # exclude the services that are not cumulative counters
-                udp.udpsend(val_reg+':?\n') # wo status to uniscada server
+            if cfg<64: # exclude the services that are not cumulative counters
+                udp.udpsend(val_reg+':?\n') # ask last value from uniscada server if counter, not power related (cfg<64)
         conn.commit()
         return 0
 
@@ -155,7 +155,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
             #        print(msg)
             #        self.set_counter(value=ovalue, mba=mba, regadd=regadd, mbi=mbi, wcount=wcount, x2=x2, y2=y2) # does not contain commit()!
             #this above should be fixed. value is already saved, put it there!
-   
+            FIMXME:  do not attempt to access counters that are not defined in devices.sql! this should be an easy way to add/remove devices.
         '''
         step=abs(wcount)
         cur=conn.cursor()
@@ -165,11 +165,15 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
             return 2
 
         msg='reading data for counter group from mba '+str(mba)+', regadd '+str(regadd)+', count '+str(count)+', wcount '+str(wcount)+', mbi '+str(mbi)
-        #print(msg) # debug
         if count>0 and mba<>0 and wcount<>0:
-            result = mb[mbi].read(mba, regadd, count=count, type='h') # client.read_holding_registers(address=regadd, count=1, unit=mba)
-            msg=msg+', result: '+str(result)
-            print(msg) # debug
+            try:
+                if mb[mbi]:
+                    result = mb[mbi].read(mba, regadd, count=count, type='h') # client.read_holding_registers(address=regadd, count=1, unit=mba)
+                    msg=msg+', result: '+str(result)
+                    print(msg) # debug
+            except:
+                print('device mbi,mba',mbi,mba,'not defined in devices.sql')
+                return 2
         else:
             print('invalid parameters for read_counter_grp()!',mba,regadd,count,wcount,mbi)
             return 2
@@ -244,9 +248,9 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
             cur.execute(Cmd) # selle paringu alusel raw update, hiljem teha value arvutused iga teenuseliikme jaoks eraldi
             for row in cur: # these groups can be interrupted into pieces to be queried!
                 mba=int(row[0]) if int(row[0]) != '' else 0
-                regadd=int(row[1]) if int(row[0]) != '' else 0
-                wcount=int(row[2])  if int(row[0]) != '' else 0 # wordcount for the whole group
-                mbi=int(row[3]) if int(row[0]) != '' else 0 # modbus connection indexed
+                regadd=int(row[1]) if int(row[1]) != '' else 0
+                wcount=int(row[2]) if int(row[2]) != '' else 0 # wordcount for the whole group
+                mbi=int(row[3]) if int(row[3]) != '' else 0 # modbus connection indexed
                 #print 'found counter mbi,mba,regadd,wcount',mbi,mba,regadd,wcount # debug
                 if bfirst == 0:
                     bfirst = regadd
@@ -262,8 +266,8 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                         bcount=bcount+abs(wcount) # increment by word size
                         #print('counter group end shifted to',blast) # debug
                     else: # a new group started, make a query for previous
-                        #print('counter group end detected at regadd',blast,'bcount',bcount) # debugb
-                        #print('going to read counter registers from',bmba,bfirst,'to',blast,'regcount',bcount) # debug
+                        #print('counter group end detected at regadd',blast,'bcount',bcount, 'mbi',mbi,'bmbi',bmbi) # debugb
+                        #print('going to read non-last counter group, registers from',bmba,bfirst,'to',blast,'regcount',bcount) # debug
                         self.read_counter_grp(bmba,bfirst,bcount,bwcount,bmbi) # reads and updates table with previous data #####################  READ MB  ######
                         bfirst = regadd # new grp starts immediately
                         blast = regadd
@@ -276,7 +280,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
 
             if bfirst != 0: # last group yet unread
                 #print('counter group end detected at regadd',blast) # debug
-                #print('going to read counter registers from',bmba,bfirst,'to',blast,'regcount',bcount) # debug
+                #print('going to read last counter group, registers from',bmba,bfirst,'to',blast,'regcount',bcount) # debug
                 self.read_counter_grp(bmba,bfirst,bcount,bwcount,bmbi) # reads and updates table with previous data #####################  READ MB  ######
 
             # raw sync (from modbus to sql) done.
@@ -611,13 +615,15 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                 status = (cfg&3) # normal becomes warning or critical
             else:
                 status = 0 # not normal becomes normal
-            print('status inversion enabled for val_reg',val_reg,'final status',status) # debug
+            #print('status inversion enabled for val_reg',val_reg,'final status',status) # debug
           
         # service done
         sendtuple=[sta_reg,status,val_reg,lisa] # sending service to buffer
-        #print('cchannels going to send',sendtuple) # debug
-        udp.send(sendtuple) # to uniscada instance 
-
+        if not (cfg&512): # bit weight 512 means not to be sent, internal services
+            udp.send(sendtuple) # to uniscada instance 
+            #print('cchannels sent',sendtuple) # debug
+        #else:
+            #print('skipped send due to cfg 512',sendtuple) # debug
         return 0
         
         
@@ -630,7 +636,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
             
         if self.ts - self.ts_send > self.sendperiod:
             self.ts_send = self.ts
-            self.report_all() # compile services and send away  / / raporteerimine, harvem
+            self.report_all() # compile services and send away  / raporteerimine, harvem
             
         return 0
    
