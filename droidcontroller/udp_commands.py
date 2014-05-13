@@ -4,7 +4,7 @@
 import subprocess
 import sys
 
-from sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
+from droidcontroller.sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
 s=SQLgeneral() 
 
 

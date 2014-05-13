@@ -17,7 +17,7 @@
 
 
 
-from sqlgeneral import * # SQLgeneral  
+from droidcontroller.sqlgeneral import * # SQLgeneral  
 s=SQLgeneral() 
 
 class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
@@ -26,7 +26,8 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         Able to sync input and output channels and accept changes to service members by their sta_reg code
     '''
     
-    def __init__(self, in_sql = 'dichannels.sql', out_sql = 'dochannels.sql', readperiod = 1, sendperiod = 30): # sends immediately on change too!
+    def __init__(self, in_sql = 'dichannels.sql', out_sql = 'dochannels.sql', readperiod = 0, sendperiod = 30): # sends immediately on change too!
+        # readperiod 0 means read on every execution. this is usually wanted behaviour to detect any di changes as soon as possible.
         self.setReadPeriod(readperiod)
         self.setSendPeriod(sendperiod)
         self.in_sql = in_sql.split('.')[0]
@@ -67,7 +68,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         cur=conn.cursor()
         msg='reading data for dichannels group from mba '+str(mba)+' regadd '+str(regadd)+' count '+str(count)
         #print(msg) # debug
-        if count>0 and mba<>0:
+        if count>0 and mba != 0:
             result = mb[mbi].read(mba, regadd, count=count, type='h') # client.read_holding_registers(address=regadd, count=1, unit=mba)
             #print('di read result',result) # debug
         else:
@@ -91,10 +92,10 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                             bit=int(srow[0]) # bit 0..15
                         if srow[1] != '':
                             ovalue=int(float(srow[1])) # bit 0..15, old bit value
-                        #print 'old value for mbi, mba, regadd, bit',mbi,mba,regadd+i,bit,'was',ovalue
+                        #print('old value for mbi, mba, regadd, bit',mbi,mba,regadd+i,bit,'was',ovalue) # debug
                         
-                        value=int((result[i]&2**bit)<<bit) # new bit value
-                        #print 'decoded new value for mbi, mba, regadd, bit',mbi,mba,regadd+i,bit,'is',value,'was',ovalue
+                        value=int((result[i]&2**bit)>>bit) # new bit value
+                        #print('decoded new value for mbi, mba, regadd, bit',mbi,mba,regadd+i,bit,'is',value,'was',ovalue) # debug
 
                         # check if outputs must be written
                         try:
@@ -114,6 +115,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                             conn.execute(Cmd) # write
                         except:
                             traceback.print_exc()
+                
                 return 0
             except:
                 traceback.print_exc()
@@ -157,7 +159,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         try:
             Cmd="BEGIN IMMEDIATE TRANSACTION" # hoiab kinni kuni mb suhtlus kestab? teised seda ei kasuta samal ajal nagunii. iga tabel omaette.
             conn.execute(Cmd)
-            Cmd="select mba,regadd,mbi from "+self.in_sql+" where mba<>'' and regadd<>'' group by mbi,mba,regadd" # tsykkel lugemiseks, tuleks regadd kasvavasse jrk grupeerida
+            Cmd="select mba,regadd,mbi from "+self.in_sql+" where mba != '' and regadd != '' group by mbi,mba,regadd" # tsykkel lugemiseks, tuleks regadd kasvavasse jrk grupeerida
             cur.execute(Cmd) # selle paringu alusel raw update, hiljem teha value arvutused iga teenuseliikme jaoks eraldi 
             for row in cur:
                 mba=int(row[0])
@@ -194,7 +196,9 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             #  bit values updated for all dichannels
             
             conn.commit()  # dichannel-bits transaction end
-            print '.', # debug, to mark di polling interval
+            #print('.',) # debug, to mark di polling interval
+            sys.stdout.write('d')
+            #sys.stdout.flush()
             return 0
 
         except: # Exception,err:  # python3 ei taha seda viimast

@@ -10,9 +10,9 @@
 # use do_read_all() and report_all() for external use after importing. or doall()
 
 
-from sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
+from droidcontroller.sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
 s=SQLgeneral() # init sisse?
-from counter2power import *  # Counter2Power() handles power calculation based on pulse count increments
+from droidcontroller.counter2power import *  # Counter2Power() handles power calculation based on pulse count increments
 
 import time
 
@@ -117,7 +117,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                 return 2
         
         print('mbi,mba,regadd,wcount,x2,y2',mbi,mba,regadd,wcount,x2,y2) # debug
-        if x2<>0 and y2<>0: #convert
+        if x2 != 0 and y2 != 0: #convert
             value=round(1.0*value*x2/y2)
         else:
             print('invalid scaling x2,y2',x2,y2)
@@ -157,20 +157,20 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
             #this above should be fixed. value is already saved, put it there!
             FIMXME:  do not attempt to access counters that are not defined in devices.sql! this should be an easy way to add/remove devices.
         '''
-        step=abs(wcount)
+        step=int(abs(wcount))
         cur=conn.cursor()
         oraw=0
         if step == 0:
             print('illegal wcount',wcount,'in read_counter_grp()')
             return 2
 
-        msg='reading data for counter group from mba '+str(mba)+', regadd '+str(regadd)+', count '+str(count)+', wcount '+str(wcount)+', mbi '+str(mbi)
-        if count>0 and mba<>0 and wcount<>0:
+        msg='reading data for counter group from mba '+str(mba)+', regadd '+str(regadd)+', count '+str(count)+', wcount '+str(wcount)+', mbi '+str(mbi)+', step '+str(step)
+        if count>0 and mba != 0 and wcount != 0:
             try:
                 if mb[mbi]:
                     result = mb[mbi].read(mba, regadd, count=count, type='h') # client.read_holding_registers(address=regadd, count=1, unit=mba)
                     msg=msg+', result: '+str(result)
-                    print(msg) # debug
+                    #print(msg) # debug
             except:
                 print('device mbi,mba',mbi,mba,'not defined in devices.sql')
                 return 2
@@ -180,7 +180,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
 
         if result != None: # got something from modbus register
             try:
-                for i in range(count/step): # counter processing loop. tuple to table rows. tuple len is twice count!
+                for i in range(int(count/step)): # counter processing loop. tuple to table rows. tuple len is twice count! int for py3 needed
                     tcpdata=0
                     #print('counter_grp debug: i',i,'step',step,'results',result[step*i],result[step*i+1]) # debug
                     if wcount == 2:
@@ -244,7 +244,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
         try:
             Cmd="BEGIN IMMEDIATE TRANSACTION" # conn3
             conn.execute(Cmd)
-            Cmd="select mba,regadd,wcount,mbi from "+self.in_sql+" where mba<>'' and regadd<>'' group by mbi,mba,regadd" # tsykkel lugemiseks, tuleks regadd kasvavasse jrk grupeerida
+            Cmd="select mba,regadd,wcount,mbi from "+self.in_sql+" where mba != '' and regadd != '' group by mbi,mba,regadd" # tsykkel lugemiseks, tuleks regadd kasvavasse jrk grupeerida
             cur.execute(Cmd) # selle paringu alusel raw update, hiljem teha value arvutused iga teenuseliikme jaoks eraldi
             for row in cur: # these groups can be interrupted into pieces to be queried!
                 mba=int(row[0]) if int(row[0]) != '' else 0
@@ -256,14 +256,14 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                     bfirst = regadd
                     blast = regadd
                     bwcount = wcount # wcount can change with next group
-                    bcount=abs(wcount) # word count is the count
+                    bcount=int(abs(wcount)) # word count is the count
                     bmba=mba
                     bmbi=mbi
                     #print('counter group mba '+str(bmba)+' start ',bfirst) # debug
                 else: # not the first
                     if mbi == bmbi and mba == bmba and regadd == blast+abs(wcount): # sequential group still growing
                         blast = regadd
-                        bcount=bcount+abs(wcount) # increment by word size
+                        bcount=bcount+int(abs(wcount)) # increment by word size
                         #print('counter group end shifted to',blast) # debug
                     else: # a new group started, make a query for previous
                         #print('counter group end detected at regadd',blast,'bcount',bcount, 'mbi',mbi,'bmbi',bmbi) # debugb
@@ -272,7 +272,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                         bfirst = regadd # new grp starts immediately
                         blast = regadd
                         #bwcount = wcount # does not change inside group
-                        bcount=abs(wcount) # new read piece started
+                        bcount=int(abs(wcount)) # new read piece started
                         bwcount=wcount
                         bmba=mba
                         bmbi=mbi
@@ -439,6 +439,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                     print('immediate counter/power/status notification due to svc '+val_reg+' status or value change!') # debug
                     self.make_counter_svc(val_reg,sta_reg) # immediate notification due to state or value change
                    
+            sys.stdout.write('c')
             return 0
 
         except: # end reading counters
@@ -562,32 +563,40 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
             # svc STATUS CHK. check the value limits and set the status, according to configuration byte cfg bits values
             # use hysteresis to return from non-zero status values
             status=0 # initially for each member
-            if value>outhi: # above hi limit
-                if (cfg&4) and status == 0: # warning
-                    status=1
-                if (cfg&8) and status<2: # critical
-                    status=2
-                if (cfg&12) == 12: #  not to be sent
-                    status=3
-                    #block=block+1 # error count incr
-            else: # return with hysteresis 5%
-                if value>outlo and value<outhi-0.05*(outhi-outlo): # value must not be below lo limit in order for status to become normal
-                    status=0 # back to normal
-                   # block=0 # reset error counter
-
-            if value<outlo: # below lo limit
-                if (cfg&1) and status == 0: # warning
-                    status=1
-                if (cfg&2) and status<2: # critical
-                    status=2
-                if (cfg&3) == 3: # not to be sent, unknown
-                    status=3
-                    #block=block+1 # error count incr
-            else: # back with hysteresis 5%
-                if value<outhi and value>outlo+0.05*(outhi-outlo):
-                    status=0 # back to normal
-                    #block=0
-                      
+            if outhi != None:
+                if value>outhi: # above hi limit
+                    if (cfg&4) and status == 0: # warning
+                        status=1
+                    if (cfg&8) and status<2: # critical
+                        status=2
+                    if (cfg&12) == 12: #  not to be sent
+                        status=3
+                        #block=block+1 # error count incr
+                else: # return with hysteresis 5%
+                    if outlo != None:
+                        if value>outlo and value<outhi-0.05*(outhi-outlo): # value must not be below lo limit in order for status to become normal
+                            status=0 # back to normal
+                        else:
+                            if value<outhi: # value must not be below lo limit in order for status to become normal
+                                status=0 # back to normal
+                            
+            if outlo != None:
+                if value<outlo: # below lo limit
+                    if (cfg&1) and status == 0: # warning
+                        status=1
+                    if (cfg&2) and status<2: # critical
+                        status=2
+                    if (cfg&3) == 3: # not to be sent, unknown
+                        status=3
+                        #block=block+1 # error count incr
+                else: # back with hysteresis 5%
+                    if outhi != None:
+                        if value<outhi and value>outlo+0.05*(outhi-outlo):
+                            status=0 # back to normal
+                    else:
+                        if value>outlo:
+                            status=0 # back to normal
+                            
             # CONFIG BYTE BIT MEANINGS
             # 1 - below outlo warning,
             # 2 - below outlo critical,

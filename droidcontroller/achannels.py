@@ -5,7 +5,7 @@
 # 14.04.2014 mb[mbi] (multiple modbus connections) support. NOT READY!
 # 16.04.2014 fixed mts problem, service messaging ok
 
-from sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
+from droidcontroller.sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
 s=SQLgeneral() # sql connection
 
 class Achannels(SQLgeneral): # handles aichannels and aochannels tables
@@ -51,7 +51,7 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
         ''' Read sequential register group and store raw into table self.in_sql. Inside transaction! '''
         msg='reading data for aichannels group from mbi '+str(mbi)+', mba '+str(mba)+', regadd '+str(regadd)+', count '+str(count)
         #print(msg) # debug
-        if count>0 and mba<>0:
+        if count>0 and mba != 0:
             result = mb[mbi].read(mba, regadd, count=count, type='h') # client.read_holding_registers(address=regadd, count=1, unit=mba)
         else:
             print('invalid parameters for read_ai_grp()!',mba,regadd,count)
@@ -97,7 +97,7 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
             Cmd="BEGIN IMMEDIATE TRANSACTION" # hoiab kinni kuni mb suhtlus kestab? teised seda ei kasuta samal ajal nagunii. iga tabel omaette.
             conn.execute(Cmd)
             #self.conn.execute(Cmd)
-            Cmd="select mba,regadd,mbi from "+self.in_sql+" where mba<>'' and regadd<>'' group by mbi,mba,regadd" # tsykkel lugemiseks, tuleks regadd kasvavasse jrk grupeerida
+            Cmd="select mba,regadd,mbi from "+self.in_sql+" where mba != '' and regadd != '' group by mbi,mba,regadd" # tsykkel lugemiseks, tuleks regadd kasvavasse jrk grupeerida
             cur.execute(Cmd) # selle paringu alusel raw update, hiljem teha value arvutused iga teenuseliikme jaoks eraldi 
             for row in cur:
                 mbi=int(row[2]) # niigi num
@@ -134,12 +134,12 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
             #  raw updated for all aichannels
             
             # now process raw -> value, by services. x1 x2 y1 y may be different even if the same mba regadd in use. DO NOT calculate status here, happens separately.
-            Cmd="select val_reg from "+self.in_sql+" where mba<>'' and regadd<>'' group by val_reg" # service list. other 
+            Cmd="select val_reg from "+self.in_sql+" where mba != '' and regadd != '' group by val_reg" # service list. other 
             cur.execute(Cmd) # selle paringu alusel raw update, hiljem teha value arvutused iga teenuseliikme jaoks eraldi 
             for row in cur: # services
                 status=0 # esialgu, aga selle jaoks vaja iga teenuse jaoks oma tsykkel.
                 val_reg=row[0] # teenuse nimi
-                Cmd3="select * from "+self.in_sql+" where val_reg='"+val_reg+"' and mba<>'' and regadd<>'' order by member" # loeme yhe teenuse kogu info
+                Cmd3="select * from "+self.in_sql+" where val_reg='"+val_reg+"' and mba != '' and regadd != '' order by member" # loeme yhe teenuse kogu info
                 cur3.execute(Cmd3) # another cursor to read the same table
                 for srow in cur3: # value from raw and also status
                     #print repr(srow) # debug
@@ -230,6 +230,7 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
             
             conn.commit() 
             #self.conn.commit() # "+self.in_sql+"  transaction end
+            sys.stdout.write('a')
             return 0
 
         except:
@@ -502,31 +503,39 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
             # ai svc STATUS CHK. check the value limits and set the status, according to configuration byte cfg bits values
             # use hysteresis to return from non-zero status values
             status=0 # initially for each member
-            if value>outhi: # above hi limit
-                if (cfg&4) and status == 0: # warning
-                    status=1
-                if (cfg&8) and status<2: # critical
-                    status=2
-                if (cfg&12) == 12: #  not to be sent
-                    status=3
-                    #block=block+1 # error count incr
-            else: # return with hysteresis 5%
-                if value>outlo and value<outhi-0.05*(outhi-outlo): # value must not be below lo limit in order for status to become normal
-                    status=0 # back to normal
-                   # block=0 # reset error counter
+            if outhi != None:
+                if value>outhi: # above hi limit
+                    if (cfg&4) and status == 0: # warning
+                        status=1
+                    if (cfg&8) and status<2: # critical
+                        status=2
+                    if (cfg&12) == 12: #  not to be sent
+                        status=3
+                        #block=block+1 # error count incr
+                else: # return with hysteresis 5%
+                    if outlo != None:
+                        if value>outlo and value<outhi-0.05*(outhi-outlo): # value must not be below lo limit in order for status to become normal
+                            status=0 # back to normal
+                    else:
+                        if value<outhi: # value must not be below lo limit in order for status to become normal
+                            status=0 # back to normal
 
-            if value<outlo: # below lo limit
-                if (cfg&1) and status == 0: # warning
-                    status=1
-                if (cfg&2) and status<2: # critical
-                    status=2
-                if (cfg&3) == 3: # not to be sent, unknown
-                    status=3
-                    #block=block+1 # error count incr
-            else: # back with hysteresis 5%
-                if value<outhi and value>outlo+0.05*(outhi-outlo):
-                    status=0 # back to normal
-                    #block=0
+            if outlo != None:
+                if value<outlo: # below lo limit
+                    if (cfg&1) and status == 0: # warning
+                        status=1
+                    if (cfg&2) and status<2: # critical
+                        status=2
+                    if (cfg&3) == 3: # not to be sent, unknown
+                        status=3
+                        #block=block+1 # error count incr
+                else: # back with hysteresis 5%
+                    if outhi != None:
+                        if value<outhi and value>outlo+0.05*(outhi-outlo):
+                            status=0 # back to normal
+                    else:
+                        if value>outlo:
+                            status=0 # back to normal
 
     #############                
             #print 'make ai mba ots mts',mba,ots,mts # debug

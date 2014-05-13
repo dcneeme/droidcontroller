@@ -27,7 +27,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
     Several UDPchannel instances can be used in parallel, to talk with different servers.
 
     Usage example:
-    from uniscada import *
+    from droidcontroller.uniscada import *
     f=UDPchannel(ip='46.183.73.35', id='000000000000', port=44445)
     f.send('BRS',0,'','') # store to buffer
     f.buff2server() # sends to server and resends earlier messages if any w.o ack
@@ -450,7 +450,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
                 dnsize=len(msg) # udp out increase, payload only
         except:
             pass # kui udp ei toimi, ei toimi ka syslog
-            print 'could NOT send syslog message to '+repr(self.logaddr)
+            print('could NOT send syslog message to '+repr(self.logaddr))
             traceback.print_exc()
 
         self.traffic[1] += dnsize  # udp traffic

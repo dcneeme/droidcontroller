@@ -1,5 +1,6 @@
 #to be imported into modbus_sql. needs mb and conn
-
+'''  Creates multiple modbus access channels for various access channels defined in devices.sql '''
+ 
 import time, datetime
 import sqlite3
 import traceback
@@ -7,7 +8,7 @@ import traceback
 import sys
 from pymodbus import *
 from droidcontroller.comm_modbus import CommModbus  # contains CommModbus, .read(), .write()
-from uniscada import *
+from droidcontroller.uniscada import *
 
 try:
     if udp:
@@ -48,9 +49,12 @@ except:
     cur.execute(Cmd)
     conn.commit()
     for row in cur:
+        print('sqlgeneral debug:',row) # debug
         if ':' in row[1]:
-            mb.append(CommModbus(host=row[1].split(':')[0], port=int(row[1].split(':')[1]))) # tcp
-        #FIXME handle serial or xport connections too!
+            mb.append(CommModbus(host=row[1].split(':')[0], port=int(row[1].split(':')[1]))) # modbustcp over tcp
+        else:
+            mb.append(CommModbus(host=row[1])) # npe_io or olinuxino. speed, parity in comm_modbus
+        #FIXME handle serial or xport connections too! also npe_io via subprocess!
     print('opened setup, devices tables and created '+str(len(mb))+' modbus connection(s)')
 
 
@@ -502,3 +506,36 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
         '''
         #print('bit_replace var: ',format("%04x" % word),bit,value,format("%04x" % ((word & (65535 - 2**bit)) + (value<<bit)))) # debug
         return ((word & (65535 - 2**bit)) + (value<<bit))
+
+        
+    def check_setup(self, table):
+        ''' Looks for conflicts in sql tables and prints the channels defined '''
+        cur=conn.cursor()
+        dev_dict={}
+        tmp_array=[]
+        bad=0
+        #Cmd="select mbi,rtuaddr as mba,tcpaddr as host,name from devices order by mbi,mba"
+        Cmd="select mbi,rtuaddr as mba from devices order by mbi,mba"
+        cur.execute(Cmd)
+        mbi=-1
+        for row in cur:
+            if row[0] != mbi:
+                tmp_array=[]
+            mbi=row[0]
+            tmp_array.append(int(row[1])) # slaves on this mb channel
+            dev_dict.update({mbi : tmp_array})
+        print('defined in devices (mbi:mba)',dev_dict)
+            
+        Cmd="select mbi,mba,regadd,val_reg,member from "+table+" where mba+0>0 group by mbi,mba,regadd"
+        cur.execute(Cmd)
+        for row in cur:
+            if row[0] in dev_dict: # in keys
+                if int(row[1]) in dev_dict[row[0]]: # 
+                    print('channel mbi,mba,regadd,member '+str(row[0])+','+str(row[1])+','+str(row[2])+','+str(row[3])+' correctly defined in '+table)
+                else:
+                    bad=1
+                    print('channel mbi,mba,regadd,member '+str(row[0])+','+str(row[1])+','+str(row[2])+','+str(row[3])+' in '+table+' NOT found in devices!')
+            else:
+                bad=2
+                print('channel mbi,mba,regadd,member '+str(row[0])+','+str(row[1])+','+str(row[2])+','+str(row[3])+' in '+table+' NOT found in devices!')
+        return bad
