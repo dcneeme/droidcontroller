@@ -52,11 +52,16 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
         msg='reading data for aichannels group from mbi '+str(mbi)+', mba '+str(mba)+', regadd '+str(regadd)+', count '+str(count)
         #print(msg) # debug
         if count>0 and mba != 0:
-            result = mb[mbi].read(mba, regadd, count=count, type='h') # client.read_holding_registers(address=regadd, count=1, unit=mba)
+            try:
+                if mb[mbi]:
+                    result = mb[mbi].read(mba, regadd, count=count, type='h') # client.read_holding_registers(address=regadd, count=1, unit=mba)
+            except:
+                print('device mbi,mba',mbi,mba,'not defined in devices.sql')
+                return 2
         else:
             print('invalid parameters for read_ai_grp()!',mba,regadd,count)
             return 2
-            
+                
         if result != None:
             try:
                 for i in range(count): # tuple to table rows. tuple len is twice count!
@@ -248,6 +253,7 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
         #print('write_aochannels start') # debug
         # and use write_register() write modbus registers  to get the desired result (all ao channels must be also defined in aichannels table!)
         respcode=0
+        mbi=0
         mba=0 
         omba=0 # previous value
         val_reg=''
@@ -297,8 +303,14 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
                 :param kwargs['value']: Modbus register value to write
                 :param kwargs['values']: Modbus registers values array to write
                 ''' 
-                respcode=respcode+mb[mbi].write(mba=mba, reg=regadd,value=value) 
-   
+                try:
+                    if mb[mbi]:
+                        respcode=respcode+mb[mbi].write(mba=mba, reg=regadd,value=value) 
+                
+                except:
+                    print('device mbi,mba',mbi,mba,'not defined in devices.sql')
+                    return 2
+            
             conn.commit()  #  transaction end - why?
             return 0
         except:
@@ -567,14 +579,15 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
         
     def doall(self): # do this regularly, executes only if time is is right
         ''' Does everything on time if executed regularly '''
+        res=0 # returncode, 0 = ok
         self.ts = round(time.time(),1)
         if self.ts - self.ts_read > self.readperiod:
             self.ts_read = self.ts
-            self.sync_ai() # 
-            self.sync_ao() # writes output registers to be changed via modbus, based on feedback on di bits
+            res=self.sync_ai() # 
+            res=res+self.sync_ao() # writes output registers to be changed via modbus, based on feedback on di bits
             
         if self.ts - self.ts_send > self.sendperiod:
             self.ts_send = self.ts
-            self.report() # compile services and send away
+            res=res+self.report() # compile services and send away
             
-        return 0
+        return res

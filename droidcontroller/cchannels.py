@@ -433,6 +433,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                     else:
                         if mba > 0 and member > 0:
                             print('ERROR: raw None for svc',val_reg,member) # debug
+                            return 1
 
                 # END OF SERVICE PROCESSING
                 if chg == 1: # no matter up or down
@@ -455,7 +456,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
 
 
 
-    def report_all(self,svc = ''): # send the ai service messages to the monitoring server (only if fresh enough, not older than 2xappdelay). all or just one svc.
+    def report_all(self, svc = ''): # send the ai service messages to the monitoring server (only if fresh enough, not older than 2xappdelay). all or just one svc.
         ''' make all counter services (with status chk) based on counters members and send it away to UDPchannel '''
         mba=0 
         val_reg=''
@@ -485,6 +486,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
 
 
             conn.commit() # aichannels transaction end
+            return 0
             
         except:
             msg='PROBLEM with counters reporting '+str(sys.exc_info()[1])
@@ -638,14 +640,15 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
         
     def doall(self): # do this regularly, executes only if time is is right
         ''' Does everything on time if executed regularly '''
+        res=0
         self.ts = round(time.time(),2)
         if self.ts - self.ts_read > self.readperiod:
             self.ts_read = self.ts
-            self.read_all() # koikide loendite lugemine
+            res=self.read_all() # koikide loendite lugemine
             
         if self.ts - self.ts_send > self.sendperiod:
             self.ts_send = self.ts
-            self.report_all() # compile services and send away  / raporteerimine, harvem
+            res=res+self.report_all() # compile services and send away  / raporteerimine, harvem
             
-        return 0
+        return res
    
