@@ -236,10 +236,14 @@ class CommModbus(Comm):
         if submode == 0: # return exit status, 0 or more
             returncode=subprocess.call(exec_cmd) # ootab kuni lopetab
             return returncode  # return just the subprocess exit code
-        else: # return everything from sdout
+        elif submode == 1: # return everything from sdout
             proc=subprocess.Popen([exec_cmd], shell=True, stdout=subprocess.PIPE)
             result = proc.communicate()[0]
             return result
+        elif submode == 2: # forks to background, does not wait for output
+            returncode=subprocess.Popen(exec_cmd, shell=True) # 
+            return 0 # no idea how it really ends
+        
 
 
     def npe_read(self,register,count = 1): # mba ignored

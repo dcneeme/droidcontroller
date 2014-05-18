@@ -33,7 +33,7 @@ try:
         print('modbus connection(s) already existing')
 except:
     # several connections may be needed, tuple of modbus connections! also direct rtu, rtu via tcp-serial or tcp-modbustcp
-    for file in ['devices.sql','setup.sql']:
+    for file in ['devices.sql','setup.sql','calendar.sql']:
         sql=open(file).read() # (num integer,rtuaddr integer,tcpaddr)
         try:
             conn.executescript(sql) # read table into database

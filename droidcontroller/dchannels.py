@@ -74,7 +74,8 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                     result = mb[mbi].read(mba, regadd, count=count, type='h') # client.read_holding_registers(address=regadd, count=1, unit=mba)
                     #print('di read result',result) # debug
             except:
-                print('device mbi,mba',mbi,mba,'not defined in devices.sql')
+                print('read_di_grp: mb['+str(mbi)+'] missing, device with mba '+str(mba)+' not defined in devices.sql?')
+                traceback.print_exc()
                 return 2
         else:
             print('invalid parameters for read_di_grp()!',mba,regadd,count)
@@ -481,8 +482,10 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         self.ts = round(time.time(),1)
         if self.ts - self.ts_read>self.readperiod:
             self.ts_read = self.ts
-            res = res + self.sync_di() # 
-            res = res + self.sync_do() # writes output registers to be changed via modbus, based on feedback on di bits
-            res = res + self.make_dichannels() # compile services and send away on change or based on ts_last regular basis
-            
+            try:
+                res = res + self.sync_di() # 
+                res = res + self.sync_do() # writes output registers to be changed via modbus, based on feedback on di bits
+                res = res + self.make_dichannels() # compile services and send away on change or based on ts_last regular basis
+            except:
+                traceback.print_exc()
         return res

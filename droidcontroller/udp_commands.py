@@ -16,20 +16,28 @@ class Commands(SQLgeneral): # p
         
     def __init__(self): 
         self.todocode=0 # todo_proc() retries
+        self.vpnconf='/mnt/mtd/openVPN/config/itvilla.conf' # techbase
         #self.uptime=[int(self.subexec('cut -f1 -d. /proc/uptime',1)), 0]
         #print('system uptime',self.uptime[0])
         #s.print_table('setup') # do we have it? access to setup table is needed
         
         
+    def set_vpnconf(self, invar):
+        self.vpnconf=invar
+    
+    
     def subexec(self, exec_cmd, submode = 1): # submode 0 returns exit code only
         ''' shell command execution. if submode 0-, return exit staus.. if 1, exit std output produced. '''
         if submode == 0: # return exit status, 0 or more
             returncode=subprocess.call(exec_cmd) # ootab kuni lopetab
             return returncode  # return just the subprocess exit code
-        else: # return everything from sdout
+        elif submode == 1: # return everything from sdout
             proc=subprocess.Popen([exec_cmd], shell=True, stdout=subprocess.PIPE)
             result = proc.communicate()[0]
             return result
+        elif submode == 2: # forks to background, does not wait for output
+            returncode=subprocess.Popen(exec_cmd, shell=True) # 
+            return 0 # no idea how it really ends
         
         
     def parse_udp(self, data_dict): 
@@ -183,8 +191,16 @@ class Commands(SQLgeneral): # p
 
             if TODO == 'CONFIG': #
                 todocode=s.channelconfig() # configure modbus registers according to W... data in setup
+                
+                
+            if TODO == 'VPNON': # ovpn start
+                todocode=self.subexec(['vpn start '+self.vpnconf],2) # start vpn
 
                     
+            if TODO == 'VPNOFF': # ovpn stop
+                todocode=self.subexec(['vpn stop'],2) # stop vpn
+    
+                
             if TODO.split(',')[0] == 'pull':
                 print('going to pull') # debug
                 if len(TODO.split(',')) == 3: # download a file (with name and size given)
@@ -348,19 +364,24 @@ class RegularComm(SQLgeneral): # r
         self.ts=self.app_start
         self.uptime=[0,0]
         self.sync_uptime()
-        
+        self.set_pyalivecmd() # to watch the process list for this as process a mark of being alive
+        self.set_udpalivecmd() # to watch udp conn being alive
       
-    def subexec(self, exec_cmd, submode = 1): # submode 0 returns exit code only
+    def subexec(self, exec_cmd, submode = 1): # submode 0 - returns exit code only, 1 - waits for output, 2 - forks to background. use []
         ''' shell command execution. if submode 0-, return exit staus.. if 1, exit std output produced. 
+            exec_cmd is a list of cmd and parameters! use []
             FIXME: HAD TO COPY subexec HERE BECAUSE I CANNOT USE p.subexec() from here ...
         '''
         if submode == 0: # return exit status, 0 or more
             returncode=subprocess.call(exec_cmd) # ootab kuni lopetab
             return returncode  # return just the subprocess exit code
-        else: # return everything from sdout
+        elif submode == 1: # return everything from sdout
             proc=subprocess.Popen([exec_cmd], shell=True, stdout=subprocess.PIPE)
             result = proc.communicate()[0]
             return result
+        elif submode == 2: # forks to background, does not wait for output
+            returncode=subprocess.Popen(exec_cmd, shell=True) # 
+            return 0 # no idea how it really ends
         
      
     def sync_uptime(self):
@@ -376,10 +397,21 @@ class RegularComm(SQLgeneral): # r
     
     def get_host_ip(self):
         #self.host_ip=p.subexec('./getnetwork.sh',1).split(' ')[1] # mac and ip from the system
+        #self.host_ip=p.subexec('./getnetwork.sh',1).split(' ')[1] # mac and ip from the system
         self.host_ip=self.subexec('./getnetwork.sh',1).split(' ')[1] # mac and ip from the system
         print('get_host_ip:',self.host_ip)
-    
-    
+        
+        
+    def set_pyalivecmd(self, alivecmd = ''): # this default alivecmd is for techbase
+        ''' sets the script forked on regular communication, to be used for watchdogging '''
+        self.pyalivecmd=alivecmd #  instead of sleep you can  use an understandable script name for a process, containing sleep $1
+
+
+    def set_udpalivecmd(self, alivecmd = ''): # not used if empty
+        ''' sets the script forked on regular communication, to be used for watchdogging '''
+        self.udpalivecmd=alivecmd #  instead of sleep you can  use an understandable script name for a process, containing sleep $1
+
+        
     def regular_svc(self, svclist = ['ULW','UTW','ip']): # default are uptime and traffic services
         ''' sends regular service messages that are not related to aichannels, dichannels or counters  '''
         self.ts=time.time()
@@ -408,6 +440,28 @@ class RegularComm(SQLgeneral): # r
             sendstring=sendstring+svc+':'+msg+'\n'
         res=udp.udpsend(sendstring) # loop over, SEND AWAY        
         self.ts_regular=self.ts
+        
+        # put python alive mark into the process list
+        self.alive_fork(self.pyalivecmd) # sleep or smthg into ps list to see the app is alive
+        # put udp connection alive mark into the process list
+        if udp.get_ts_udpgot() > self.ts + 2*self.interval: # 
+            self.alive_fork(self.udpalivecmd) # sleep or smthg into ps list to see the app is alive
+        
         return res # 0 is ok 
                     
-                    
+    
+    def alive_fork(self, alivecmd, interval = 0): # spawn a process indicating activity
+        ''' to enable checking application activity the process with lifetime of 2*interval is started via subexec() '''
+        if interval == 0:
+            interval=2*self.interval  # regual communication will keep about 2 processes alive
+        tbs=alivecmd+' '+str(interval)+' &'
+        #print(tbs) # debug
+        if alivecmd != '':
+            try:
+                self.subexec([tbs],2)
+                return 0
+            except:
+                traceback.print_exc()
+                return 1
+        
+    

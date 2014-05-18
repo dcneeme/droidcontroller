@@ -19,7 +19,9 @@ import requests
 #from udp_commands import *
 
 
-
+#class UniSCADA:
+#    ''' Common parent to share methods between UDPchannel(UniSCADA) and TCPchannel(UniSCADA) '''
+    
             
             
 class UDPchannel: # for one host only. if using 2 servers, create separate UDPchannels but a single MessageBuffer.. probably not necessary, can be separate too!
@@ -44,6 +46,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
         self.port = port
         self.loghost = loghost
         self.logport = logport
+        self.logaddr = (self.loghost,self.logport) # tuple
         
         self.traffic = [0,0] # UDP bytes in, out
         self.UDPSock = socket(AF_INET,SOCK_DGRAM)
@@ -55,7 +58,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
         self.UDPlogSock.settimeout(None) # for syslog
         self.UDPlogSock.setsockopt(SOL_SOCKET, SO_BROADCAST, 1) # broadcast allowed
 
-        print('init: created uniscada and syslog connections')
+        print('init: created uniscada and syslog connections to '+ip+':'+str(port)+' and '+loghost+':'+str(logport))
         self.table = 'buff2server' # can be anything, not accessible to other objects
         self.Initialize()
 
@@ -101,17 +104,21 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
 
 
     def getTS(self):
-        '''returns timestamps for last send trial and successful receive '''
+        ''' returns timestamps for last send trial and successful receive '''
         return self.ts_udpsent, self.ts_udpgot
 
     def getID(self):
-        '''returns host id for this instance '''
+        ''' returns host id for this instance '''
         return self.host_id
 
     def getIP(self):
-        '''returns server ip for this instance '''
+        ''' returns server ip for this instance '''
         return self.ip
 
+    def getLogIP(self):
+        ''' returns syslog server ip for this instance '''
+        return self.loghost
+        
     
     def get_traffic(self):
         return self.traffic # tuple in, out
@@ -137,6 +144,10 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
 
     def get_inum(self):  #get message counter
         return self.inum
+        
+        
+    def get_ts_udpgot(self):  #get ts of last ack from monitoring server
+        return self.ts_udpgot
 
 
     def makebuff(self): # drops buffer table and creates
@@ -147,9 +158,6 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
             self.conn.executescript(sql) # read table into database
             self.conn.commit()
             msg='sqlread: successfully (re)created table '+self.table
-            #print(msg)
-            #syslog(msg)
-            #time.sleep(0.5)
             return 0
         except:
             msg='sqlread: '+str(sys.exc_info()[1])
@@ -168,8 +176,6 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
             print('buffer content deleted')
         except:
             traceback.print_exc()
-
-
 
 
 
@@ -439,10 +445,12 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
         return data_dict # possible key:value pairs here for setup change or commands
 
 
-    def syslog(self, msg): # sending out syslog message to self.logaddr.
+    def syslog(self, msg,logaddr=()): # sending out syslog message to self.logaddr.
         msg=msg+"\n" # add newline to the end
         #print('syslog send to',self.logaddr) # debug
         dnsize=0 
+        if self.logaddr == None and logaddr != ():
+            self.logaddr = logaddr
         
         try: #
             self.UDPlogSock.sendto(msg.encode('utf-8'),self.logaddr)
@@ -468,8 +476,8 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
 
 
 
-class TCPchannel:
-    ''' Communication via TCP (pull, push)  '''
+class TCPchannel(UDPchannel): # used this parent to share self.syslog()
+    ''' Communication via TCP (pull, push, calendar)  '''
 
     def __init__(self, id = '000000000000', supporthost = 'www.itvilla.ee', directory = '/support/pyapp/', uploader='/upload.php', base64string='cHlhcHA6QkVMYXVwb2E='):
         self.supporthost = supporthost
@@ -478,11 +486,14 @@ class TCPchannel:
         self.traffic = [0,0] # TCP bytes in, out
         self.setID(id)
         self.directory=directory
+        self.ts_cal=time.time()
+        self.conn = sqlite3.connect(':memory:') # for calendar table
+        self.makecalendar()
+        
     
     def setID(self, invar):
         ''' Set the host id '''
         self.host_id = invar
-        
 
     
     def getID(self):
@@ -507,7 +518,10 @@ class TCPchannel:
             else:
                 print('invalid bytes_out',bytes_out)
 
-    
+    def get_ts_cal(self): # last time calendar was accessed
+        return int(round(self.ts_cal))
+
+
     
     def push(self, filename): # send (gzipped) file to supporthost
         ''' push file filename to supporthost directory using uploader and base64string (for basic auth) '''
@@ -530,7 +544,7 @@ class TCPchannel:
             dnsize=os.stat(filename)[6] # file size to be sent
             msg='the file was gzipped to '+filename+' with size '+str(dnsize) # the original file is kept!
             print(msg)
-            #syslog(msg)
+            #udp.syslog(msg)
 
         try:
             r = requests.post('http://'+self.supporthost+self.uploader,
@@ -540,14 +554,14 @@ class TCPchannel:
                              )
             print('post response:',r.text) # nothing?
             msg='file '+filename+' with size '+str(dnsize)+' sent to '+self.directory+self.host_id+'/'
-            #syslog(msg)
+            #udp.syslog(msg)
             print(msg)
             self.traffic[1] += dnsize
             return 0
 
         except:
             msg='the file '+filename+' was NOT sent to '+self.directory+self.host_id+'/ '+str(sys.exc_info()[1])
-            syslog(msg)
+            udp.syslog(msg)
             print(msg)
             #traceback.print_exc()
             return 1
@@ -564,7 +578,7 @@ class TCPchannel:
         if start>filesize:
             msg='pull parameters: file '+filename+' start '+str(start)+' above filesize '+str(filesize)
             print(msg)
-            #syslog(msg)
+            #udp.syslog(msg)
             return 99 # illegal parameters or file bigger than stated during download resume
 
         req = 'http://'+self.supporthost+self.directory+self.host_id+'/'+filename
@@ -572,7 +586,7 @@ class TCPchannel:
 
         msg='trying '+req+' from byte '+str(start)+' using '+repr(pullheaders)
         print(msg)
-        #syslog(msg)
+        #udp.syslog(msg)
         try:
             response = requests.get(req, headers=pullheaders) # with python3
             output = open(filepart,'wb')
@@ -581,7 +595,7 @@ class TCPchannel:
         except:
             msg='pull: partial or failed download of temporary file '+filepart+' '+str(sys.exc_info()[1])
             print(msg)
-            #syslog(msg)
+            #udp.syslog(msg)
             #traceback.print_exc()
 
         try:
@@ -589,14 +603,14 @@ class TCPchannel:
         except:
             msg='pull: got no size for file '+os.getcwd()+'/'+filepart+' '+str(sys.exc_info()[1])
             print(msg)
-            #syslog(msg)
+            #udp.syslog(msg)
             #traceback.print_exc()
             oksofar=0
 
         if dnsize == filesize: # ok
             msg='pull: file '+filename+' download OK, size '+str(dnsize)
             print(msg)
-            #syslog(msg)
+            #udp.syslog(msg)
 
             try:
                 os.rename(filename, filebak) # keep the previous version if exists
@@ -605,7 +619,7 @@ class TCPchannel:
                 #traceback.print_exc()
                 msg='FAILED to rename '+filename+' to '+filebak+' '+str(sys.exc_info()[1])
                 print(msg)
-                #syslog(msg)
+                #udp.syslog(msg)
                 oksofar=0
 
 
@@ -615,7 +629,7 @@ class TCPchannel:
             except:
                 msg='FAILED to rename '+filepart+' to '+filename+' '+str(sys.exc_info()[1])
                 print(msg)
-                #syslog(msg)
+                #udp.syslog(msg)
                 oksofar=0
                 #traceback.print_exc()
 
@@ -643,7 +657,7 @@ class TCPchannel:
                     msg='pull: file '+filename+' unzipping failure, previous file '+filename2+' restored. '+str(sys.exc_info()[1])
                     #traceback.print_exc()
                     print(msg)
-                    #syslog(msg)
+                    #udp.syslog(msg)
                     self.traffic[0] += dnsize
                     return 1
 
@@ -657,7 +671,7 @@ class TCPchannel:
                     msg='pull: tgz file '+filename+' unpacking failure! '+str(sys.exc_info()[1])
                     #traceback.print_exc()
                     print(msg)
-                    #syslog(msg)
+                    #udp.syslog(msg)
                     self.traffic[0] += dnsize
                     return 1
 
@@ -683,13 +697,112 @@ class TCPchannel:
             if dnsize<filesize:
                 msg='pull: file '+filename+' received partially with size '+str(dnsize)
                 print(msg)
-                #syslog(msg)
+                #udp.syslog(msg)
                 self.traffic[0] += dnsize
                 return 1 # next try will continue
             else:
                 msg='pull: file '+filename+' received larger than unexpected, in size '+str(dnsize)
                 print(msg)
-                #syslog(msg)
+                #udp.syslog(msg)
                 self.traffic[0] += dnsize
                 return 99
+
+
+    def makecalendar(self, table='calendar'): # creates  buffer table in memory for calendar events
+        Cmd='drop table if exists '+table
+        sql="CREATE TABLE "+table+"(title,timestamp,value);CREATE INDEX ts_calendar on "+table+"(timestamp);" # semicolon needed for NPE for some reason!
+        try:
+            self.conn.execute(Cmd) # drop the table if it exists
+            self.conn.executescript(sql) # read table into database
+            self.conn.commit()
+            msg='successfully (re)created table '+table
+            return 0
+        except:
+            msg='sqlread: '+str(sys.exc_info()[1])
+            print(msg)
+            #udp.syslog(msg)
+            traceback.print_exc()
+            time.sleep(1)
+            return 1
+
+
+    def get_calendar(self, id, days = 3): # query to SUPPORTHOST, returning txt. started by cmd:GCAL too for testing
+        ''' google calendar events via monitoring server '''
+        # example:   http://www.itvilla.ee/cgi-bin/gcal.cgi?mac=000101000001&days=10
+        self.ts_cal=time.time() # calendar access timestamp
+        cur=self.conn.cursor()
+        req = 'http://www.itvilla.ee/cgi-bin/gcal.cgi?mac='+id+'&days='+str(days)+'&format=json'
+        headers={'Authorization': 'Basic YmFyaXg6Y29udHJvbGxlcg=='} # Base64$="YmFyaXg6Y29udHJvbGxlcg==" ' barix:controller
+        msg='starting gcal query '+req
+        print(msg) # debug
+        try:
+            response = requests.get(req, headers = headers)
+        except:
+            msg='gcal query '+req+' failed!'
+            traceback.print_exc()
+            print(msg)
+            #udp.syslog(msg)
+            return 1 # kui ei saa gcal yhendust, siis lopetab ja vana ei havita!
+
+        try:
+            events = eval(response.content) # string to list
+        except:
+            msg='getting calendar events failed for host id '+id
+            print(msg)
+            #udp.syslog(msg)
+            traceback.print_exc() # debug
+            return 1 # kui ei saa normaalseid syndmusi, siis ka lopetab
+            
+        #print(repr(events)) # debug
+        Cmd = "BEGIN IMMEDIATE TRANSACTION"
+        try:
+            self.conn.execute(Cmd)
+            Cmd="delete from calendar"
+            self.conn.execute(Cmd)
+            for event in events:
+                #print('event',event) # debug
+                columns=str(list(event.keys())).replace('[','(').replace(']',')')
+                values=str(list(event.values())).replace('[','(').replace(']',')')
+                #columns=str(list(event.keys())).replace('{','(').replace('}',')') 
+                #values=str(list(event.values())).replace('{','(').replace('}',')')
+                Cmd = "insert into calendar"+columns+" values"+values
+                print(Cmd) # debug
+                self.conn.execute(Cmd)
+            self.conn.commit()
+            msg='calendar table updated'
+            print(msg)
+            #udp.syslog(msg) # FIXME - syslog via UDPchannel does not work. syslog() is found, but not it's logaddr?
+            #self.syslog(msg) # common parent UDP TCP channel
+            return 0
+        except:
+            msg='delete + insert to calendar table failed!'
+            print(msg)
+            #udp.syslog(msg)
+            print('logaddr in tcp',self.logaddr)
+            #self.syslog(msg,logaddr=self.logaddr) # class UDPchannel is parent to TCPchannel
+            #UDPchannel.syslog(msg)
+            traceback.print_exc() # debug
+            return 1 # kui insert ei onnestu, siis ka delete ei toimu
+            
+            
+    def chk_calevents(self, title = ''): # set a new setpoint if found in table calendar (sharing database connection with setup)
+        ts=time.time()
+        cur=self.conn.cursor()
+        value='' # local string value
+        if title == '':
+            return None
+        
+        Cmd = "BEGIN IMMEDIATE TRANSACTION"
+        try:
+            conn.execute(Cmd)
+            Cmd="select value from calendar where title='"+title+"' and timestamp+0<"+str(ts)+" order by timestamp asc" # find the last passed event value
+            cur.execute(Cmd)
+            for row in cur:
+                value=row[0] # overwrite with the last value before now
+                #print(Cmd4,', value',value) # debug. voib olla mitu rida, viimane value jaab iga title jaoks kehtima
+            self.conn.commit()
+            return value # last one for given title becomes effective. can be empty string too, then use default value for setpoint related to title
+        except:
+            traceback.print_exc()
+            return None
 

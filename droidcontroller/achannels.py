@@ -56,7 +56,8 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
                 if mb[mbi]:
                     result = mb[mbi].read(mba, regadd, count=count, type='h') # client.read_holding_registers(address=regadd, count=1, unit=mba)
             except:
-                print('device mbi,mba',mbi,mba,'not defined in devices.sql')
+                print('read_ai_grp: mb['+str(mbi)+'] missing, device with mba '+str(mba)+' not defined in devices.sql?')
+                traceback.print_exc()
                 return 2
         else:
             print('invalid parameters for read_ai_grp()!',mba,regadd,count)
@@ -442,6 +443,7 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
 
 
             conn.commit() # aichannels transaction end
+            return 0 # success
             
         except:
             msg='PROBLEM with aichannels reporting '+str(sys.exc_info()[1])
@@ -583,11 +585,19 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
         self.ts = round(time.time(),1)
         if self.ts - self.ts_read > self.readperiod:
             self.ts_read = self.ts
-            res=self.sync_ai() # 
-            res=res+self.sync_ao() # writes output registers to be changed via modbus, based on feedback on di bits
-            
+            try:
+                res=self.sync_ai() # 
+                res=res+self.sync_ao() # writes output registers to be changed via modbus, based on feedback on di bits
+            except:
+                traceback.print_exc()
+                return 1
+                
         if self.ts - self.ts_send > self.sendperiod:
             self.ts_send = self.ts
-            res=res+self.report() # compile services and send away
+            try:
+                res=res+self.report() 
+                return res
+            except:
+                traceback.print_exc()
+                return 2
             
-        return res

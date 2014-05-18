@@ -169,10 +169,11 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
             try:
                 if mb[mbi]:
                     result = mb[mbi].read(mba, regadd, count=count, type='h') # client.read_holding_registers(address=regadd, count=1, unit=mba)
+                    traceback.print_exc()
                     msg=msg+', result: '+str(result)
                     #print(msg) # debug
             except:
-                print('device mbi,mba',mbi,mba,'not defined in devices.sql')
+                print('read_counter_grp: mb['+str(mbi)+'] missing, device with mba '+str(mba)+' not defined in devices.sql?')
                 return 2
         else:
             print('invalid parameters for read_counter_grp()!',mba,regadd,count,wcount,mbi)
@@ -644,11 +645,15 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
         self.ts = round(time.time(),2)
         if self.ts - self.ts_read > self.readperiod:
             self.ts_read = self.ts
-            res=self.read_all() # koikide loendite lugemine
-            
+            try:
+                res=self.read_all() # koikide loendite lugemine
+            except:
+                traceback.print_exc()
         if self.ts - self.ts_send > self.sendperiod:
             self.ts_send = self.ts
-            res=res+self.report_all() # compile services and send away  / raporteerimine, harvem
-            
+            try:
+                res=res+self.report_all() # compile services and send away  / raporteerimine, harvem
+            except:
+                traceback.print_exc()
         return res
    
