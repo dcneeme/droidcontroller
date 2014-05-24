@@ -176,7 +176,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
         sendstring=''
         loghost=''
 
-        #sendstring=sendstring+"AVV:"+self.APVER+"\nAVS:0\n"  # main juba saadab
+        #sendstring += "AVV:"+self.APVER+"\nAVS:0\n"  # main juba saadab
         udp.udpsend(sendstring) # sending directly to the monitoring server
         cur=conn.cursor()
         try:
@@ -319,7 +319,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
                                     print(msg)
                                     syslog(msg)
                                     #prepare data for the monitoring server
-                                    #sendstring=sendstring+"W"+str(mba)+"."+str(regadd)+":"+str(tcpdata)+"\n"  # register content reported as decimal
+                                    #sendstring += "W"+str(mba)+"."+str(regadd)+":"+str(tcpdata)+"\n"  # register content reported as decimal
                                 else:
                                     msg='CHANGING config in mba '+str(mba)+' regadd '+str(regadd)+' from '+format("%04x" % tcpdata)+' to '+format("%04x" % value)
                                     time.sleep(0.1) # successive sending without delay may cause failures!
@@ -327,7 +327,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
                                         client.write_register(address=regadd, value=value, unit=mba) # only one regiter to write here
                                         respcode=0 #write_register(mba,regadd,value,0) # write_register sets MBsta[] as well
                                         #prepare data for the monitoring server = NOT HERE!
-                                        #sendstring=sendstring+"W"+str(mba)+"."+str(regadd)+":"+str(value)+"\n"  # data just written, not verified!
+                                        #sendstring += "W"+str(mba)+"."+str(regadd)+":"+str(value)+"\n"  # data just written, not verified!
                                     except:
                                         msg='error writing modbus register: '+str(sys.exc_info()[1])
                                         udp.syslog(msg)
@@ -349,7 +349,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
                                 Cmd="update setup set value='"+str(tcpdata)+"' where register='"+register+"'"
                                 conn.execute(Cmd)
                                 #send the actual data to the monitoring server
-                                #sendstring=sendstring+"R"+str(mba)+"."+str(regadd)+":"+str(tcpdata)+"\n"  # register content reported as decimal
+                                #sendstring += "R"+str(mba)+"."+str(regadd)+":"+str(tcpdata)+"\n"  # register content reported as decimal
 
                         except:
                             msg=' - could not read the modbus register mba.reg '+str(mba)+'.'+str(regadd)+' '+str(sys.exc_info()[1])

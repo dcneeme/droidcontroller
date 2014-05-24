@@ -14,9 +14,17 @@ class Commands(SQLgeneral): # p
         Outputs TODO for execution and ... 
     '''
         
-    def __init__(self): 
+    def __init__(self, OSTYPE): 
         self.todocode=0 # todo_proc() retries
-        self.vpnconf='/mnt/mtd/openVPN/config/itvilla.conf' # techbase
+        if OSTYPE == 'techbaselinux':
+            self.vpn_start='vpn start /mnt/mtd/openVPN/config/itvilla.conf' # techbase
+            self.vpn_stop='vpn stop'
+        elif OSTYPE == 'archlinux':
+            self.vpn_start='rcopenvpn-start' # olinuxino
+            self.vpn_stop='rcopenvpn-stop'
+        else:
+            print('udp_commands: vpn start/stop commands undefined for OSTYPE',OSTYPE)
+            time.sleep(1)
         #self.uptime=[int(self.subexec('cut -f1 -d. /proc/uptime',1)), 0]
         #print('system uptime',self.uptime[0])
         #s.print_table('setup') # do we have it? access to setup table is needed
@@ -36,7 +44,7 @@ class Commands(SQLgeneral): # p
             result = proc.communicate()[0]
             return result
         elif submode == 2: # forks to background, does not wait for output
-            returncode=subprocess.Popen(exec_cmd, shell=True) # 
+            returncode=subprocess.Popen([exec_cmd], shell=True) # 
             return 0 # no idea how it really ends
         
         
@@ -194,11 +202,11 @@ class Commands(SQLgeneral): # p
                 
                 
             if TODO == 'VPNON': # ovpn start
-                todocode=self.subexec(['vpn start '+self.vpnconf],2) # start vpn
+                todocode=self.subexec([self.vpn_start],2) # start vpn
 
                     
             if TODO == 'VPNOFF': # ovpn stop
-                todocode=self.subexec(['vpn stop'],2) # stop vpn
+                todocode=self.subexec([self.vpn_stop],2) # stop vpn
     
                 
             if TODO.split(',')[0] == 'pull':
@@ -328,11 +336,11 @@ class Commands(SQLgeneral): # p
             # common part for all commands
             if todocode == 0: # success with TODO execution
                 msg='remote command '+TODO+' successfully executed'
-                sendstring=sendstring+'ERS:0\n'
+                sendstring += 'ERS:0\n'
                 TODO='' # no more execution
             else: # no success
                 msg='remote command '+TODO+' execution failed or incomplete on try '+str(pulltry)
-                sendstring=sendstring+'ERS:2\n'
+                sendstring += 'ERS:2\n'
                 if TODO.split(',')[0] == 'size':
                     msg=msg+', file not found'
                 if 'pull,' in TODO and pulltry<5: # pull must continue
@@ -342,7 +350,7 @@ class Commands(SQLgeneral): # p
                     TODO=''
             print(msg)
             udp.syslog(msg)
-            sendstring=sendstring+'ERV:'+msg+'\n' # msh cannot contain colon or newline
+            sendstring += 'ERV:'+msg+'\n' # msh cannot contain colon or newline
             udp.udpsend(sendstring) # SEND AWAY. no need for server ack so using 0 instead of inumm
 
             sys.stdout.flush()
@@ -357,7 +365,7 @@ class RegularComm(SQLgeneral): # r
         Outputs TODO for execution and ... 
     '''
         
-    def __init__(self, interval = 60): #
+    def __init__(self, interval = 120): #
         self.interval=interval # todo_proc() retries
         self.app_start=int(time.time())
         self.ts_regular=self.app_start - interval # for immediate sending on start
@@ -412,53 +420,66 @@ class RegularComm(SQLgeneral): # r
         self.udpalivecmd=alivecmd #  instead of sleep you can  use an understandable script name for a process, containing sleep $1
 
         
-    def regular_svc(self, svclist = ['ULW','UTW','ip']): # default are uptime and traffic services
+    def get_pyalivecmd(self): # this default alivecmd is for techbase
+        ''' sets the script forked on regular communication, to be used for watchdogging '''
+        return self.pyalivecmd #  instead of sleep you can  use an understandable script name for a process, containing sleep $1
+
+
+    def get_udpalivecmd(self): # not used if empty
+        ''' sets the script forked on regular communication, to be used for watchdogging '''
+        return self.udpalivecmd #  instead of sleep you can  use an understandable script name for a process, containing sleep $1
+
+
+    def regular_svc(self, svclist = ['UTW','ip','ULW']): # default are uptime and traffic services
         ''' sends regular service messages that are not related to aichannels, dichannels or counters  '''
         self.ts=time.time()
-        if self.ts < self.ts_regular + self.interval: # break
-            return None
+        if self.ts > self.ts_regular + self.interval: # time to send again
             
-        self.sync_uptime()
-        sendstring=''
-        for svc in svclist:
-            if svc == 'UTW': # traffic
-                msg=str(udp.traffic[0])+' '+str(udp.traffic[1])+' '+str(tcp.traffic[0])+' '+str(tcp.traffic[1])+'\nUTS:' # adding status
-                if udp.traffic[0]+udp.traffic[1]+tcp.traffic[0]+tcp.traffic[1] < 10000000:
-                    sendstring=sendstring+'0\n' # ok
-                else:
-                    sendstring=sendstring+'1\n' # warning about recent restart
-            elif svc == 'ULW': # uptime
-                msg=str(self.uptime[0])+' '+str(self.uptime[1])+'\nULS:' # diagnostic uptimes, add status!
-                if (self.uptime[0] > 1800) or (self.uptime[0] > 1800):
-                    sendstring=sendstring+'0\n' # ok
-                else:
-                    sendstring=sendstring+'1\n' # warning
+                
+            self.sync_uptime()
+            sendstring=''
+            for svc in svclist:
+                if svc == 'UTW': # traffic
+                    sendstring += svc+':'+str(udp.traffic[0])+' '+str(udp.traffic[1])+' '+str(tcp.traffic[0])+' '+str(tcp.traffic[1])+'\nUTS:' # adding status
+                    if udp.traffic[0]+udp.traffic[1]+tcp.traffic[0]+tcp.traffic[1] < 10000000:
+                        sendstring += '0\n' # ok
+                    else:
+                        sendstring += '1\n' # warning about recent restart
+                elif svc == 'ULW': # uptime
+                    sendstring += svc+':'+str(self.uptime[0])+' '+str(self.uptime[1])+'\nULS:' # diagnostic uptimes, add status!
+                    if (self.uptime[0] > 1800) and (self.uptime[0] > 1800):
+                        sendstring += '0\n' # ok
+                    else:
+                        sendstring += '1\n' # warning
 
-            elif svc == 'ip': # own ip
-                msg=str(self.host_ip) # refreshing from time to time? via set_host_ip()
-
-            sendstring=sendstring+svc+':'+msg+'\n'
-        res=udp.udpsend(sendstring) # loop over, SEND AWAY        
-        self.ts_regular=self.ts
-        
-        # put python alive mark into the process list
-        self.alive_fork(self.pyalivecmd) # sleep or smthg into ps list to see the app is alive
-        # put udp connection alive mark into the process list
-        if udp.get_ts_udpgot() > self.ts + 2*self.interval: # 
-            self.alive_fork(self.udpalivecmd) # sleep or smthg into ps list to see the app is alive
-        
-        return res # 0 is ok 
-                    
+                elif svc == 'ip': # own ip
+                    sendstring += svc+':'+str(self.host_ip)+'\n'
+            
+            res=udp.udpsend(sendstring) # loop over, SEND AWAY        
+            self.ts_regular=self.ts
+            
+            # put python alive mark into the process list
+            try:
+                self.alive_fork(self.pyalivecmd) # sleep or smthg into ps list to see the app is alive
+                # put udp connection alive mark into the process list
+                if udp.get_ts_udpgot() > self.ts + 2*self.interval: # 
+                    self.alive_fork(self.udpalivecmd) # sleep or smthg into ps list to see the app is alive
+            except:
+                traceback.print_exc()
+            
+            #return res # 0 is ok 
+        #else:
+            #print('next regular_svc() in '+str(int(round(self.ts_regular + self.interval - self.ts)))+' s',self.ts_regular,self.interval,self.ts) # debug
     
-    def alive_fork(self, alivecmd, interval = 0): # spawn a process indicating activity
+    def alive_fork(self, alivecmd, interval = 0): # spawn a process indicating activity, start via regular actions (not too often)
         ''' to enable checking application activity the process with lifetime of 2*interval is started via subexec() '''
         if interval == 0:
-            interval=2*self.interval  # regual communication will keep about 2 processes alive
-        tbs=alivecmd+' '+str(interval)+' &'
-        #print(tbs) # debug
+            interval=2*self.interval  # regular communication will keep about 2 processes alive
+        tbs=alivecmd+' '+str(interval) # +' &' # & not needed
+        print('alive_fork',tbs) # debug
         if alivecmd != '':
             try:
-                self.subexec([tbs],2)
+                self.subexec(tbs,2)
                 return 0
             except:
                 traceback.print_exc()

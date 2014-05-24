@@ -38,8 +38,10 @@ class CommModbus(Comm):
 
         '''
 
+        self.errorcount = 0 # add here modbus problems
         self.type = type # empty if not npe_io or /dev/tty
         if ('host' in kwargs):
+            self.host=kwargs.get('host','127.0.0.1')
             if kwargs.get('host') == 'npe_io': # npe_io via subexec(), no pymodbus in use
                 self.type='n' # npe_io
                 print('CommModbus() init1: created CommModbus instance for using npe_read.sh and npe_write.sh instead of pymodbus, type',self.type)
@@ -68,6 +70,26 @@ class CommModbus(Comm):
         Comm.__init__(self, **kwargs)
 
 
+    def get_errorcount(self):
+        ''' returns number of errors, becomes 0 after each successful modbus transaction '''
+        return self.errorcount
+    
+    
+    def set_errorcount(self,invar):
+        ''' Sets number of errors '''
+        self.errorcount = invar
+        return 0
+    
+    
+    def get_type(self):
+        ''' returns type, to mark special comm channels to be used if not empty. n - npe_io '''
+        return self.type
+    
+    def get_host(self):
+        ''' returns type, to mark special comm channels to be used if not empty. n - npe_io '''
+        return self.host
+    
+    
     def _poller(self, id, **kwargs):
         ''' Read Modbus register and write to storage
 
@@ -115,37 +137,47 @@ class CommModbus(Comm):
         :param 'type': Modbus register type, h = holding, i = input, c = coil
 
         '''
-        dummy=0
+        #dummy=0
         if self.type == 'n':  # type switch for npe_io
             type=self.type  # this instance does not use modbus at all! for npe_io!
             #print('read type',type) # debug
             
         # actual reading
         if type == 'h':
-            res = self.client.read_holding_registers(address=reg, count=count, unit=mba)
+            #res = self.client.read_holding_registers(address=reg, count=count, unit=mba)
             try: #if (isinstance(res, ReadHoldingRegistersResponse)): # ei funka!
-                dummy=res.registers[0]
+                res = self.client.read_holding_registers(address=reg, count=count, unit=mba)
+                #dummy=res.registers[0]
+                self.errorcount = 0
                 return res.registers
             except:
                 print('modbus read (h) failed from',mba,reg,count)
-                traceback.print_exc()
+                #traceback.print_exc()
+                #self.on_error(id, **kwargs) # ei funka
+                self.errorcount += 1
                 return None
 
         elif type == 'i':
             try:
                 res = self.client.read_input_registers(address=reg, count=count, unit=mba)
+                self.errorcount = 0
                 return res.registers
             except:
                 print('modbus read (i) failed from',mba,reg,count)
-                traceback.print_exc() # self.on_error(id, **kwargs)
+                #traceback.print_exc() 
+                #self.on_error(id, **kwargs)
+                self.errorcount += 1
                 return None
 
         elif type == 'c':
             try:
                 #FIXME #res = self.client.read_input_registers(address=reg, count=count, unit=mba)
+                #self.errorcount = 0
                 return res.registers
             except:
-                traceback.print_exc() # self.on_error(id, **kwargs)
+                #traceback.print_exc()
+                #self.on_error(id, **kwargs)
+                self.errorcount += 1
                 return None
 
         elif type == 'n': # npe_io  ##################### NPE ##################
@@ -155,16 +187,19 @@ class CommModbus(Comm):
                 #print('npe_read() returned:', res) # debug
                 if len(res)>0:
                     registers=[int(eval(i)) for i in res.split(' ')] # possible str to int
+                    self.errorcount = 0
                     return registers
                 else:
                     print('no data from npe_read.sh')
                     return None
             except:
-                traceback.print_exc() # self.on_error(id, **kwargs)
+                #traceback.print_exc() # self.on_error(id, **kwargs)
+                self.errorcount += 1
                 return None
 
         else:
             print('unknown type',type)
+            self.errorcount += 1
             return None
 
 
@@ -197,35 +232,46 @@ class CommModbus(Comm):
             if count == 1:
                 try:
                     self.client.write_register(address=reg, value=value, unit=mba)
+                    self.errorcount = 0
                     return 0
                 except:
-                    traceback.print_exc() # self.on_error(id, **kwargs)
+                    #traceback.print_exc() # self.on_error(id, **kwargs)
+                    #self.on_error(id, **kwargs)
+                    self.errorcount += 1
                     return 2
             else:
                 try:
                     res = self.client.write_registers(address=reg, count=count, unit=mba, values = values)
+                    self.errorcount = 0
                     return 0
                 except:
-                    traceback.print_exc() # self.on_error(id, **kwargs)
+                    #traceback.print_exc() # self.on_error(id, **kwargs)
+                    #self.on_error(id, **kwargs)
+                    self.errorcount += 1
                     return 1
 
         elif type == 'c': # coil
             try:
                 #FIXME #res = self.client.read_input_registers(address=reg, count=count, unit=mba)
+                #self.errorcount = 0
                 return 0
             except:
-                traceback.print_exc() # self.on_error(id, **kwargs)
+                #traceback.print_exc() # self.on_error(id, **kwargs)
+                self.errorcount += 1
                 return 1
         elif type == 'n': # npe_io  ##################### NPE ##################
             try:
                 res = self.npe_write(reg, count=count, value= value) # mba ignored
+                self.errorcount = 0
                 return 0
             except:
-                traceback.print_exc() # self.on_error(id, **kwargs)
+                #traceback.print_exc() # self.on_error(id, **kwargs)
+                self.errorcount += 1
                 return 1
 
         else:
             print('unknown type',type)
+            self.errorcount += 1
             return 2
 
 

@@ -169,9 +169,8 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
             try:
                 if mb[mbi]:
                     result = mb[mbi].read(mba, regadd, count=count, type='h') # client.read_holding_registers(address=regadd, count=1, unit=mba)
-                    traceback.print_exc()
                     msg=msg+', result: '+str(result)
-                    #print(msg) # debug
+                    print(msg) # debug
             except:
                 print('read_counter_grp: mb['+str(mbi)+'] missing, device with mba '+str(mba)+' not defined in devices.sql?')
                 return 2
@@ -189,7 +188,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                         #print('normal counter',str(i),'result',tcpdata) # debug
                     elif wcount == -2:
                         tcpdata = 65536*result[step*i+1]+result[step*i]  # wrong word order for counters in barionet!
-                        #print('barionet counter',str(i),'result',tcpdata) # debug
+                        #print('swapped words counter',str(i),'result',tcpdata) # debug
                     else: # something else
                         print('unsupported counter word size',wcount)
                         return 1
@@ -200,7 +199,8 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                     for row in cur:
                         oraw=int(row[0]) if row[0] !='' else -1
                     if tcpdata != oraw or oraw == -1: # update only if change needed or empty so far
-                        Cmd="UPDATE "+self.in_sql+" set raw='"+str(tcpdata)+"', ts='"+str(self.ts)+"' where mba='"+str(mba)+"' and regadd='"+str(regadd+i*step)+"'" # koigile korraga
+                        Cmd="UPDATE "+self.in_sql+" set raw='"+str(tcpdata)+"', ts='"+str(self.ts)+ \
+                            "' where mba='"+str(mba)+"' and regadd='"+str(regadd+i*step)+"' and mbi="+str(mbi) # koigile korraga selle mbi, mba, regadd jaoks
                         #print('counters i',i,Cmd) # debug
                         conn.execute(Cmd)
                 return 0
@@ -208,7 +208,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                 traceback.print_exc()
                 return 1
         else:
-            msg='counter grp data processing FAILED for mbi,mba,regadd,count '+str(mbi)+', '+str(mba)+', '+str(regadd)+', '+str(count)
+            msg='counter grp read FAILED for mbi,mba,regadd,count '+str(mbi)+', '+str(mba)+', '+str(regadd)+', '+str(count)
             print(msg)
             return 1
 
@@ -429,7 +429,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                                 print('value change of more than 10% detected in '+val_reg+'.'+str(member)+', need to notify') # debug
                                 chg=1
                             
-                        # print('end processing counter',val_reg,'member',member,'raw',raw,' value',value,' ovalue',ovalue,', avg',avg) # debug
+                        #print('end processing counter',val_reg,'member',member,'raw',raw,' value',value,' ovalue',ovalue,', avg',avg) # debug
 
                     else:
                         if mba > 0 and member > 0:
@@ -501,7 +501,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
 
 
 
-    def make_counter_svc(self,val_reg,sta_reg):  # should be generic, suitable both for aichannels and counters
+    def make_counter_svc(self,val_reg,sta_reg):  # should be generic, suitable both for aichannels and counters, ONE svc
         ''' make a single service record WITH STATUS based on existing values of the counter members and send it away to UDPchannel '''
         #FIXME! we do not need to calc value here, that has to be made with aquiry of every new raw!
 

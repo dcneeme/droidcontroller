@@ -56,7 +56,7 @@ class Achannels(SQLgeneral): # handles aichannels and aochannels tables
                 if mb[mbi]:
                     result = mb[mbi].read(mba, regadd, count=count, type='h') # client.read_holding_registers(address=regadd, count=1, unit=mba)
             except:
-                print('read_ai_grp: mb['+str(mbi)+'] missing, device with mba '+str(mba)+' not defined in devices.sql?')
+                print('read_ai_grp: mb['+str(mbi)+'] missing, device with mba '+str(mba)+' not defined in devices.sql or connection refused')
                 traceback.print_exc()
                 return 2
         else:

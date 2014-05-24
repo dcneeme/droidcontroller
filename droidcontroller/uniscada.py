@@ -289,9 +289,9 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
                 ts_created=srow[4]
 
                 if val_reg != '':
-                    sendstring=sendstring+val_reg+":"+str(value)+"\n"
+                    sendstring += val_reg+":"+str(value)+"\n"
                 if sta_reg != '':
-                    sendstring=sendstring+sta_reg+":"+str(status)+"\n"
+                    sendstring += sta_reg+":"+str(status)+"\n"
 
                 Cmd="update "+self.table+" set ts_tried="+str(int(self.ts))+",inum="+str(self.inum)+" where sta_reg='"+sta_reg+"' and status="+str(status)+" and ts_created="+str(ts_created)
                 #print "update Cmd=",Cmd # debug
@@ -332,9 +332,9 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
             return 1
 
         self.ts = round(time.time(),1)
-        sendstring="id:"+self.host_id+"\n"+sendstring # loodame, et ts_created on enam-vahem yhine neil teenustel...
+        sendstring += "id:"+self.host_id+"\n" # loodame, et ts_created on enam-vahem yhine neil teenustel...
         if self.inum > 0: # "in:inum" to be added
-            sendstring="in:"+str(self.inum)+","+str(round(self.ts))+"\n"+sendstring
+            sendstring += "in:"+str(self.inum)+","+str(round(self.ts))+"\n"
 
         self.traffic[1]=self.traffic[1]+len(sendstring) # adding to the outgoing UDP byte counter
 
@@ -419,7 +419,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
                         print(msg)
                         data_dict.update({ sregister : svalue })
                         #syslog(msg)
-                        sendstring=sendstring+sregister+":"+svalue+"\n"  # add to the answer
+                        sendstring += sregister+":"+svalue+"\n"  # add to the answer
                         self.udpsend(sendstring) # send the response right away to avoid multiple retransmits
                     else:
                         if sregister == "in": # one such a key in message
