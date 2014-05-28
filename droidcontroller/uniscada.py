@@ -421,6 +421,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
                         #syslog(msg)
                         sendstring += sregister+":"+svalue+"\n"  # add to the answer
                         self.udpsend(sendstring) # send the response right away to avoid multiple retransmits
+                        # this answers to the server but does not update the setup or service table yet!
                     else:
                         if sregister == "in": # one such a key in message
                             inumm=eval(data[data.find("in:")+3:].splitlines()[0].split(',')[0]) # loodaks integerit

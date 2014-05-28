@@ -1,14 +1,6 @@
 # to be imported to access modbus registers as counters
-# 04.04.2014 OOP
-# 05.04.2014 OOP
-# 06.04.2014 counter grousp with sequential regadd range, optimized read done
-# 15.04.2014 added ask_counters()
-# 19.05.2014 counters.sql ts tohib muuta ainult siis, kui raw muutus! niisama lugemine ei muuda ts!!!
-#            siis saab voimsust arvestada aja alusel ka yhe impulsilise kasvu alusel, kui piisavalt tihti lugeda!
-# 25.4.2014 power metering ok. need to add on/off svc
-
-# use do_read_all() and report_all() for external use after importing. or doall()
-
+# combines previous achannels.py and cchannels.py into one universal acchannel.py. add cfg bit for counter?
+# 28 may 2014.... handle negative values
 
 from droidcontroller.sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
 s=SQLgeneral() # init sisse?
@@ -16,9 +8,11 @@ from droidcontroller.counter2power import *  # Counter2Power() handles power cal
 
 import time
 
-class Cchannels(SQLgeneral): # handles counters registers and tables
+class ACchannels(SQLgeneral): # handles aichannels and counters, modbus registers and sqlite tables
     ''' Access to io by modbus analogue register addresses (and also via services?). Modbus client must be opened before.
-        Able to sync input and output channels and accept changes to service members by their sta_reg code
+        Able to sync input and output channels and accept changes to service members by their sta_reg code.
+        Channel configuration is defined in sql tables. Required table format:
+        
     '''
 
     def __init__(self, in_sql = 'counters.sql', readperiod = 1, sendperiod = 30):
@@ -143,7 +137,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
 
 
 
-    def read_counter_grp(self,mba,regadd,count,wcount,mbi=0): # using self,in_sql as the table to store in.
+    def read_grp(self,mba,regadd,count,wcount,mbi=0): # update raw in self.in_sql with data from modbus registers
         ''' Reads sequential register group, process numbers according to counter size and store raw into table self.in_sql. Inside transaction!
             Compares the now value from mobdbus register with old value in the table. If changed, ts is set to the modbus readout time self.ts.
 
@@ -171,7 +165,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                     msg=msg+', result: '+str(result)
                     print(msg) # debug
             except:
-                print('read_counter_grp: mb['+str(mbi)+'] missing, device with mba '+str(mba)+' not defined in devices.sql?')
+                print('read_grp: mb['+str(mbi)+'] missing, device with mba '+str(mba)+' not defined in devices.sql?')
                 return 2
         else:
             print('invalid parameters for read_counter_grp()!',mba,regadd,count,wcount,mbi)
@@ -183,13 +177,13 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                     tcpdata=0
                     #print('counter_grp debug: i',i,'step',step,'results',result[step*i],result[step*i+1]) # debug
                     if wcount == 2:
-                        #tcpdata = 65536*result[step*i]+result[step*i+1]
                         tcpdata = (result[step*i]<<16)+result[step*i+1]
                         #print('normal counter',str(i),'result',tcpdata) # debug
                     elif wcount == -2:
-                        #tcpdata = 65536*result[step*i+1]+result[step*i]  # wrong word order for counters in barionet!
                         tcpdata = (result[step*i+1]<<16)+result[step*i]  # wrong word order for counters in barionet!
                         #print('swapped words counter',str(i),'result',tcpdata) # debug
+                    elif wcount == 1:
+                        tcpdata = result[0]
                     else: # something else
                         print('unsupported counter word size',wcount)
                         return 1
@@ -270,7 +264,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                     else: # a new group started, make a query for previous
                         #print('counter group end detected at regadd',blast,'bcount',bcount, 'mbi',mbi,'bmbi',bmbi) # debugb
                         #print('going to read non-last counter group, registers from',bmba,bfirst,'to',blast,'regcount',bcount) # debug
-                        self.read_counter_grp(bmba,bfirst,bcount,bwcount,bmbi) # reads and updates table with previous data #####################  READ MB  ######
+                        self.read_grp(bmba,bfirst,bcount,bwcount,bmbi) # reads and updates table with previous data #####################  READ MB  ######
                         bfirst = regadd # new grp starts immediately
                         blast = regadd
                         #bwcount = wcount # does not change inside group
@@ -283,14 +277,14 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
             if bfirst != 0: # last group yet unread
                 #print('counter group end detected at regadd',blast) # debug
                 #print('going to read last counter group, registers from',bmba,bfirst,'to',blast,'regcount',bcount) # debug
-                self.read_counter_grp(bmba,bfirst,bcount,bwcount,bmbi) # reads and updates table with previous data #####################  READ MB  ######
+                self.read_grp(bmba,bfirst,bcount,bwcount,bmbi) # reads and updates table with previous data #####################  READ MB  ######
 
             # raw sync (from modbus to sql) done.
 
 
 
             # now process raw -> value and find status BY SERVICES. service loop begins.
-            #power calcultions happens below too, for each service , not for each counter!
+            #power calculations happens below too, for each service , not for each counter!
 
             Cmd="select val_reg from "+self.in_sql+" group by val_reg" # process and report by services
             #print "Cmd=",Cmd
@@ -359,28 +353,32 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                     ots=eval(srow[16]) if srow[16] != '' else self.ts
                     #desc=srow[17]
                     #comment=srow[18]
-                    wcount=int(srow[19]) if srow[19] != '' else 0  # word count
+                    wcount=int(srow[21]) if srow[21] != '' else 1  # word count
                     mbi=srow[20] # int
                     #print('got from '+self.in_sql+' raw,ovalue',raw,ovalue) # debug
 
                     if lisa != '':
                         lisa=lisa+" "
 
-                    # CONFIG BYTE BIT MEANINGS
-                    # 1 - below outlo warning,
-                    # 2 - below outlo critical,
-                    # NB! 3 - not to be sent  if value below outlo
+                    # CONFIGURATION BITS
+                    # 1 - below outlo warning, 4 
+                    # 2 - below outlo critical, 8 - above outhi critical
                     # 4 - above outhi warning
-                    # 8 - above outhi critical
-
-                    # 16 - - immediate notification on status change (USED FOR STATE FROM POWER)
-                    # 32  - limits to state inversion
-                    # 64 - power to be counted based on count increase and time period between counts
-                    # 128 -  state from power flag
+                    # 8   above outhi critical
+                    # 16 - immediate notification on status change (USED FOR STATE FROM POWER)
+                    # 32 - value "limits to status" inversion  - to defined forbidden area instead of allowed area  
+                    # 64 - power flag, based on value increments
+                    # 128 - state from power flag
+                    # 256 - notify on 10% value change (not only limit crossing that becomes activated by first 4 cfg bits)
+                    # 512 - do not report at all, for internal usage
+                    # 1024 - raw counter, no sign
+                        # counters are normally located in 2 registers, but also ai values can be 32 bits. 
+                        # negative wcount means swapped words (barionet, npe imod)
+ 
                     
                     if raw != None: # valid data for either energy or power value
                         #POWER?
-                        if (cfg&64): # power, increment to be calculated! divide increment to time from the last reading to get the power
+                        if (cfg&64): # power, no sign, increment to be calculated! divide increment to time from the last reading to get the power
                             cpi=cpi+1 # counter2power index
                             try:
                                 if self.cp[cpi]:
@@ -391,9 +389,8 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                             res=self.cp[cpi].calc(ots, raw, ts_now = self.ts) # power calculation based on raw counter increase
                             raw=res[0]
                             #print('got result[0] from cp['+str(cpi)+']: '+str(res))  # debug
-                 
-                        # on-off?
-                        #if (cfg&128): # 
+                        
+                        
                         if (cfg&128) > 0: # 
                             cpi=cpi+1 # counter2power index on /off jaoks
                             try:
@@ -410,6 +407,16 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                         
                         
                         # SCALING
+                        if (cfg&1024) == 0: # take sign into account, not counter ### SIGN ##
+                            if raw >= (2**(wcount*16-1)): # negative!
+                                raw=raw-(2**(wcount*16))
+                                print('read_all: converted to negative value',raw,'wcount',wcount) # debug
+                            else:
+                                print('not counter, no conversion due to raw below '+str(2**(wcount*16-1))+', leave raw as',raw,'wcount',wcount) # debug
+                        #else:
+                            #print('counter, raw',raw,'wcount',wcount) # debug
+                            
+                            
                         if raw != None and x1 != x2 and y1 != y2: # seems like normal input data
                             value=(raw-x1)*(y2-y1)/(x2-x1)
                             value=int(round(y1+value)) # integer values to be reported only
@@ -422,7 +429,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                             if avg>1 and abs(value-ovalue) < value/2:  # averaging the readings. big jumps (more than 50% change) are not averaged.
                                 value=int(((avg-1)*ovalue+value)/avg) # averaging with the previous value, works like RC low pass filter
                                 #print('counter avg on, value became ',value) # debug
-                            #print('counter svc,val_reg,member,ovalue,value,avg,abs(value-ovalue),cfg',val_reg,member,ovalue,value,avg,abs(value-ovalue),cfg) # debug
+                            print('acchannels: svc,val_reg,member,ovalue,value,avg,abs(value-ovalue),cfg',val_reg,member,ovalue,value,avg,abs(value-ovalue),cfg) # debug
                             Cmd="update "+self.in_sql+" set value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
                             #print(Cmd) # debug
                             conn.execute(Cmd) # new value set in sql table ONLY if there was a valid result
@@ -604,14 +611,20 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
             # CONFIG BYTE BIT MEANINGS
             # 1 - below outlo warning,
             # 2 - below outlo critical,
-            # NB! 3 - not to be sent  if value below outlo
+                # NB! 3 - not to be sent  if value below outlo
             # 4 - above outhi warning
             # 8 - above outhi critical
-
+                # NB! 3 - not to be sent  if value above outhi
             # 16 - - immediate notification on status change (USED FOR STATE FROM POWER)
             # 32  - limits to state inversion
             # 64 - power to be counted based on count increase and time period between counts
             # 128 -  state from power flag
+            # 256 - notify on 10% value change (not only limit crossing that becomes activated by first 4 cfg bits)
+            # 512 - do not report at all, for internal usage
+            # 1024 - raw counter, no sign
+                # counters are normally located in 2 registers, but also ai values can be 32 bits. 
+                # negative wcount means swapped words (barionet, npe imod)
+
         #############                
             #print 'make counter_svc mba ots mts',mba,ots,mts # debug
             if mba>0:

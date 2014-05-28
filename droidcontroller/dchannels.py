@@ -127,7 +127,6 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 traceback.print_exc()
                 return 1
         else:
-            print('di processing failure')
             msg='di grp data reading FAILED!'
             print(msg)
             return 1

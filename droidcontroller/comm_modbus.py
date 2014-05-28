@@ -52,13 +52,15 @@ class CommModbus(Comm):
             else: #tcp, possibly rtu over tcp
                 from pymodbus.client.sync import ModbusTcpClient as ModbusClient
                 if kwargs.get('port') > 10000 and kwargs.get('port')<10003: # xport, rtu over tcp. use port 10001 or 10002
+                    self.port=kwargs.get('port')
                     self.client = ModbusClient(
-                        host=kwargs.get('host', '127.0.0.1'),
+                        kwargs.get('host', '127.0.0.1'),
                         port=kwargs.get('port'),
                         framer=ModbusRtuFramer)
                     print('CommModbus() init3: created CommModbus instance for ModbusRTU over TCP',kwargs)
                 else: # normal modbustcp
                     self.type='' # normal modbus
+                    self.port=kwargs.get('port')
                     self.client = ModbusClient(
                             host=kwargs.get('host', '127.0.0.1'),
                             port=kwargs.get('port', 502))
@@ -88,6 +90,10 @@ class CommModbus(Comm):
     def get_host(self):
         ''' returns type, to mark special comm channels to be used if not empty. n - npe_io '''
         return self.host
+        
+    def get_port(self):
+        ''' returns type, to mark special comm channels to be used if not empty. n - npe_io '''
+        return self.port
     
     
     def _poller(self, id, **kwargs):

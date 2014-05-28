@@ -245,23 +245,23 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
 
 
 
-    def change_setup(self, sregister, svalue):  # iga muutus omaette transaktsioonina
-        ''' Save changes to general setup '''
+    def change_setup(self, register, value, table='setup'):  # if register found in table, then change value. no protection here.
+        ''' If register found as service in table, then change the value. No protection here against misusage. '''
         ts=time.time()
-        print('setup change started for', sregister, svalue)
-        #sCmd="BEGIN IMMEDIATE TRANSACTION" # setup table. there may be no setup changes, no need for empty transactions
+        print('setup change of '+table+' started for', register, value)
+        #Cmd="BEGIN IMMEDIATE TRANSACTION" # setup table. there may be no setup changes, no need for empty transactions
         try:
-            #conn.execute(sCmd) # setup transaction start
-            sCmd="update setup set value='"+str(svalue)+"', ts='"+str(int(ts))+"' where register='"+sregister+"'" # update only, no insert here!
-            print(sCmd)
-            udp.syslog(sCmd) # debug
-            conn.execute(sCmd) # table asetup/setup
+            #conn.execute(Cmd) # setup transaction start
+            Cmd="update "+table+" set value='"+str(value)+"', ts='"+str(int(ts))+"' where register='"+register+"'" # update only, no insert here!
+            print(Cmd)
+            udp.syslog(Cmd) # debug
+            conn.execute(Cmd) # table asetup/setup
             conn.commit() # end transaction
-            print('setup change done for',sregister,svalue)
+            print('setup change done for',register,value)
             return 0
 
         except: #if not succcessful, then not a valid setup message - NO INSERT here, UPDATE ONLY!
-            msg='setup change problem, the assumed setup register '+sregister+' not found in setup table! '+str(sys.exc_info()[1])
+            msg='setup change problem, the assumed setup register '+register+' not found in setup table! '+str(sys.exc_info()[1])
             print(msg)
             udp.syslog(msg)
 

@@ -115,6 +115,8 @@ class Commands(SQLgeneral): # p
                     else:
                         print('could not set TODO to',value,', TODO still',TODO)
                 
+                # add here svc table update
+                
                 if len(msg)>0:
                     print(msg)
                     udp.syslog(msg)
@@ -370,7 +372,9 @@ class RegularComm(SQLgeneral): # r
         self.app_start=int(time.time())
         self.ts_regular=self.app_start - interval # for immediate sending on start
         self.ts=self.app_start
-        self.uptime=[0,0]
+        self.uptime=[0,0,0]
+        self.uptime[0]=int(self.subexec('cut -f1 -d. /proc/uptime',1)) # should be avoided on npe, use only once
+        self.uptime[2]=self.uptime[0] # counting on from app init 
         self.sync_uptime()
         self.set_pyalivecmd() # to watch the process list for this as process a mark of being alive
         self.set_udpalivecmd() # to watch udp conn being alive
@@ -394,9 +398,9 @@ class RegularComm(SQLgeneral): # r
      
     def sync_uptime(self):
         #self.uptime[0]=0 # 
-        self.uptime[0]=int(self.subexec('cut -f1 -d. /proc/uptime',1))
-        self.uptime[1]=int(self.ts - self.app_start) # sys and app uptimes
-        print('uptimes sys,app',self.uptime) # debug
+        self.uptime[1]=int(self.ts - self.app_start) # app uptime
+        self.uptime[0]=self.uptime[2]+self.uptime[1] # sys uptime
+        print('uptimes sys,app,app_start_ts',self.uptime) # debug
         
 
     def set_host_ip(self, invar):
@@ -462,7 +466,7 @@ class RegularComm(SQLgeneral): # r
             try:
                 self.alive_fork(self.pyalivecmd) # sleep or smthg into ps list to see the app is alive
                 # put udp connection alive mark into the process list
-                if udp.get_ts_udpgot() > self.ts + 2*self.interval: # 
+                if udp.get_ts_udpgot() > self.ts - 2*self.interval: # fresh enough
                     self.alive_fork(self.udpalivecmd) # sleep or smthg into ps list to see the app is alive
             except:
                 traceback.print_exc()
