@@ -365,8 +365,10 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
 
 
     def udpread(self):
-        ''' tries to receive data from monitoring server and IF the data contains key "in",
-        then deletes the rows with this inum in the sql table and returns received data
+        ''' Checks received data for monitoring server to see if the data contains key "in",
+            then deletes the rows with this inum in the sql table. 
+            If the received datagram contains more data, these key:value pairs are
+            returned as dictionary.
         '''
         data=''
         data_dict={} # possible setup and commands
@@ -417,11 +419,10 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
                     if sregister != 'in' and sregister != 'id': # may be setup or command (cmd:)
                         msg='got setup/cmd reg:val '+sregister+':'+svalue  # need to reply in order to avoid retransmits of the command(s)
                         print(msg)
-                        data_dict.update({ sregister : svalue })
-                        #syslog(msg)
+                        data_dict.update({ sregister : svalue }) # in and idf are not included in dict
+                        #udp.syslog(msg) # cannot use udp here
                         sendstring += sregister+":"+svalue+"\n"  # add to the answer
-                        self.udpsend(sendstring) # send the response right away to avoid multiple retransmits
-                        # this answers to the server but does not update the setup or service table yet!
+                        
                     else:
                         if sregister == "in": # one such a key in message
                             inumm=eval(data[data.find("in:")+3:].splitlines()[0].split(',')[0]) # loodaks integerit
@@ -442,6 +443,10 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
                                     #syslog(msg)
                                     time.sleep(1)
                                 self.conn.commit() # buff2server transaction end
+                    
+                    if len(sendstring) > 0:
+                        self.udpsend(sendstring) # send the response right away to avoid multiple retransmits
+                        # this answers to the server but does not update the setup or service table yet!
 
         return data_dict # possible key:value pairs here for setup change or commands
 

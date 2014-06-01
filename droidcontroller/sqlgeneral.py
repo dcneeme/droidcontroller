@@ -49,7 +49,7 @@ except:
     cur.execute(Cmd)
     conn.commit()
     for row in cur:
-        print('sqlgeneral debug:',row) # debug
+        #print('sqlgeneral debug:',row) # debug
         if ':' in row[1]:
             mb.append(CommModbus(host=row[1].split(':')[0], port=int(row[1].split(':')[1]))) # modbustcp over tcp
         else:
@@ -59,7 +59,7 @@ except:
 
 
 
-class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
+class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters, ACchannels
     ''' Access to io by modbus slave/register addresses and also via services. modbus client must be opened before.
         able to sync input and output channels and accept changes to service members by their sta_reg code
     '''
@@ -138,6 +138,8 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters
         filename=table+'.sql' # the file to read from
         try:
             sql = open(filename).read()
+            msg='found '+filename
+            print(msg)
         except:
             msg='FAILURE in opening '+filename+': '+str(sys.exc_info()[1])
             print(msg)

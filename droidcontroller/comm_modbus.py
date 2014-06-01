@@ -4,6 +4,7 @@ from droidcontroller.comm import Comm
 from pymodbus import * # from pymodbus.register_read_message import *
 import traceback
 import subprocess # could not use p.subexec()
+import sys # to return sys.exc_info()[1])
 
 class CommModbus(Comm):
     ''' Implementation of Modbus communications
@@ -157,7 +158,7 @@ class CommModbus(Comm):
                 self.errorcount = 0
                 return res.registers
             except:
-                print('modbus read (h) failed from',mba,reg,count)
+                print('modbus read (h) failed from mba,reg,count',mba,reg,count,' error: '+str(sys.exc_info()[1]))
                 #traceback.print_exc()
                 #self.on_error(id, **kwargs) # ei funka
                 self.errorcount += 1
@@ -169,7 +170,7 @@ class CommModbus(Comm):
                 self.errorcount = 0
                 return res.registers
             except:
-                print('modbus read (i) failed from',mba,reg,count)
+                print('modbus read (i) failed from',mba,reg,count,' error: '+str(sys.exc_info()[1]))
                 #traceback.print_exc() 
                 #self.on_error(id, **kwargs)
                 self.errorcount += 1
@@ -196,7 +197,7 @@ class CommModbus(Comm):
                     self.errorcount = 0
                     return registers
                 else:
-                    print('no data from npe_read.sh')
+                    print('no data from npe_read.sh, error: '+str(sys.exc_info()[1]))
                     return None
             except:
                 #traceback.print_exc() # self.on_error(id, **kwargs)

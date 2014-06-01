@@ -48,7 +48,7 @@ class Commands(SQLgeneral): # p
             return 0 # no idea how it really ends
         
         
-    def parse_udp(self, data_dict): 
+    def parse_udp(self, data_dict): # #search for special commands
         ''' Incoming datagram members are dictionary members as key:value. 
         If there is match with known command, the key:value is returned to prevent repeated sending from server.
         Unknown commands are ignored. Setup values starting with B W or S are possible. 
@@ -115,7 +115,9 @@ class Commands(SQLgeneral): # p
                     else:
                         print('could not set TODO to',value,', TODO still',TODO)
                 
-                # add here svc table update
+                #else: # can be setup value for services
+                    
+                
                 
                 if len(msg)>0:
                     print(msg)
@@ -367,7 +369,7 @@ class RegularComm(SQLgeneral): # r
         Outputs TODO for execution and ... 
     '''
         
-    def __init__(self, interval = 120): #
+    def __init__(self, interval = 120, pyalivecmd='', udpalivecmd=''): #
         self.interval=interval # todo_proc() retries
         self.app_start=int(time.time())
         self.ts_regular=self.app_start - interval # for immediate sending on start
@@ -375,7 +377,6 @@ class RegularComm(SQLgeneral): # r
         self.uptime=[0,0,0]
         self.uptime[0]=int(self.subexec('cut -f1 -d. /proc/uptime',1)) # should be avoided on npe, use only once
         self.uptime[2]=self.uptime[0] # counting on from app init 
-        self.sync_uptime()
         self.set_pyalivecmd() # to watch the process list for this as process a mark of being alive
         self.set_udpalivecmd() # to watch udp conn being alive
       
@@ -464,12 +465,14 @@ class RegularComm(SQLgeneral): # r
             
             # put python alive mark into the process list
             try:
-                self.alive_fork(self.pyalivecmd) # sleep or smthg into ps list to see the app is alive
+                if len(self.pyalivecmd)>3: # python app alive marker process defined
+                    self.alive_fork(self.pyalivecmd) # sleep or smthg into ps list to see the app is alive
                 # put udp connection alive mark into the process list
-                if udp.get_ts_udpgot() > self.ts - 2*self.interval: # fresh enough
+                if (len(self.udpalivecmd)>3 and udp.get_ts_udpgot() > self.ts - 2*self.interval): # fresh enough
                     self.alive_fork(self.udpalivecmd) # sleep or smthg into ps list to see the app is alive
             except:
-                traceback.print_exc()
+                traceback.print_exc() # debug
+                pass
             
             #return res # 0 is ok 
         #else:

@@ -361,7 +361,7 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
                     #comment=srow[18]
                     wcount=int(srow[19]) if srow[19] != '' else 0  # word count
                     mbi=srow[20] # int
-                    #print('got from '+self.in_sql+' raw,ovalue',raw,ovalue) # debug
+                    #print('got from '+self.in_sql+' raw,ovalue,cfg',raw,ovalue,cfg) # debug
 
                     if lisa != '':
                         lisa=lisa+" "
@@ -455,6 +455,8 @@ class Cchannels(SQLgeneral): # handles counters registers and tables
             return 1
 
     #read_all end #############
+
+
 
 
 
