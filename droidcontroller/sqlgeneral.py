@@ -53,7 +53,13 @@ except:
         if ':' in row[1]:
             mb.append(CommModbus(host=row[1].split(':')[0], port=int(row[1].split(':')[1]))) # modbustcp over tcp
         else:
-            mb.append(CommModbus(host=row[1])) # npe_io or olinuxino. speed, parity in comm_modbus
+            if row[1] == 'npe_io': # using subprocess on techbase npe
+                mb.append(CommModbus(host=row[1], type='n')) # npe_io, subexec / subprocess
+            elif row[1] == 'npe_udpio': # using socat on techbase npe
+                mb.append(CommModbus(host=row[1], type='u')) # npe_udpio, socat 
+            else: # probably using dev/tty, rtu
+                mb.append(CommModbus(host=row[1])) # probably olinuxino serial. speed, parity in comm_modbus
+            
         #FIXME handle serial or xport connections too! also npe_io via subprocess!
     print('opened setup, devices tables and created '+str(len(mb))+' modbus connection(s)')
 

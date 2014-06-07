@@ -653,10 +653,10 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
     def set_aivalue(self,svc,member,value): # sets variables like setpoints or limits to be reported within services, based on service name and member number
-        ''' there will be no need for this if parse_udp takes ovber '''
+        ''' there will be no need for this if parse_udp takes over '''
         #(mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,comment,type integer)
-        Cmd="BEGIN IMMEDIATE TRANSACTION" # conn
-        conn.execute(Cmd)
+        #Cmd="BEGIN IMMEDIATE TRANSACTION" # conn
+        #conn.execute(Cmd)
         Cmd="update aichannels set value='"+str(value)+"' where val_reg='"+svc+"' and member='"+str(member)+"'"
         #print(Cmd) # debug
         try:

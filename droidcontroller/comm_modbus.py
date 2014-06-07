@@ -5,6 +5,7 @@ from pymodbus import * # from pymodbus.register_read_message import *
 import traceback
 import subprocess # could not use p.subexec()
 import sys # to return sys.exc_info()[1])
+import time # had no effect in init for type 'u' only
 
 class CommModbus(Comm):
     ''' Implementation of Modbus communications
@@ -40,12 +41,30 @@ class CommModbus(Comm):
         '''
 
         self.errorcount = 0 # add here modbus problems
-        self.type = type # empty if not npe_io or /dev/tty
+        self.type = type # default h
         if ('host' in kwargs):
             self.host=kwargs.get('host','127.0.0.1')
+            ###############
             if kwargs.get('host') == 'npe_io': # npe_io via subexec(), no pymodbus in use
                 self.type='n' # npe_io
-                print('CommModbus() init1: created CommModbus instance for using npe_read.sh and npe_write.sh instead of pymodbus, type',self.type)
+                print('CommModbus() init1: created CommModbus instance to use npe_read.sh and npe_write.sh via subprocess(), type',self.type)
+            elif kwargs.get('host') == 'npe_udpio': # npe_io via so_comm(), via udp port 444441 to read and 44442 to write.
+                self.type='u' # npe_udpio. do not forget to set this as channel type in sql too! FIXME: set up a client for that? ##############
+                #from droidcontroller.npechannels import NPEchannel # socat channel to use npe_io.sh for local io
+                #npe=NPEchannel(ip='127.0.0.1', port=44441) # universal (socat based udp) channel for both reading and writing
+                #self.timeout=timeout  # receive timeout, data in buffer waits for next time if not ready
+                #import time
+                from socket import socket, AF_INET, SOCK_DGRAM
+                self.UDPSock = socket(AF_INET,SOCK_DGRAM)
+                self.UDPSock.settimeout(0.1)
+                self.ip='127.0.0.1' # FIXME: SHOULD BE BASED ON PORT NUMBER LIKE WITH XPORT
+                self.port=44441
+                self.saddr = (self.ip,self.port) 
+                self.datadict={} # to give instant response from previous reading
+                #self.data=[]
+                #print('created npe channel to',self.saddr)
+                print('CommModbus() init1u: created CommModbus instance to use npe_io.sh over udp to',self.saddr,'type',self.type)
+            ###############
             elif '/dev/tty' in kwargs.get('host'): # direct serial connection defined via host
                 from pymodbus.client.sync import ModbusSerialClient as ModbusClient
                 self.client = ModbusClient(method='rtu', stopbits=1, bytesize=8, parity='E', baudrate=19200, timeout=0.2, port=kwargs.get('host'))
@@ -145,10 +164,9 @@ class CommModbus(Comm):
 
         '''
         #dummy=0
-        if self.type == 'n':  # type switch for npe_io
+        if self.type == 'n' or self.type == 'u':  # type switch for npe_io
             type=self.type  # this instance does not use modbus at all! for npe_io!
-            #print('read type',type) # debug
-            
+             
         # actual reading
         if type == 'h':
             #res = self.client.read_holding_registers(address=reg, count=count, unit=mba)
@@ -187,10 +205,10 @@ class CommModbus(Comm):
                 self.errorcount += 1
                 return None
 
-        elif type == 'n': # npe_io  ##################### NPE ##################
+        elif type == 'n': # npe_io  ##################### NPE subprocess() READ ##################
             #print('npe_io read: reg,count',reg,count) # debug
             try:
-                res = self.npe_read(reg, count=count) # mba ignored
+                res = self.npe_read(reg, count) # mba ignored
                 #print('npe_read() returned:', res) # debug
                 if len(res)>0:
                     registers=[int(eval(i)) for i in res.split(' ')] # possible str to int
@@ -201,6 +219,25 @@ class CommModbus(Comm):
                     return None
             except:
                 #traceback.print_exc() # self.on_error(id, **kwargs)
+                self.errorcount += 1
+                return None
+                
+        elif type == 'u': # npe_io over udp ##################### NPE socat READ ##################
+            #print('npe_io read over udp: reg,count',reg,count) # debug
+            try:
+                res = self.udpcomm(reg, count, 'r') # use 'rs' to get current (not previous) reading, delayed!
+                print('udpcomm() returned:', res,'for reg',reg) # debug
+                if res != None and len(res)>0:
+                    #registers=[int(eval(i)) for i in res.split(' ')] # possible str to int
+                    self.errorcount = 0
+                    return res
+                else:
+                    #print('no fresh data from npe_io.sh yet, returning previous!') # debug
+                    #return self.datadict[reg]
+                    self.errorcount += 1 # if high enough, do something
+                    return None
+            except:
+                traceback.print_exc() # self.on_error(id, **kwargs)
                 self.errorcount += 1
                 return None
 
@@ -221,9 +258,9 @@ class CommModbus(Comm):
         :param kwargs['value']: Modbus register value to write
         :param kwargs['values']: Modbus registers values array to write
         '''
-        if self.type == 'n':  # npe_io
+        if self.type == 'n' or self.type == 'u':  # type switch for npe_io
             type=self.type  # this instance does not use modbus at all! for npe_io!
-
+        
         try:
             values = kwargs['values']
             count = len(values)
@@ -266,9 +303,18 @@ class CommModbus(Comm):
                 #traceback.print_exc() # self.on_error(id, **kwargs)
                 self.errorcount += 1
                 return 1
-        elif type == 'n': # npe_io  ##################### NPE ##################
+        elif type == 'n': # npe_io  ##################### NPE subexec WRITE ##################
             try:
                 res = self.npe_write(reg, count=count, value= value) # mba ignored
+                self.errorcount = 0
+                return 0
+            except:
+                #traceback.print_exc() # self.on_error(id, **kwargs)
+                self.errorcount += 1
+                return 1
+        elif type == 'u': # npe_udpio  ##################### NPE socat WRITE ##################
+            try:
+                res = self.udpcomm(reg, value, 'w') # mba ignored. single register!
                 self.errorcount = 0
                 return 0
             except:
@@ -287,14 +333,17 @@ class CommModbus(Comm):
             FIXME: HAD TO COPY subexec HERE BECAUSE I CANNOT USE p.subexec() from here ...
         '''
         if submode == 0: # return exit status, 0 or more
-            returncode=subprocess.call(exec_cmd) # ootab kuni lopetab
+            returncode=subprocess.call(exec_cmd, stdout=open('/dev/null', 'w'), stderr=subprocess.STDOUT) # waits for exit, do not care about cmd output
             return returncode  # return just the subprocess exit code
-        elif submode == 1: # return everything from sdout
-            proc=subprocess.Popen([exec_cmd], shell=True, stdout=subprocess.PIPE)
+        elif submode == 1: # returns everything from sdout
+            proc=subprocess.Popen(exec_cmd, shell=True, stdout=subprocess.PIPE) # shell True is dangerous!
+            #proc=subprocess.Popen(exec_cmd, shell=False, stdout=subprocess.PIPE) # do not use path here
             result = proc.communicate()[0]
             return result
         elif submode == 2: # forks to background, does not wait for output
-            returncode=subprocess.Popen(exec_cmd, shell=True) # 
+            subprocess.Popen(exec_cmd, shell=True) # dangerous, accept no no exec_cmd from outside
+            # Popen(exec_cmd, shell=False) # safer, limited to use shell built-ins, no p[ath can be given. exec_cmd can be a tuple (inc params)
+            # Popen(['sleep','15'], shell=False) # example of using parameters
             return 0 # no idea how it really ends
         
 
@@ -326,3 +375,83 @@ class CommModbus(Comm):
         except:
             print('subexec() failed in npe_write()')
             return 1
+            
+    def udpcomm(self, reg, countvalue, type = 'r'): # type r, ra or w = read or write command. ra returns existing data (async). for npe
+        ''' Communicates with (sends and receives data to&from) socat on techbase NPE, where subprocess() usage should be avoided '''
+        ureg=None
+        i=0
+        if (type != 'r' and type != 'rs' and type != 'w'):
+            print('udpcomm(): invalid type '+str(type))
+            return None
+            
+        sendstring=str(reg)+' '+str(countvalue)+' '+type # 3 parameters for both npe_write.sh or npe_read.sh
+        self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr)
+        #print('sent udp msg '+sendstring+' to '+str(self.saddr)) # debug
+        if type[0] == 'r':
+            if (not reg in self.datadict.keys() or type[-1] == 's'):  # first query or sync (rs), wait until fresh should be ready
+                while ureg != reg and i<10: # no more than 2 s here, as socat has 2 s timeout
+                    print('wait before read') # debug - read in loop until data for right reg arrives
+                    time.sleep(0.1) # wait until fresh data arrives for answer. without delay the previous read data is returned
+                    retread=self.udpread() # [data], reg. after delay the fresh one should arrive for the 
+                    if retread != None:
+                        ureg=retread[0]
+                        self.update_datadict(retread)
+                    i+=1
+                    
+            else: # read the response of last query
+                retread=self.udpread() # likely not was was asked, but we should have something in datadict
+                if retread != None:
+                    self.update_datadict(retread)
+                    
+            
+                
+            #if reg in self.datadict.keys():
+            if reg in self.datadict: # return data from here
+                #print('udpcomm: value for '+str(reg)+' exists: '+str(self.datadict[reg])) # debug
+                return self.datadict[reg] # may not be the one received above!
+            else:
+                print('nothing in datadict for reg',reg)
+                return None # not ready yet
+            
+        elif type == 'w': # write a single register to npe_io. no response.
+            return None
+    
+    def update_datadict(self, retread):
+        ''' Update data dictionary with data from socat for registers to be polled, to speed things up '''
+        if retread != None:
+            #print('going to update datadict with',retread) # debug
+            #if len(retread>1):
+            #print('retread:',retread[0],retread[1:]) # debug
+            self.datadict.update({ retread[0] : retread[1:] }) # reg:[data]
+            #print('updated datadict',self.datadict) # debug
+                
+                
+    def udpread(self): # not to be called from outside of this method, used only by udpsend() above
+        ''' Read npe_io over socat or other udp channel. Register will be returned as the first value, may NOT be the one asked last! '''
+        data=[]
+        #print('udpread: trying to get udp data from '+str(self.saddr)) # debug
+        try: # if anything is comes into udp buffer before timeout
+            buf=256
+            rdata,raddr = self.UDPSock.recvfrom(buf)
+            #data=str(rdata.decode("utf-8")).strip('\n').split(' ') # python3 related need due to mac in hex
+            data=[int(eval(i)) for i in str(rdata.decode("utf-8")).strip('\n').split(' ')]
+            #print('udpread got something: '+str(data)) # debug
+        except:
+            #print('no new udp data at this time') # debug
+            return None
+
+        if len(data) > 0: # something arrived
+            #print('<=so '+str(data)) # debug
+
+            if raddr[0] != self.ip:
+                msg='illegal sender '+str(raddr[0])+' for message: '+str(data)  # ignore the data received!
+                print(msg)
+                #syslog(msg)
+                data='' # data destroy
+        #else:
+            #print('got no data '+str(data)) # debug
+        return data # to update right value in dict
+
+
+
+ 

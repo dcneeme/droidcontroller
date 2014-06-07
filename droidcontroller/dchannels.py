@@ -448,13 +448,13 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                             #print('modified by bit '+str(bit)+' value '+str(bit_dict[bit][0])+' word '+format("%04x" % word)) # debug
                         #print('going to write a register mba,regadd,with modified word - ',mba,regadd,format("%04x" % word)) # temporary
 
-                        respcode=mb[mbi].write(mba, regadd, type = 'h', value=word)
+                        respcode=mb[mbi].write(mba, regadd, value=word) # do not give type, npe may need something else then h
                         if respcode == 0:
                             msg='output written - mbi mba regadd value '+str(mbi)+' '+str(mba)+' '+str(regadd)+' '+format("%04x" % word)
                         else:
                             msg='FAILED writing register '+str(mba)+'.'+str(regadd)+' '+str(sys.exc_info()[1])
 
-                        udp.syslog(msg)
+                        #udp.syslog(msg)
                         print(msg)
 
                     
