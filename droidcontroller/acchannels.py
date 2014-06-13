@@ -764,7 +764,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         status=0 # initially
         cur=conn.cursor()
         lisa=''
-        print('acchannels.make_svc: reading aico values for val_reg,sta_reg',val_reg,sta_reg) # ajutine
+        #print('acchannels.make_svc: reading aico values for val_reg,sta_reg',val_reg,sta_reg) # debug
 
         #Cmd="select * from "+self.in_sql+" where val_reg='"+val_reg+"'" # loeme yhe teenuse kogu info uuesti
         Cmd="select mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,regtype,grp,mbi,wcount from "+self.in_sql \

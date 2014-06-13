@@ -224,9 +224,11 @@ class CommModbus(Comm):
                 
         elif type == 'u': # npe_io over udp ##################### NPE socat READ ##################
             #print('npe_io read over udp: reg,count',reg,count) # debug
+            # for types b or p use udpcomm() directly
             try:
-                res = self.udpcomm(reg, count, 'r') # use 'rs' to get current (not previous) reading, delayed!
-                print('udpcomm() returned:', res,'for reg',reg) # debug
+                res = self.udpcomm(reg, count, 'rs') # use 'rs' to get current (not previous) reading, delayed! use rs for now 
+                # FIXME - using type is able NOT to update 200,4...
+                #print('udpcomm() returned:', res,'for reg',reg) # debug
                 if res != None and len(res)>0:
                     #registers=[int(eval(i)) for i in res.split(' ')] # possible str to int
                     self.errorcount = 0
@@ -347,111 +349,132 @@ class CommModbus(Comm):
             return 0 # no idea how it really ends
         
 
+# #############  npe_read.sh and npe_write.sh not used, subprocess() usage is dangerous, socat is better #####
+    #def npe_read(self,register,count = 1): # mba ignored
+        #return self.subexec('/mnt/nand-user/d4c/npe_io.sh '+str(register)+' '+str(count)+' rs',1) # returns values read as string
 
-    def npe_read(self,register,count = 1): # mba ignored
-        return self.subexec('/mnt/nand-user/d4c/npe_read.sh '+str(register)+' '+str(count),1) # returns values read as string
 
+    #def npe_write(self,register, **kwargs): # write register or registers. mba ignored. value or values is needed
+        #try:
+        #    values = kwargs['values']
+        #    count = len(values)
+        #except:
+        #    try:
+        #        value = kwargs['value']
+        #        count = 1
+        #    except:
+        #        print('write parameters problem, no value or values given')
+         #       return None
 
-    def npe_write(self,register, **kwargs): # write register or registers. mba ignored. value or values is needed
-        try:
-            values = kwargs['values']
-            count = len(values)
-        except:
-            try:
-                value = kwargs['value']
-                count = 1
-            except:
-                print('write parameters problem, no value or values given')
-                return None
+       # try:
+       #     if count == 1:
+        #        self.subexec('/mnt/nand-user/d4c/npe_io.sh '+str(register)+' '+str(1&value)+' w',1) # returns exit status
 
-        try:
-            if count == 1:
-                self.subexec('/mnt/nand-user/d4c/npe_write.sh '+str(register)+' '+str(1&value),1) # returns exit status
-
-            else:
-                value=" ".join(values) # list to string, multiple value # FIXME!
-                self.subexec('/mnt/nand-user/d4c/npe_write.sh '+str(register)+' '+str(value),1) # returning exit status does not function!
-            return 0
-        except:
-            print('subexec() failed in npe_write()')
-            return 1
+        #    else:
+        #        value=" ".join(values) # list to string, multiple value # FIXME!
+        #        return 2 # self.subexec('/mnt/nand-user/d4c/npe_write.sh '+str(register)+' '+str(value),1) # returning exit status does not function!
+       #     return 0
+       # except:
+        #    print('subexec() failed in npe_write()')
+         #   return 1
             
+
     def udpcomm(self, reg, countvalue, type = 'r'): # type r, ra or w = read or write command. ra returns existing data (async). for npe
         ''' Communicates with (sends and receives data to&from) socat on techbase NPE, where subprocess() usage should be avoided '''
         ureg=None
         i=0
-        if (type != 'r' and type != 'rs' and type != 'w'):
+        if (type != 'r' and type != 'rs' and type != 'w' and type != 'p' and type != 'b' and type != 'bs'):
             print('udpcomm(): invalid type '+str(type))
             return None
             
-        sendstring=str(reg)+' '+str(countvalue)+' '+type # 3 parameters for both npe_write.sh or npe_read.sh
+        sendstring=str(reg)+' '+str(countvalue)+' '+type[0] # 3 parameters for both npe_write.sh or npe_read.sh
         self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr)
         #print('sent udp msg '+sendstring+' to '+str(self.saddr)) # debug
-        if type[0] == 'r':
-            if (not reg in self.datadict.keys() or type[-1] == 's'):  # first query or sync (rs), wait until fresh should be ready
-                while ureg != reg and i<10: # no more than 2 s here, as socat has 2 s timeout
-                    print('wait before read') # debug - read in loop until data for right reg arrives
-                    time.sleep(0.1) # wait until fresh data arrives for answer. without delay the previous read data is returned
-                    retread=self.udpread() # [data], reg. after delay the fresh one should arrive for the 
-                    if retread != None:
-                        ureg=retread[0]
-                        self.update_datadict(retread)
-                    i+=1
-                    
-            else: # read the response of last query
-                retread=self.udpread() # likely not was was asked, but we should have something in datadict
+        
+        if type[0] == 'r' or type[0] == 'b': # some data return is needed
+            if type == 'b' and countvalue != 2:
+                print('udpcomm fixing countvalue for type b from',countvalue,'to 2')
+                countvalue=2                
+            
+            #if (not reg in self.datadict.keys() or type[-1] == 's' or (reg in self.datadict.keys() and len(self.datadict[reg]) != countvalue)):
+            if type[-1] != 's' and (reg in self.datadict.keys() and len(self.datadict[reg].split(' ')) == countvalue): # give immediate response
+                # query with changed parameters must wait for correct result!
+                retread=self.udpread() # read buffer but do not use for output, just update datadict
                 if retread != None:
                     self.update_datadict(retread)
                     
-            
-                
-            #if reg in self.datadict.keys():
-            if reg in self.datadict: # return data from here
-                #print('udpcomm: value for '+str(reg)+' exists: '+str(self.datadict[reg])) # debug
-                return self.datadict[reg] # may not be the one received above!
+            else: # wait until actual true response is received 
+                ureg=''
+                ulen=0
+                while (i<20 and ((ureg != reg) or (ulen != countvalue))): # no more than 2 s here, as socat has 2 s timeout
+                    #print('wait before read') # debug - read in loop until data for right reg arrives
+                    time.sleep(0.05) # wait until fresh data arrives for answer. without delay the previous read data is returned
+                    retread=self.udpread() # [data], reg. after delay the fresh one should arrive for the 
+                    if retread != None:
+                        #print('udpcomm got from udpread:',retread) # debug
+                        try:
+                            ureg=int(eval(retread[0]))
+                            self.update_datadict(retread)
+                            ulen=len(retread[1].split(' '))
+                        except:
+                            traceback.print_exc()
+                            return None
+                    if i == 10: # still no response?
+                        print('udpcomm: repeating the query',sendstring)
+                        self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr) # repeat the query
+                    i+=1
+
+                    
+            if reg in self.datadict and len(self.datadict[reg].split(' ')) == countvalue: # return data from here
+                #print('udpcomm: correct value for '+str(reg)+' exists: '+str(self.datadict[reg])) # debug
+                #data=str(rdata.decode("utf-8")).strip('\n').split(' ') # python3 related need due to mac in hex
+                if type[0] == 'b':
+                    data=self.datadict[reg].split(' ')
+                    #print('returning mac_ip',data) # debug
+                else: # num values
+                    #data=[int(eval(i)) for i in str(rdata.decode("utf-8")).strip('\n').split(' ')] # avoid dots in response too
+                    data=[int(eval(i)) for i in self.datadict[reg].split(' ')] # values list
+                return data
             else:
-                print('nothing in datadict for reg',reg)
+                print('not what we need in datadict for reg',reg)
                 return None # not ready yet
             
-        elif type == 'w': # write a single register to npe_io. no response.
+        else: # write a single register or fork something over npe_io.sh. types w or p 
             return None
     
+
     def update_datadict(self, retread):
         ''' Update data dictionary with data from socat for registers to be polled, to speed things up '''
         if retread != None:
             #print('going to update datadict with',retread) # debug
-            #if len(retread>1):
-            #print('retread:',retread[0],retread[1:]) # debug
-            self.datadict.update({ retread[0] : retread[1:] }) # reg:[data]
-            #print('updated datadict',self.datadict) # debug
-                
+            #self.datadict.update({ int(eval(retread[0])) : retread[1:] }) # reg:[data]
+            try:
+                self.datadict.update({ int(eval(retread[0])) : retread[1:][0] }) # reg:'data'
+                #print('updated datadict',self.datadict) # debug
+            except:
+                print('update_datadict error')
+                traceback.print_exc()
                 
     def udpread(self): # not to be called from outside of this method, used only by udpsend() above
         ''' Read npe_io over socat or other udp channel. Register will be returned as the first value, may NOT be the one asked last! '''
-        data=[]
+        data=['','']
         #print('udpread: trying to get udp data from '+str(self.saddr)) # debug
         try: # if anything is comes into udp buffer before timeout
             buf=256
             rdata,raddr = self.UDPSock.recvfrom(buf)
-            #data=str(rdata.decode("utf-8")).strip('\n').split(' ') # python3 related need due to mac in hex
-            data=[int(eval(i)) for i in str(rdata.decode("utf-8")).strip('\n').split(' ')]
-            #print('udpread got something: '+str(data)) # debug
+            #print('udpread got rdata: ',rdata) # debug
+            data=rdata.replace(' ','|',1).strip('\n').split('|')
+            #print('udpread got data to return: ',data) # debug
+            return data
         except:
-            #print('no new udp data at this time') # debug
+            #print('no new udp data this time') # debug
+            #traceback.print_exc() # debug
             return None
 
         if len(data) > 0: # something arrived
-            #print('<=so '+str(data)) # debug
-
             if raddr[0] != self.ip:
-                msg='illegal sender '+str(raddr[0])+' for message: '+str(data)  # ignore the data received!
+                msg='illegal_sender'+str(raddr[0])+' for message: '+str(data)  # ignore the data received!
                 print(msg)
                 #syslog(msg)
-                data='' # data destroy
-        #else:
-            #print('got no data '+str(data)) # debug
-        return data # to update right value in dict
-
-
-
- 
+                return None
+        

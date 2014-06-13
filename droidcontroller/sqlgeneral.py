@@ -61,7 +61,7 @@ except:
                 mb.append(CommModbus(host=row[1])) # probably olinuxino serial. speed, parity in comm_modbus
             
         #FIXME handle serial or xport connections too! also npe_io via subprocess!
-    print('opened setup, devices tables and created '+str(len(mb))+' modbus connection(s)')
+    print('sqlgeneral: opened setup, devices tables and created '+str(len(mb))+' modbus connection(s)')
 
 
 

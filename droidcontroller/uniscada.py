@@ -386,10 +386,10 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
         if len(data) > 0: # something arrived
             #print('got from monitoring server',repr(raddr),repr(data)) # debug
             self.traffic[0]=self.traffic[0]+len(data) # adding top the incoming UDP byte counter
-            print('<= '+data.replace('\n', ' ')) # also to syslog (communication with server only)
+            #print('<= '+data.replace('\n', ' ')) # also to syslog (communication with server only)
 
             if (int(raddr[1]) < 1 or int(raddr[1]) > 65536):
-                msg='illegal source port '+str(raddr[1])+' in the message received from '+raddr[0]
+                msg='illegal_ source port '+str(raddr[1])+' in the message received from '+raddr[0]
                 print(msg)
                 #syslog(msg)
 
