@@ -34,19 +34,27 @@ class Commands(SQLgeneral): # p
         self.vpnconf=invar
     
     
+    def free(path='./'): #returns free MB and percentage of given fs (can be current fs './' as well) # FIXME!
+        #shold return free MB both for RAM and filesystem (with home dir included)
+        info=os.statvfs(path)
+        return info[3]*info[1]/1048576,100*info[3]/info[2] # returns free [MB,%]
+    
     def subexec(self, exec_cmd, submode = 1): # submode 0 returns exit code only
         ''' shell command execution. if submode 0-, return exit staus.. if 1, exit std output produced. '''
-        if submode == 0: # return exit status, 0 or more
-            returncode=subprocess.call(exec_cmd) # ootab kuni lopetab
-            return returncode  # return just the subprocess exit code
-        elif submode == 1: # return everything from sdout
-            proc=subprocess.Popen([exec_cmd], shell=True, stdout=subprocess.PIPE)
-            result = proc.communicate()[0]
-            return result
-        elif submode == 2: # forks to background, does not wait for output
-            returncode=subprocess.Popen([exec_cmd], shell=True) # 
-            return 0 # no idea how it really ends
-        
+        try:
+            if submode == 0: # return exit status, 0 or more
+                returncode=subprocess.call(exec_cmd) # ootab kuni lopetab
+                return returncode  # return just the subprocess exit code
+            elif submode == 1: # return everything from sdout
+                proc=subprocess.Popen(exec_cmd, shell=True, stdout=subprocess.PIPE)
+                result = proc.communicate()[0]
+                return result
+            elif submode == 2: # forks to background, does not wait for output
+                returncode=subprocess.Popen(exec_cmd, shell=True) # 
+                return 0 # no idea how it really ends
+        except:
+            print('subexec failure')
+            
         
     def parse_udp(self, data_dict): # #search for special commands
         ''' Incoming datagram members are dictionary members as key:value. 
@@ -206,11 +214,11 @@ class Commands(SQLgeneral): # p
                 
                 
             if TODO == 'VPNON': # ovpn start
-                todocode=self.subexec([self.vpn_start],2) # start vpn
+                todocode=self.subexec(self.vpn_start,2) # start vpn
 
                     
             if TODO == 'VPNOFF': # ovpn stop
-                todocode=self.subexec([self.vpn_stop],2) # stop vpn
+                todocode=self.subexec(self.vpn_stop,2) # stop vpn
     
                 
             if TODO.split(',')[0] == 'pull':
@@ -242,7 +250,7 @@ class Commands(SQLgeneral): # p
                             print(msg)
                             udp.syslog(msg)
 
-                        if pull(filename,filesize,startnum)>0:
+                        if tcp.pull(filename,filesize,startnum)>0:
                             pulltry=pulltry+1 # next try will follow
                             todocode=1
                         else: # success
@@ -256,7 +264,7 @@ class Commands(SQLgeneral): # p
                 try:
                     filename=TODO.split(',')[1]
                     print('starting push with',filename)
-                    todocode=push(filename) # no automated retry here
+                    todocode=tcp.push(filename) # no automated retry here
                 except:
                     msg='invalid cmd syntax for push'
                     print(msg)
@@ -269,10 +277,10 @@ class Commands(SQLgeneral): # p
                     if '.sql' in tablename:
                         msg='invalid parameters for cmd '+TODO
                         print(msg)
-                        udp.udp.syslog(msg)
+                        udp.syslog(msg)
                         pulltry=88 # need to skip all tries below
                     else:
-                        todocode=sqlread(tablename) # hopefully correct parameter (existing table, not sql filename)
+                        todocode=s.sqlread(tablename) # hopefully correct parameter (existing table, not sql filename)
                         if tablename == 'setup' and todocode == 0: # table refreshed, let's use the new setup
                             s.channelconfig() # possibly changed setup data to modbus registers
                             s.report_setup() # let the server know about new setup
@@ -290,7 +298,7 @@ class Commands(SQLgeneral): # p
                     
             # start scripts in parallel (with 10s pause in this channelmonitor). cmd:run,nimi,0 # 0 or 1 means bg or fore
             # use background normally, the foreground process will open a window and keep it open until closed manually
-            if TODO.split(',')[0] == 'run': # FIXME! for linux
+            if TODO.split(',')[0] == 'run': # FIXME! below is for android only
                 if len(TODO.split(',')) == 3: # run any script in the d4c directory as foreground or background subprocess
                     script=TODO.split(',')[1]
                     if script in os.listdir('/sdcard/sl4a/scripts/d4c'): # file exists

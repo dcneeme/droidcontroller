@@ -47,18 +47,18 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         self.ts_send = self.ts -10 # time of last reporting
         self.sqlread(self.in_sql) # read counters table
         self.sqlread(self.out_sql) # read aochannels if exist
-        self.ask_counters() # ask server about the last known values of the counter related services
+        self.ask_counters() # ask server about the last known values of all counter related services (1024 in cfg)
 
 
     def ask_counters(self): # use on init, send ? to server
         ''' Queries last counter service values from the server '''
-        Cmd="select val_reg,max(cfg) from "+self.in_sql+" where (cfg+0 & 1024) group by val_reg" # counter, to be asked and restored
+        Cmd="select val_reg,max(cfg) from "+self.in_sql+" where (cfg+0 & 1024) group by val_reg" # counters only, to be asked and restored
         #print "Cmd=",Cmd
         cur=conn.cursor()
         cur.execute(Cmd) # getting services to be read and reported
         for row in cur: # possibly multivalue service members
             val_reg=row[0]
-            cfg=int(row[1]) if row[1] != '' else 0
+            #cfg=int(row[1]) if row[1] != '' else 0
             udp.udpsend(val_reg+':?\n') # ask last value from uniscada server if counter
         conn.commit()
         return 0
@@ -89,7 +89,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         
                         regtype=row[5] # 'h' 'i' 's!' 
                         print('going to replace '+key+' member '+str(member)+' existing value '+str(sqlvalue)+' with '+str(value)) # debug
-                        # faster to use physical data instead of svc
+                        # faster to use physical data instead of svc. also clear counter2power buffer if cp[] exsists!
                         
                         if regtype == 's!': # setup row, external modif allowed (!)
                             if (row[0] == '' and row[1] == ''): # mba, regadd
@@ -119,6 +119,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                 
                                 #if self.set_counter(val_reg=key, member=member,value=value, wcount=wcount) == 0: # faster to use physical data instead of svc
                                 if self.set_counter(mbi=mbi, mba=mba, regadd=regadd, value=value, wcount=wcount, x2=x2, y2=y2) == 0: # set counter
+                                    #set_counter also cleared counter2power buffer if cp[] exsisted!
                                     msg='counter set for key '+key+', member '+str(member)+' to value '+str(value)
                                     print(msg)
                                     #udp.syslog(msg)
@@ -144,6 +145,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
     def set_counter(self, value = 0, **kwargs): # value, mba,regadd,mbi,val_reg,member   # one counter to be set. check wcount from counters table
         ''' sets consecutive holding registers, wordlen 1 or 2 or -2 (must be defined in sql table in use). 
             Usable for cumulative counter counting initialization, not for analogue output (use set_output for this).
+            Must also clear counter2power instance buffer dictionary if cp[] instance exsists, to avoid unwanted spike in power calculation result!
         '''
         #val_reg=''  # arguments to use a subset of them
         #member=0
@@ -198,23 +200,46 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         value=(int(value)&0xFFFFFFFF) # to make sure the value to write is 32 bit integer    
         try:
             if wcount == 2: # normal counter, type h
-                res=mb[mbi].write(mba, regadd, values=[(value&0xFFFF0000)>>16,(value&0xFFFF)]) #
-                #return 0
+                #res=mb[mbi].write(mba, regadd, values=[(value&0xFFFF0000)>>16,(value&0xFFFF)]) # works if multiple register write supported
+                res=mb[mbi].write(mba, regadd, value=(value&0xFFFF0000)>>16) # single registe write
+                time.sleep(0.1)
+                res+=mb[mbi].write(mba, regadd+1, value=(value&0xFFFF)) # single registe write
+                
             elif wcount == -2:
-                res=mb[mbi].write(mba, regadd, values=[(value&0xFFFF), (value&0xFFFF0000)>>16])
-                #return 0
+                #res=mb[mbi].write(mba, regadd, values=[(value&0xFFFF), (value&0xFFFF0000)>>16]) # works if multiple register write supported
+                res=mb[mbi].write(mba, regadd, value=(value&0xFFFF)) # single registe write
+                time.sleep(0.1)
+                res+=mb[mbi].write(mba, regadd+1, value=(value&0xFFFF0000)>>16) # single registe write
+                
             elif wcount == 1:
                 res=mb[mbi].write(mba, regadd, value=(value&0xFFFF)) # single register write
-                #return 0
+                
             else:
                 print('set_counter: unsupported word count! mba,regadd,wcount',mba,regadd,wcount)
-                return 1
+                res=1
+                
             if res == 0:
                 print('set_counter: write success to mba,regadd',mba,regadd)
-                return 0
+                
+                #check if there are counter2power instances (cp[]) related to that register, intialize them
+                Cmd="select mbi,mba,regadd,val_reg,member from "+self.in_sql+" where (cfg+0 & 192) order by val_reg,member" # counter2power bits 64+128
+                cur.execute(Cmd) # what about commit()? FIXME
+                conn.commit()
+                j=-1
+                for row in cur: # start from 0 with indexing
+                    j+=1
+                    #print('cp init prep select row (j,mbi,mba,regadd):',j,row) # debug
+                    try:
+                        if mbi == int(row[0]) and mba == int(row[1]) and regadd == int(row[2]): # cp[j] must be initialized
+                            print('initializing counter2power instance cp['+str(j)+'] due to counter setting')
+                            self.cp[j].init() # cp[] may not exist on start, but init is then not needed either...
+                    except:    
+                        print('FAILED initializing counter2power instance cp['+str(j)+'], tried due to counter setting')
+                        traceback.print_exc() # debug
+                # end power init
             else:
                 print('set_counter: write FAILED to mba,regadd',mba,regadd)
-                return 1
+            return res
                 
         except:  # set failed
             msg='failed set_counter mbi.mba.regadd'+str(mbi)+'.'+str(mba)+'.'+str(regadd)
@@ -243,15 +268,15 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         cur=conn.cursor()
         oraw=0
         if step == 0:
-            print('illegal wcount',wcount,'in read_counter_grp()')
+            print('illegal wcount',wcount,'in read_grp()')
             return 2
 
-        msg='reading data for aicochannels group from mba '+str(mba)+', regadd '+str(regadd)+', count '+str(count)+', wcount '+str(wcount)+', mbi '+str(mbi)+', step '+str(step)
+        msg=' from mba '+str(mba)+'.'+str(regadd)+', cnt '+str(count)+', wc '+str(wcount)+', mbi '+str(mbi)
         if count>0 and mba != 0 and wcount != 0:
             try:
                 if mb[mbi]:
                     result = mb[mbi].read(mba, regadd, count=count, type='h') # client.read_holding_registers(address=regadd, count=1, unit=mba)
-                    msg=msg+', result: '+str(result)
+                    msg=msg+', raw: '+str(result)
                     print(msg) # debug
             except:
                 print('read_grp: mb['+str(mbi)+'] missing, device with mba '+str(mba)+' not defined in devices.sql?')
@@ -262,14 +287,14 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
         if result != None: # got something from modbus register
             try:
-                for i in range(int(count/step)): # counter processing loop. tuple to table rows. tuple len is twice count! int for py3 needed
+                for i in range(int(count/step)): # ai-co processing loop. tuple to table rows. tuple len is twice count! int for py3 needed
                     tcpdata=0
-                    #print('counter_grp debug: i',i,'step',step,'results',result[step*i],result[step*i+1]) # debug
+                    #print('aico_grp debug: i',i,'step',step,'results',result[step*i],result[step*i+1]) # debug
                     if wcount == 2:
                         tcpdata = (result[step*i]<<16)+result[step*i+1]
                         #print('normal counter',str(i),'result',tcpdata) # debug
                     elif wcount == -2:
-                        tcpdata = (result[step*i+1]<<16)+result[step*i]  # wrong word order for counters in barionet!
+                        tcpdata = (result[step*i+1]<<16)+result[step*i]  # swapped word order, as in barionet
                         #print('swapped words counter',str(i),'result',tcpdata) # debug
                     elif wcount == 1:
                         tcpdata = result[0]
@@ -277,11 +302,13 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         print('unsupported counter word size',wcount)
                         return 1
 
-                    Cmd="select raw from "+self.in_sql+" where mbi="+str(mbi)+" and mba='"+str(mba)+"' and regadd='"+str(regadd+i*step)+"' group by mbi,mba,regadd"
-                    # get the old value to compare with new. can be multiple rows, group to single
+                    #Cmd="select raw from "+self.in_sql+" where mbi="+str(mbi)+" and mba='"+str(mba)+"' and regadd='"+str(regadd+i*step)+"' group by mbi,mba,regadd"
+                    Cmd="select raw,max(cfg) from "+self.in_sql+" where mbi="+str(mbi)+" and mba='"+str(mba)+"' and regadd='"+str(regadd+i*step)+"' group by mbi,mba,regadd" 
+                    # get the old value to compare with new. can be multiple rows, group to single row. if counter and zero, ask_counters()
                     cur.execute(Cmd)
                     for row in cur:
                         oraw=int(row[0]) if row[0] !='' else -1
+                        cfg=int(row[1]) if row[1] != '' else 0
                     if tcpdata != oraw or oraw == -1: # update only if change needed or empty so far
                         Cmd="UPDATE "+self.in_sql+" set raw='"+str(tcpdata)+"', ts='"+str(self.ts)+ \
                             "' where mba='"+str(mba)+"' and regadd='"+str(regadd+i*step)+"' and mbi="+str(mbi) # koigile korraga selle mbi, mba, regadd jaoks
@@ -455,6 +482,22 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     #print('got from '+self.in_sql+' raw,ovalue,cfg',raw,ovalue,cfg) # debug
 
 
+                    #-- CONFIG BIT MEANINGS
+                    #-- # 1 - below outlo warning, 4 
+                    #-- # 2 - below outlo critical, 8 - above outhi critical
+                    #-- # 4 - above outhi warning
+                    #-- # 8   above outhi critical
+
+                    #-- 16 - immediate notification on status change (USED FOR STATE FROM POWER)
+                    #-- 32 - value "limits to status" inversion  - to defined forbidden area instead of allowed area  
+                    #-- 64 - power flag, based on value increments, creates cp[] instance
+                    #-- 128 - state from power flag
+                    #-- 256 - notify on 20% value change (not only limit crossing that becomes activated by first 4 cfg bits)
+                    #-- 512 - do not report at all, for internal usage
+                    #-- 1024 - counter, unsigned, to be queried/restored from server on restart
+                    #    -- counters are normally located in 2 registers, but also ai values can be 32 bits. 
+                    #    -- negative wcount means swapped words (barionet, npe imod)
+ 
                     if raw != None: # valid data for either energy or power value
                         #POWER?
                         if (cfg&64): # power, no sign, increment to be calculated! divide increment to time from the last reading to get the power
@@ -486,15 +529,10 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         
                         
                         # SCALING
-                        if (cfg&1024) == 0: # take sign into account, not counter ### SIGN ##
+                        if (cfg&1024) == 0: # take sign into account, not counter ### SIGNED if not counter ##
                             if raw >= (2**(wcount*16-1)): # negative!
                                 raw=raw-(2**(wcount*16))
                                 #print('read_all: converted to negative value',raw,'wcount',wcount) # debug
-                            #else:
-                                #print('not counter, no conversion due to raw below '+str(2**(wcount*16-1))+', leave raw as',raw,'wcount',wcount) # debug
-                        #else:
-                            #print('counter, raw',raw,'wcount',wcount) # debug
-                            
                             
                         if raw != None and x1 != x2 and y1 != y2: # seems like normal input data
                             value=(raw-x1)*(y2-y1)/(x2-x1)
@@ -512,8 +550,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                             Cmd="update "+self.in_sql+" set value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
                             #print(Cmd) # debug
                             conn.execute(Cmd) # new value set in sql table ONLY if there was a valid result
-                            if (cfg&256) and abs(value-ovalue) > value/10.0: # change more than 20% detected, use num w comma!
-                                print('value change of more than 10% detected in '+val_reg+'.'+str(member)+', need to notify') # debug
+                            if (cfg&256) and abs(value-ovalue) > value/5.0: # change more than 20% detected, use num w comma!
+                                print('value change of more than 20% detected in '+val_reg+'.'+str(member)+', need to notify') # debug
                                 chg=1
                             
                         #print('acchannels: end raw2value processing',val_reg,'member',member,'raw',raw,' value',value,' ovalue',ovalue,', avg',avg) # debug

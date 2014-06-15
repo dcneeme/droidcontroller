@@ -271,7 +271,8 @@ class CommModbus(Comm):
                 value = kwargs['value']
                 count = 1
             except:
-                print('write parameters problem, no value or values given')
+                #traceback.print_exc() # debug
+                print('write parameters problem, no value or values given, params',kwargs)
                 return 2
 
         if type == 'h': # holding
@@ -389,11 +390,11 @@ class CommModbus(Comm):
             
         sendstring=str(reg)+' '+str(countvalue)+' '+type[0] # 3 parameters for both npe_write.sh or npe_read.sh
         self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr)
-        #print('sent udp msg '+sendstring+' to '+str(self.saddr)) # debug
+        #print('udpcomm sent udp msg '+sendstring+' to '+str(self.saddr)) # debug
         
         if type[0] == 'r' or type[0] == 'b': # some data return is needed
-            if type == 'b' and countvalue != 2:
-                print('udpcomm fixing countvalue for type b from',countvalue,'to 2')
+            if type == 'b' and reg == 10 and countvalue != 2:
+                print('udpcomm fixing countvalue for reg 10 type b from',countvalue,'to 2')
                 countvalue=2                
             
             #if (not reg in self.datadict.keys() or type[-1] == 's' or (reg in self.datadict.keys() and len(self.datadict[reg]) != countvalue)):
@@ -436,7 +437,7 @@ class CommModbus(Comm):
                     data=[int(eval(i)) for i in self.datadict[reg].split(' ')] # values list
                 return data
             else:
-                print('not what we need in datadict for reg',reg)
+                print('not what we need in datadict for reg',reg,self.datadict)
                 return None # not ready yet
             
         else: # write a single register or fork something over npe_io.sh. types w or p 

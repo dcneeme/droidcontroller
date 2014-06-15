@@ -19,10 +19,13 @@ class Counter2Power():
     def __init__(self, svc_name = '', svc_member = 1, off_tout = 100):  # 100s corresponds to 36W threshold if 1000 pulses per kWh
         self.svc_name=svc_name
         self.svc_member=svc_member
-        self.ts_last=0 # time stamp of last count increase
-        self.count_last=0 # last received count
         self.state=0 # OFF
         self.off_tout = off_tout
+        self.init() # clear buffer dictionary 
+        
+    def init(self): # to be used in case of counter (re)setting, to avoid jump to power calculation
+        self.ts_last=0 # time stamp of last count increase
+        self.count_last=0 # last received count
         self.inc_dict={} # averaging buffer to be filled with count increment only, {ts:count}
 
     def get_svc(self):
