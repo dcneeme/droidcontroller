@@ -44,7 +44,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         ''' initialize delta t variables, create tables and modbus connection '''
         self.ts = round(time.time(),1)
         self.ts_read = self.ts # time of last read
-        self.ts_send = self.ts -10 # time of last reporting
+        self.ts_send = self.ts-10 # allow counters restoring
         self.sqlread(self.in_sql) # read counters table
         self.sqlread(self.out_sql) # read aochannels if exist
         self.ask_counters() # ask server about the last known values of all counter related services (1024 in cfg)
@@ -65,6 +65,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
     def parse_udp(self,data_dict): # search for setup or set counter
+        ''' Setup change for variables in sql or value preset for modbus cpountyer channels '''
         cur=conn.cursor()
         setup_changed = 0 # flag general setup change, data to be dumped into sql file
         msg=''
@@ -84,10 +85,13 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     print('srow:',row) # debug
                     sqlvalue=int(row[4]) if row[4] != '' else 0 # eval(row[4]) if row[4] != '' else 0 # 
                     value=eval(valmembers[valmember])
-                    if sqlvalue != value and (value == 0 or value > sqlvalue): # replace if bigger than existing or zero
+                    regtype=row[5] # 'h' 'i' 's!' 
+                    
+                    if sqlvalue != value and ((regtype == 'h' and value == 0 or value > sqlvalue) \
+                            or (regtype == 's!')): 
+                        # replace actual counters only if bigger than existing or zero, no limits for setup type 's!' 
                         member=valmember+1
                         
-                        regtype=row[5] # 'h' 'i' 's!' 
                         print('going to replace '+key+' member '+str(member)+' existing value '+str(sqlvalue)+' with '+str(value)) # debug
                         # faster to use physical data instead of svc. also clear counter2power buffer if cp[] exsists!
                         
@@ -97,11 +101,11 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                     msg='setup changed for key '+key+', member '+str(member)+' to value '+str(value)
                                     setup_changed=1
                                     print(msg)
-                                    #udp.syslog(msg)
+                                    udp.syslog(msg)
                                 else:
                                     msg='svc member setting problem for key '+key+', member '+str(member)+' to value '+str(value)
                                     print(msg)
-                                    #udp.syslog(msg)
+                                    udp.syslog(msg)
                                     res+=1
                             else:
                                 msg='acchannels.udp_parse: setup value cannot have mba,regadd defined!'
@@ -124,7 +128,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                     print(msg)
                                     #udp.syslog(msg)
                                 else:
-                                    msg='counter setting problem for key '+key+', member '+str(member)+' to value '+str(value)
+                                    msg='member value setting problem for key '+key+', member '+str(member)+' to value '+str(value)
                                     print(msg)
                                     #udp.syslog(msg)
                                     res+=1
@@ -134,16 +138,23 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                 #udp.syslog(msg)
                                 res+=1
                     else: # skip
-                        print('parse_udp: counter write for key '+key+' SKIPPED due to sqlvalue,value',sqlvalue,value)
-                    
-        if res == 0:
-            self.read_all() # reread the changed channels to avoid repeated restore 
+                        print('parse_udp: member value write for key '+key+' SKIPPED due to sqlvalue,value,regtype',sqlvalue,value,regtype)
+                
+            if setup_changed == 1:
+                print('going to dump table',self.in_sql)
+                try:
+                    s.dump_table(self.in_sql)
+                except:
+                    print('FAILED to dump table',self.in_sql)
+                    traceback.print_exc() # debug
+        #if res == 0:
+            #self.read_all() # reread the changed channels to avoid repeated restore - no need
             
         return res # kui setup_changed ==1, siis todo = varlist! aga kui samal ajal veel miski ootel?
         
 
     def set_counter(self, value = 0, **kwargs): # value, mba,regadd,mbi,val_reg,member   # one counter to be set. check wcount from counters table
-        ''' sets consecutive holding registers, wordlen 1 or 2 or -2 (must be defined in sql table in use). 
+        ''' Sets consecutive holding registers, wordlen 1 or 2 or -2 (must be defined in sql table in use). 
             Usable for cumulative counter counting initialization, not for analogue output (use set_output for this).
             Must also clear counter2power instance buffer dictionary if cp[] instance exsists, to avoid unwanted spike in power calculation result!
         '''
@@ -230,7 +241,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     j+=1
                     #print('cp init prep select row (j,mbi,mba,regadd):',j,row) # debug
                     try:
-                        if mbi == int(row[0]) and mba == int(row[1]) and regadd == int(row[2]): # cp[j] must be initialized
+                        if self.cp and mbi == int(row[0]) and mba == int(row[1]) and regadd == int(row[2]): # cp[j] must be initialized
                             print('initializing counter2power instance cp['+str(j)+'] due to counter setting')
                             self.cp[j].init() # cp[] may not exist on start, but init is then not needed either...
                     except:    
@@ -695,7 +706,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         #(mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,comment,type integer)
         #Cmd="BEGIN IMMEDIATE TRANSACTION" # conn
         #conn.execute(Cmd)
-        Cmd="update aichannels set value='"+str(value)+"' where val_reg='"+svc+"' and member='"+str(member)+"'"
+        Cmd="update "+self.in_sql+" set value='"+str(value)+"' where val_reg='"+svc+"' and member='"+str(member)+"'"
         #print(Cmd) # debug
         try:
             conn.execute(Cmd)
@@ -943,7 +954,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         
         
     def doall(self): # do this regularly, executes only if time is is right
-        ''' Does everything that is regularly needed in this class on time if executed often enough '''
+        ''' Does everything that is regularly needed in this class on time if executed often enough.
+            Do not report too after early, counters may get restored from server.
+        '''
         res=0
         self.ts = round(time.time(),2)
         if self.ts - self.ts_read > self.readperiod:

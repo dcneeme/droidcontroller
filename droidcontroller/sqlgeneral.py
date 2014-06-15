@@ -124,8 +124,9 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
         print(msg)
         try:
             with open(table+'.sql', 'w') as f:
-                for line in conn.iterdump():
-                    f.write('%s\n' % line)
+                for line in conn.iterdump(): # see dumbib koik kokku!
+                    if table in line: # needed for one table only! without that dumps all!
+                        f.write('%s\n' % line)
             return 0
         except:
             msg='FAILURE dumping '+table+'! '+str(sys.exc_info()[1])
@@ -149,8 +150,8 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
         except:
             msg='FAILURE in opening '+filename+': '+str(sys.exc_info()[1])
             print(msg)
-            #syslog(msg)
-            #traceback.print_exc()
+            udp.syslog(msg)
+            traceback.print_exc()
             time.sleep(1)
             return 1
 
@@ -169,7 +170,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
             msg='sqlread() problem for '+table+': '+str(sys.exc_info()[1])
             print(msg)
             udp.syslog(msg)
-            #traceback.print_exc()
+            traceback.print_exc()
             time.sleep(1)
             return 1
 
