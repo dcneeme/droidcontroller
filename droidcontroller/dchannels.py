@@ -475,6 +475,75 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         # write_dochannels() end. 
         
         
+    def parse_udp(self,data_dict): # search for setup or set di remote control signals
+        ''' Setup change for variables in sql for modbus di channels '''
+        cur=conn.cursor()
+        setup_changed = 0 # flag general setup change, data to be dumped into sql file
+        msg=''
+        mval=''
+        res=0
+        member=0
+        print('dchannels: parsing key:value data ',data_dict) # debug
+        for key in data_dict: # process per key:value
+            valmembers=data_dict[key].split(' ') # convert value to member list
+            print('number of members for',key,len(valmembers),valmembers) # debug
+            for valmember in range(len(valmembers)): # 0...N-1
+                Cmd="select mba,regadd,val_reg,member,value,regtype from "+self.in_sql+" where val_reg='"+key+"' and member='"+str(valmember+1)+"'"
+                print(Cmd) # debug
+                cur.execute(Cmd)
+                conn.commit()
+                for row in cur: # single member
+                    print('srow:',row) # debug
+                    sqlvalue=int(row[4]) if row[4] != '' else 0 # eval(row[4]) if row[4] != '' else 0 # 
+                    value=eval(valmembers[valmember])
+                    regtype=row[5] # 'h' 'i' 's!' 
+                    
+                    if (sqlvalue != value and regtype == 's!'): # ok to change value
+                        # replace actual counters only if bigger than existing or zero, no limits for setup type 's!' 
+                        member=valmember+1
+                        
+                        print('going to replace '+key+' member '+str(member)+' existing value '+str(sqlvalue)+' with '+str(value)) # debug
+                        # faster to use physical data instead of svc. also clear counter2power buffer if cp[] exsists!
+                        
+                        if regtype == 's!': # setup row, external modif allowed (!)
+                            if (row[0] == '' and row[1] == ''): # mba, regadd
+                                if self.set_divalue(str(key),member,value) == 0: # set setup value in sql table
+                                    msg='di setup changed for key '+key+', member '+str(member)+' to value '+str(value)
+                                    setup_changed=1
+                                    print(msg)
+                                    udp.syslog(msg)
+                                else:
+                                    msg='svc member setting problem for key '+key+', member '+str(member)+' to value '+str(value)
+                                    print(msg)
+                                    udp.syslog(msg)
+                                    res+=1
+                            else:
+                                msg='dchannels.parse_upd: setup value cannot have mba,regadd defined!'
+                                print(msg)
+                                udp.syslog(msg)
+                                res+=1
+                        
+                    else: # skip
+                        print('dchannels.parse_udp: member value write for key '+key+' SKIPPED due to sqlvalue,value,regtype',sqlvalue,value,regtype)
+                
+            #if setup_changed == 1: # no need to dump di, too much sumping. ask di states after reboot, if regtype == 's!' 
+            #    print('going to dump table',self.in_sql)
+            #    try:
+            #        s.dump_table(self.in_sql)
+            #    except:
+            #        print('FAILED to dump table',self.in_sql)
+             #       traceback.print_exc() # debug
+        #if res == 0:
+            #self.read_all() # reread the changed channels to avoid repeated restore - no need
+            
+        return res # kui setup_changed ==1, siis todo = varlist! aga kui samal ajal veel miski ootel?
+        
+        
+    def set_divalue(self,svc,member,value): # sets binary variables within services for remote control, based on service name and member number
+        ''' Setting member value using sqlgeneral set_membervalue. adding sql table below for that '''
+        return s.set_membervalue(svc,member,value,self.in_sql)
+        
+        
     def doall(self): # do this regularly, blocks for the time of socket timeout!
         ''' Does everything on time if executed regularly '''
         res=0 # returncode

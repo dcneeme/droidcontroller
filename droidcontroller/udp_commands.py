@@ -79,7 +79,7 @@ class Commands(SQLgeneral): # p
                     print(msg)
                     udp.syslog(msg)
                                 
-            else: # some program variables to be restored?
+            else: # some program variables to be restored? put them into sql tables!#
                 if key == 'TCW': # traffic volumes to be restored
                     if len(value.split(' ')) == 4: # member count for traffic: udpin, udpout, tcpin, tcpout in bytes
                         for member in range(2): # udp tcp
@@ -89,29 +89,29 @@ class Commands(SQLgeneral): # p
                     else:
                         msg='invalid number of members in value from server: '+key+':'+value
                         
-                elif key == 'LRW': # lighting state service. no dump to sql file needed. SHOULD BE IN MAIN!
-                    if len(value.split(' ')) == 4: # valid message remote control via last member
-                        mval=value.split(' ')[3] #  last member
-                        res=s.set_membervalue(key,4,mval,'dichannels') # svc,member,value,table='aichannels'. mval as string here!
+                #elif key == 'LRW': # lighting state service. no dump to sql file needed. SHOULD BE IN MAIN!
+                #    if len(value.split(' ')) == 4: # valid message remote control via last member
+                #        mval=value.split(' ')[3] #  last member
+                #        res=s.set_membervalue(key,4,mval,'dichannels') # svc,member,value,table='aichannels'. mval as string here!
                         #FIXME: allow any member with cfg true to be changed here, for any xxW key (to become universal)!!!
-                        if res == 0: # success if 0
-                            msg='set lighting state (value of LRW.3) to '+mval
-                        else:
-                            msg='set lighting state failure!'
-                    else:
-                        msg='invalid number of members in value from server: '+key+':'+value
+                #        if res == 0: # success if 0
+                #            msg='set lighting state (value of LRW.3) to '+mval
+                #        else:
+                #            msg='set lighting state failure!'
+                #    else:
+                #        msg='invalid number of members in value from server: '+key+':'+value
                         
-                elif key == 'LSW': # lighting SENSOR SELECTION. SHOULD BE IN MAIN!
-                    if len(value.split(' ')) == 3: # valid message remote control via last member
-                        mval=value.split(' ')[2] #  last member (0 1 2)
-                        res=s.set_membervalue(key,3,mval,'dichannels') # svc,member,value,table='aichannels'. mval as string here!
-                        #FIXME: allow any member with cfg true to be changed here, for any xxW key (to become universal)!!!
-                        if res == 0: # success if 0
-                            msg='set lighting sensor selection value (LSW.3) to '+mval
-                        else:
-                            msg='set lighting state failure!'
-                    else:
-                        msg='invalid number of members in value from server: '+key+':'+value
+                #elif key == 'LSW': # lighting SENSOR SELECTION. SHOULD BE IN MAIN!
+                #    if len(value.split(' ')) == 3: # valid message remote control via last member
+                #        mval=value.split(' ')[2] #  last member (0 1 2)
+                #        res=s.set_membervalue(key,3,mval,'dichannels') # svc,member,value,table='aichannels'. mval as string here!
+                #        #FIXME: allow any member with cfg true to be changed here, for any xxW key (to become universal)!!!
+                #        if res == 0: # success if 0
+                #            msg='set lighting sensor selection value (LSW.3) to '+mval
+                #        else:
+                #            msg='set lighting state failure!'
+                #    else:
+                 #       msg='invalid number of members in value from server: '+key+':'+value
                 
                 elif key == 'cmd': # commands
                     msg='remote command '+key+':'+value+' detected'

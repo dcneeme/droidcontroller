@@ -702,21 +702,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
     def set_aivalue(self,svc,member,value): # sets variables like setpoints or limits to be reported within services, based on service name and member number
-        ''' there will be no need for this if parse_udp takes over '''
-        #(mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,comment,type integer)
-        #Cmd="BEGIN IMMEDIATE TRANSACTION" # conn
-        #conn.execute(Cmd)
-        Cmd="update "+self.in_sql+" set value='"+str(value)+"' where val_reg='"+svc+"' and member='"+str(member)+"'"
-        #print(Cmd) # debug
-        try:
-            conn.execute(Cmd)
-            conn.commit()
-            return 0
-        except:
-            msg='set_aivalue failure: '+str(sys.exc_info()[1])
-            print(msg)
-            #udp.syslog(msg)
-            return 1  # update failure
+        ''' Setting member value using sqlgeneral set_aivalue. adding sql table below for that '''
+        return s.set_membervalue(svc,member,value,self.in_sql)
         
 
     def set_aovalue(self, value, mba, reg): # sets variables to control, based on physical addresses
