@@ -1,6 +1,8 @@
 import time
 import threading
 import sys
+import traceback
+
 try:
     if sys.version_info.major >= 3:
         import http.server as BaseHTTPServer
@@ -61,7 +63,7 @@ class WebServer(threading.Thread):
 
         #Handler for the GET requests
         def do_GET(self):
-            print("REQUEST: " + str(self)) # debug
+            #print("REQUEST: " + str(self)) # debug
 
             if self.path=="/":
                 self.path="/webui.html"
@@ -75,7 +77,8 @@ class WebServer(threading.Thread):
                     try:
                         self.wfile.write(conv.getJSON().encode('utf-8'))
                     except: #  Exception, e: # problem with py3
-                        self.wfile.write('error writing /pacui.json: ') # + str(e))
+                        print('problem with wfile') # self.wfile.write('error writing /pacui.json: ') # + str(e))
+                        traceback.print_exc()
                     return
 
                 if self.path == "/exit":
@@ -110,10 +113,11 @@ class WebServer(threading.Thread):
                     self.send_header('Content-type',mimetype)
                     self.end_headers()
                     try:
-                        #self.wfile.write(f.read().encode('utf-8'))
-                        self.wfile.write(f.read())
+                        self.wfile.write(f.read().encode('utf-8')) # .encode('utf-8') works with py3
+                        #self.wfile.write(f.read())
                     except: #  Exception, e: # py3 problem
-                        self.wfile.write('error writing ' + self.datadir + self.path) #  + ': ' + str(e)) # py3 problem
+                        traceback.print_exc()
+                        #self.wfile.write('error writing ' + self.datadir + self.path) #  + ': ' + str(e)) # py3 problem
                     f.close()
                 return
 
