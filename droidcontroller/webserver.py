@@ -55,16 +55,13 @@ class WebServer(threading.Thread):
     class myHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         def __init__(self, request, client_address, server):
+            datadir='/root/d4c/webui' # ei saa default ette anda klassi defin?
+            self.datadir=datadir
             BaseHTTPServer.BaseHTTPRequestHandler.__init__(self, request, client_address, server)
 
         #Handler for the GET requests
         def do_GET(self):
-#           datadir = '/home/cougar/modbus/git/webui'
-            datadir = '/sdcard/sl4a/scripts/d4c/webui'
-#            datadir = './build/webui'
-#            datadir = '/sdcard/sl4a/scripts/d4c_cougar_2014-01-18/webui'
-
-#            print("REQUEST: " + str(self))
+            print("REQUEST: " + str(self)) # debug
 
             if self.path=="/":
                 self.path="/webui.html"
@@ -77,8 +74,8 @@ class WebServer(threading.Thread):
                     conv = InDataPacui(gindata)
                     try:
                         self.wfile.write(conv.getJSON().encode('utf-8'))
-                    except Exception, e:
-                        self.wfile.write('error writing /pacui.json: ' + str(e))
+                    except: #  Exception, e: # problem with py3
+                        self.wfile.write('error writing /pacui.json: ') # + str(e))
                     return
 
                 if self.path == "/exit":
@@ -108,18 +105,18 @@ class WebServer(threading.Thread):
 
                 if sendReply == True:
                     #Open the static file requested and send it
-                    f = open(datadir + self.path)
+                    f = open(self.datadir + self.path)
                     self.send_response(200)
                     self.send_header('Content-type',mimetype)
                     self.end_headers()
                     try:
                         #self.wfile.write(f.read().encode('utf-8'))
                         self.wfile.write(f.read())
-                    except Exception, e:
-                        self.wfile.write('error writing ' + datadir + self.path + ': ' + str(e))
+                    except: #  Exception, e: # py3 problem
+                        self.wfile.write('error writing ' + self.datadir + self.path) #  + ': ' + str(e)) # py3 problem
                     f.close()
                 return
 
             except IOError:
-                self.send_error(404,'File Not Found: %s %s' % (datadir, self.path))
+                self.send_error(404,'File Not Found: %s %s' % (self.datadir, self.path))
 

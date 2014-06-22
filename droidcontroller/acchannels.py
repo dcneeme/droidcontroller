@@ -533,7 +533,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                 self.cp.append(Counter2Power(val_reg,member,off_tout = block)) # another Count2Power instance. 10s tout = 360W threshold if 1000 imp per kWh
                                 print('Counter2Power() instance cp['+str(cpi)+'] created for state svc '+val_reg+' member '+str(member)+', off_tout '+str(block))
                             res=self.cp[cpi].calc(ots, raw, ts_now = self.ts) # power calculation based on raw counter increase
-                            raw=res[1]
+                            raw=res[1] # on off = 0 1
                             #print('got result from cp['+str(cpi)+']: '+str(res))  # debug
                             if res[2] != 0: # on/off change
                                 chg=1 # immediate notification needed due to state change

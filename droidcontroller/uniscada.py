@@ -19,8 +19,9 @@ import requests
 #from udp_commands import *
 
 
-#class UniSCADA:
-#    ''' Common parent to share methods between UDPchannel(UniSCADA) and TCPchannel(UniSCADA) '''
+#FIXME: syslog() usage.
+#FIXME: gz tgz bak not needed, throw out
+
     
             
             
@@ -567,7 +568,7 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
 
         except:
             msg='the file '+filename+' was NOT sent to '+self.directory+self.host_id+'/ '+str(sys.exc_info()[1])
-            udp.syslog(msg)
+            #udp.syslog(msg)
             print(msg)
             #traceback.print_exc()
             return 1
@@ -667,7 +668,7 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
                     msg='pull: file '+filename+' unzipping failure, previous file '+filename2+' restored. '+str(sys.exc_info()[1])
                     #traceback.print_exc()
                     print(msg)
-                    udp.syslog(msg)
+                    #udp.syslog(msg)
                     self.traffic[0] += dnsize
                     return 1
 
@@ -678,12 +679,12 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
                     f.close()
                     msg='pull: tgz file '+filename+' successfully unpacked'
                     print(msg)
-                    udp.syslog(msg)
+                    #udp.syslog(msg)
                 except:
                     msg='pull: tgz file '+filename+' unpacking failure! '+str(sys.exc_info()[1])
                     #traceback.print_exc()
                     print(msg)
-                    udp.syslog(msg)
+                    #udp.syslog(msg)
                     self.traffic[0] += dnsize
                     return 1
 
@@ -709,13 +710,13 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
             if dnsize<filesize:
                 msg='pull: file '+filename+' received partially with size '+str(dnsize)
                 print(msg)
-                udp.syslog(msg)
+                #udp.syslog(msg)
                 self.traffic[0] += dnsize
                 return 1 # next try will continue
             else:
                 msg='pull: file '+filename+' received larger than unexpected, in size '+str(dnsize)
                 print(msg)
-                udp.syslog(msg)
+                #udp.syslog(msg)
                 self.traffic[0] += dnsize
                 return 99
 

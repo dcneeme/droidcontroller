@@ -427,7 +427,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
         return value # tuple from member values
 
 
-    def set_membervalue(self, svc, member, value, table='aichannels'): # setting value in table based on svc and member
+    def set_membervalue(self, svc, member, value, table): # setting value in table based on svc and member
         ''' Sets variables like setpoints or limits to be reported within services, based on service name and member number.
             Table can be either dichannels, aichannels or counters and must be known! FIXME: could be detected automatically!
         '''
