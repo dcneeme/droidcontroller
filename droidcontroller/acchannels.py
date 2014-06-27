@@ -1,6 +1,7 @@
 # to be imported to access modbus registers as counters
 # combines previous achannels.py and cchannels.py into one universal acchannel.py. add cfg bit for counter?
 # 28 may 2014.... handle negative values
+# 27.06.2014 make_svc() handles change and age detection together with value (incl power) calc. svc stalled if a member is older than 10xself.readperiod
 
 
 from droidcontroller.sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
@@ -17,7 +18,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
     '''
 
     def __init__(self, in_sql = 'aicochannels.sql', out_sql = 'aochannels.sql', readperiod = 1, sendperiod = 30):
-        self.setReadPeriod(readperiod)
+        self.setReadPeriod(readperiod) 
         self.setSendPeriod(sendperiod)
         self.in_sql = in_sql.split('.')[0]
         self.out_sql = out_sql.split('.')[0]
@@ -27,8 +28,10 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
     def setReadPeriod(self, invar):
-        ''' Set the refresh period, executes sync if time from last read was earlier than period ago '''
-        self.readperiod = invar
+        ''' Set the refresh period, executes sync if time from last read was earlier than period ago.
+            values considered as stalled after 10x self.readperiod
+        '''
+        self.readperiod = invar  # values considered as stalled after 10x self.readperiod
 
 
     def setSendPeriod(self, invar):
@@ -275,6 +278,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             #this above should be fixed. value is already saved, put it there!
             FIMXME:  do not attempt to access counters that are not defined in devices.sql! this should be an easy way to add/remove devices.
         '''
+        self.ts = round(time.time(),2) # refresh timestamp for raw, common for grp members
         step=int(abs(wcount))
         cur=conn.cursor()
         oraw=0
@@ -320,12 +324,12 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     for row in cur:
                         oraw=int(row[0]) if row[0] !='' else -1
                         cfg=int(row[1]) if row[1] != '' else 0
-                    if tcpdata != oraw or oraw == -1: # update only if change needed or empty so far
-                        Cmd="UPDATE "+self.in_sql+" set raw='"+str(tcpdata)+"', ts='"+str(self.ts)+ \
-                            "' where mba='"+str(mba)+"' and regadd='"+str(regadd+i*step)+"' and mbi="+str(mbi) # koigile korraga selle mbi, mba, regadd jaoks
-                        #print('counters i',i,Cmd) # debug
-                        conn.execute(Cmd)
-                time.sleep(0.1) # ainult seriali puhul? ##########  FIXME
+                    #if tcpdata != oraw or oraw == -1: # update only if change needed or empty so far - NO! value CAN stay the same, but age is needed!
+                    Cmd="UPDATE "+self.in_sql+" set raw='"+str(tcpdata)+"', ts='"+str(self.ts)+ \
+                        "' where mba='"+str(mba)+"' and regadd='"+str(regadd+i*step)+"' and mbi="+str(mbi) # koigile korraga selle mbi, mba, regadd jaoks
+                    #print('counters i',i,Cmd) # debug
+                    conn.execute(Cmd)
+                time.sleep(0.05) # ainult seriali puhul? ##########  FIXME
                 return 0
             except:
                 traceback.print_exc()
@@ -352,8 +356,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         comment=''
         #mcount=0
         Cmd1=''
-        self.ts = round(time.time(),2)
-        ts_created=self.ts # selle loeme teenuse ajamargiks
+        #self.ts = round(time.time(),2) # not needed here
+        #ts_created=self.ts # not needed here
         cur=conn.cursor()
         cur3=conn.cursor()
         bmba=0 # mba for sequential register address block
@@ -416,13 +420,13 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
 
-            # now process raw -> value BY SERVICE members. 
-            #power calculations happens below too for each service, not for each counter!
+            # now process raw -> value and find statuses using make_svc() for each service. 
+            #power calculations happen in make_svc too!
 
-            Cmd="select val_reg from "+self.in_sql+" group by val_reg" # process and report by services
+            Cmd="select val_reg from "+self.in_sql+" group by val_reg" # find ervices
             #print "Cmd=",Cmd
-            cur.execute(Cmd) # getting services to be read and reported
-            cpi=-1 # counter2power instance index, increase only if with cfg weight 64 true
+            #cur.execute(Cmd) # getting services to be read and reported
+            #cpi=-1 # counter2power instance index, increase only if with cfg weight 64 true
             for row in cur: # SERVICES LOOP
                 val_reg=''
                 sta_reg=''
@@ -430,154 +434,11 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 value=0
                 val_reg=row[0] # service value register name
                 sta_reg=val_reg[:-1]+"S" # status register name
-                #print 'reading counter values for val_reg',val_reg,'with',mcount,'members' # temporary
-                #Cmd3="select * from "+self.in_sql+" where val_reg='"+val_reg+"' order by member asc" # chk all members, also virtual!
-                Cmd3="select mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,regtype,grp,mbi,wcount from "+self.in_sql \
-                    +" where val_reg='"+val_reg+"' order by member asc" # avoid trouble with column order
-                #(mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc, regtype, grp integer,mbi integer,wcount integer,loref,hiref)
-                #print Cmd3 # debug
-                cur3.execute(Cmd3)
-                chg=0 # service change flag based on member state or value change
                 
-                for srow in cur3: # members for one counter svc
-                    #print srow # debug
-                    mbi=0
-                    mba=0 # local here
-                    regadd=0
-                    member=0
-                    cfg=0
-                    x1=0
-                    x2=0
-                    y1=0
-                    y2=0
-                    outlo=0
-                    outhi=0
-                    ostatus=0 # eelmine
-                    #tvalue=0 # test
-                    raw=0 # unconverted reading
-                    #oraw=0 # previous unconverted reading
-                    ovalue=0 # previous converted value
-                    value=0 # latest (converted) value
-                    ots=0
-                    avg=0 # averaging strength, effective from 2
-                    desc='' # description for UI
-                    comment='' # comment internal
-                    result=[]
-
-                    # 0       1     2     3     4   5  6  7  8  9    10     11  12    13   14   15    16  17   18
-                    #mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,comment  # counters
-                    mba=int(srow[0]) if srow[0] != '' else 0 # modbus address
-                    regadd=int(srow[1]) if srow[1] != '' else 0 # must be int! can be missing
-                    val_reg=srow[2] # string
-                    member=int(srow[3]) if srow[3] != '' else 0
-                    cfg=int(srow[4]) if srow[4] != '' else 0 # config byte
-                    x1=int(srow[5]) if srow[5] != '' else 0
-                    x2=int(srow[6]) if srow[6] != ''  else 0
-                    y1=int(srow[7]) if srow[7] != '' else 0
-                    y2=int(srow[8]) if srow[8] != '' else 0
-                    outlo=int(srow[9]) if srow[9] != '' else 0
-                    outhi=int(srow[10]) if srow[10] != '' else 0
-                    avg=int(srow[11]) if srow[11] != '' else 0 #  averaging strength, effective from 2
-                    #if srow[12] != '': # block
-                    block=int(srow[12]) if srow[12] != '' else 0  # threshold in s for OFF state
-                    # updated before raw reading
-                    raw=int(srow[13]) if srow[13] != '' else None
-                    # previous converted value
-                    ovalue=eval(srow[14]) if srow[14] != '' else 0 # not updated above!
-                    ostatus=int(srow[15]) if srow[15] != '' else 0
-                    ots=eval(srow[16]) if srow[16] != '' else self.ts
-                    #desc=srow[17]
-                    #comment=srow[18]
-                    wcount=int(srow[21]) if srow[21] != '' else 1  # word count
-                    mbi=srow[20] # int
-                    #print('got from '+self.in_sql+' raw,ovalue,cfg',raw,ovalue,cfg) # debug
-
-
-                    #-- CONFIG BIT MEANINGS
-                    #-- # 1 - below outlo warning, 4 
-                    #-- # 2 - below outlo critical, 8 - above outhi critical
-                    #-- # 4 - above outhi warning
-                    #-- # 8   above outhi critical
-
-                    #-- 16 - immediate notification on status change (USED FOR STATE FROM POWER)
-                    #-- 32 - value "limits to status" inversion  - to defined forbidden area instead of allowed area  
-                    #-- 64 - power flag, based on value increments, creates cp[] instance
-                    #-- 128 - state from power flag
-                    #-- 256 - notify on 20% value change (not only limit crossing that becomes activated by first 4 cfg bits)
-                    #-- 512 - do not report at all, for internal usage
-                    #-- 1024 - counter, unsigned, to be queried/restored from server on restart
-                    #    -- counters are normally located in 2 registers, but also ai values can be 32 bits. 
-                    #    -- negative wcount means swapped words (barionet, npe imod)
- 
-                    if raw != None: # valid data for either energy or power value
-                        #POWER?
-                        if (cfg&64): # power, no sign, increment to be calculated! divide increment to time from the last reading to get the power
-                            cpi=cpi+1 # counter2power index
-                            try:
-                                if self.cp[cpi]:
-                                    pass # instance already exists
-                            except:
-                                self.cp.append(Counter2Power(val_reg,member,off_tout = block)) # another Count2Power instance. 100s  = 36W threshold if 1000 imp per kWh
-                                print('Counter2Power() instance cp['+str(cpi)+'] created for pwr svc '+val_reg+' member '+str(member)+', off_tout '+str(block))
-                            res=self.cp[cpi].calc(ots, raw, ts_now = self.ts) # power calculation based on raw counter increase
-                            raw=res[0]
-                            #print('got result[0] from cp['+str(cpi)+']: '+str(res))  # debug
-                        
-                        
-                        if (cfg&128) > 0: # 
-                            cpi=cpi+1 # counter2power index on /off jaoks
-                            try:
-                                if self.cp[cpi]:
-                                    pass # instance already exists
-                            except:
-                                self.cp.append(Counter2Power(val_reg,member,off_tout = block)) # another Count2Power instance. 10s tout = 360W threshold if 1000 imp per kWh
-                                print('Counter2Power() instance cp['+str(cpi)+'] created for state svc '+val_reg+' member '+str(member)+', off_tout '+str(block))
-                            res=self.cp[cpi].calc(ots, raw, ts_now = self.ts) # power calculation based on raw counter increase
-                            raw=res[1] # on off = 0 1
-                            #print('got result from cp['+str(cpi)+']: '+str(res))  # debug
-                            if res[2] != 0: # on/off change
-                                chg=1 # immediate notification needed due to state change
-                        
-                        
-                        # SCALING
-                        if (cfg&1024) == 0: # take sign into account, not counter ### SIGNED if not counter ##
-                            if raw >= (2**(wcount*16-1)): # negative!
-                                raw=raw-(2**(wcount*16))
-                                #print('read_all: converted to negative value',raw,'wcount',wcount) # debug
-                            
-                        if raw != None and x1 != x2 and y1 != y2: # seems like normal input data
-                            value=(raw-x1)*(y2-y1)/(x2-x1)
-                            value=int(round(y1+value)) # integer values to be reported only
-                        else:
-                            #print("read_counters val_reg",val_reg,"member",member,"raw",raw,"ai2scale PARAMETERS INVALID:",x1,x2,'->',y1,y2,'conversion not used!') # debug
-                            value=None
-                            
-
-                        if value != None:
-                            if avg>1 and abs(value-ovalue) < value/2:  # averaging the readings. big jumps (more than 50% change) are not averaged.
-                                value=int(((avg-1)*ovalue+value)/avg) # averaging with the previous value, works like RC low pass filter
-                                #print('counter avg on, value became ',value) # debug
-                            #print('acchannels: svc,val_reg,member,ovalue,value,avg,abs(value-ovalue),cfg',val_reg,member,ovalue,value,avg,abs(value-ovalue),cfg) # debug
-                            Cmd="update "+self.in_sql+" set value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
-                            #print(Cmd) # debug
-                            conn.execute(Cmd) # new value set in sql table ONLY if there was a valid result
-                            if (cfg&256) and abs(value-ovalue) > value/5.0: # change more than 20% detected, use num w comma!
-                                print('value change of more than 20% detected in '+val_reg+'.'+str(member)+', need to notify') # debug
-                                chg=1
-                            
-                        #print('acchannels: end raw2value processing',val_reg,'member',member,'raw',raw,' value',value,' ovalue',ovalue,', avg',avg) # debug
-
-                    else:
-                        if mba > 0 and member > 0:
-                            print('ERROR: raw None for svc',val_reg,member) # debug
-                            return 1
-
-                # END OF SERVICE "RAW TO VALUE" PROCESSING. cannot do it together with raw update, conversion may be different for different svc members.
-                if chg == 1: # no matter up or down
-                    print('acchannel.read_all: immediate notification due to svc '+val_reg+' status or value change!') # debug
-                    self.make_svc(val_reg,sta_reg) # immediate notification due to state or value change
-                   
-            conn.commit()
+                
+                self.make_svc(val_reg,sta_reg) # sets status and notifies id status chg in any member
+                                
+            conn.commit() # also for make_svc()
             sys.stdout.write('A')
             return 0
 
@@ -670,6 +531,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
     
     
     def get_aivalue(self,svc,member): # returns raw,value,lo,hi,status values based on service name and member number
+        # but status is for a service, not for member!!!??
         #(mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,comment,type integer)
         cur=conn.cursor()
         Cmd="BEGIN IMMEDIATE TRANSACTION" # conn3, et ei saaks muutuda lugemise ajal
@@ -769,11 +631,12 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 val_reg=row[0] # teenuse nimi
                 sta_reg=val_reg[:-1]+"S" # nimi ilma viimase symbolita ja S - statuse teenuse nimi, analoogsuuruste ja temp kohta
 
-                if self.make_svc(val_reg,sta_reg) == 0: # successful svc insertion into buff2server
-                    pass
-                    #print('tried to report svc',val_reg,sta_reg)
+                sendstring=self.make_svc(val_reg,sta_reg)
+                if sendstring != None: # == 0: # successful svc insertion into buff2server
+                    udp.send(sendstring) #may send to buffer double if make_svc found change. no dblk sending if ts is the same.
+                    #print('regular report of svc',val_reg,sta_reg)
                 else:
-                    print('make_svc FAILED to report svc',val_reg,sta_reg)
+                    print('FAILED to report svc',val_reg,sta_reg)
                     return 1 #cancel
 
 
@@ -792,7 +655,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
 
-    def make_svc(self, val_reg, sta_reg):  # should be generic, suitable both for aichannels and counters, ONE svc
+    def make_svc(self, val_reg, sta_reg):  # ONE svc, both val_reg and sta_reg exist for ai and counters
         ''' Make a single service record WITH STATUS based on existing values of the counter members and send it away to UDPchannel.
             No value calculation here, this is done in read_all(). Status for service is found here. 
         '''
@@ -808,8 +671,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         #(mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc, regtype, grp integer,mbi integer,wcount integer,loref,hiref)
         #print Cmd # ajutine
         cur.execute(Cmd) # another cursor to read the same table
-
-        mts=0  # max timestamp for svc members. if too old, skip messaging to server
+        ts_now=time.time() # time now in sec
+        
         for srow in cur: # service members
             #print(repr(srow)) # debug
             mba=-1 #
@@ -828,6 +691,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             ovalue=0 # previous (possibly averaged) value
             ots=0 # eelmine ts value ja status ja raw oma
             avg=0 # keskmistamistegur, mojub alates 2
+            result=None
             #desc=''
             #comment=''
             # 0       1     2     3     4   5  6  7  8  9    10     11  12    13  14   15     16  17    18
@@ -845,15 +709,15 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             outhi=int(srow[10]) if srow[10] != '' else None
             avg=int(srow[11]) if srow[11] != '' else 0  #  averaging strength, values 0 and 1 do not average!
             #block=int(srow[12]) if srow[12] != '' else 0 # - loendame siin vigu, kui kasvab yle 3? siis enam ei saada
-            oraw=int(srow[13]) if srow[13] != '' else 0
-            value=float(srow[14]) if srow[14] != '' else 0 # teenuseliikme vaartus
-            ostatus=int(srow[15]) if srow[15] != '' else 0 # teenusekomponendi status - ei kasuta
+            raw=int(srow[13]) if srow[13] != '' else None # 0
+            ovalue=float(srow[14]) if srow[14] != '' else 0 # teenuseliikme endine vaartus
+            ostatus=int(srow[15]) if srow[15] != '' else 0 # teenusekomponendi status - ei kasuta / votame kasutusele
             ots=eval(srow[16]) if srow[16] != '' else 0
             #desc=srow[17]
             #comment=srow[18]
             mbi=srow[20] # int
             wcount=int(srow[21]) if srow[21] != '' else 1  # word count
-                    
+            chg=0 # member status change flag        
             
             ################ sat
             
@@ -876,68 +740,137 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             # 1024 - raw counter, no sign
                 # counters are normally located in 2 registers, but also ai values can be 32 bits. 
                 # negative wcount means swapped words (barionet, npe imod)
-
+            
             status=0 # initially for each member
-            if outhi != None:
-                if value>outhi: # above hi limit
-                    if (cfg&4) and status == 0: # warning
-                        status=1
-                    if (cfg&8) and status<2: # critical
-                        status=2
-                    if (cfg&12) == 12: #  not to be sent
-                        status=3
-                        #block=block+1 # error count incr
-                else: # return with hysteresis 5%
-                    if outlo != None:
-                        if value>outlo and value<outhi-0.05*(outhi-outlo): # value must not be below lo limit in order for status to become normal
-                            status=0 # back to normal
-                        else:
-                            if value<outhi: # value must not be below lo limit in order for status to become normal
-                                status=0 # back to normal
-                            
-            if outlo != None:
-                if value<outlo: # below lo limit
-                    if (cfg&1) and status == 0: # warning
-                        status=1
-                    if (cfg&2) and status<2: # critical
-                        status=2
-                    if (cfg&3) == 3: # not to be sent, unknown
-                        status=3
-                        #block=block+1 # error count incr
-                else: # back with hysteresis 5%
-                    if outhi != None:
-                        if value<outhi and value>outlo+0.05*(outhi-outlo):
-                            status=0 # back to normal
-                    else:
-                        if value>outlo:
-                            status=0 # back to normal
-                            
-    #############                
-            #print 'make_svc mba ots mts',mba,ots,mts # debug
-            if mba>0:
-                if ots>mts:
-                    mts=ots # latest member timestamp for the current service
+            if raw != None: # valid data for either energy or power value
+                if ots < ts_now - 10*self.readperiod: # data stalled
+                    print('make_svc() cancelled due to stalled member data for',val_reg,member,'ots,ts_now',ots,ts_now)
+                    return None
+                
+                #POWER?
+                if (cfg&64): # power, no sign, increment to be calculated! divide increment to time from the last reading to get the power
+                    cpi=cpi+1 # counter2power index
+                    try:
+                        if self.cp[cpi]:
+                            pass # instance already exists
+                    except:
+                        self.cp.append(Counter2Power(val_reg,member,off_tout = block)) # another Count2Power instance. 100s  = 36W threshold if 1000 imp per kWh
+                        print('Counter2Power() instance cp['+str(cpi)+'] created for pwr svc '+val_reg+' member '+str(member)+', off_tout '+str(block))
+                    res=self.cp[cpi].calc(ots, raw, ts_now = self.ts) # power calculation based on raw counter increase
+                    raw=res[0]
+                    #print('got result[0] from cp['+str(cpi)+']: '+str(res))  # debug
+                
+                
+                if (cfg&128) > 0: # 
+                    cpi=cpi+1 # counter2power index on /off jaoks
+                    try:
+                        if self.cp[cpi]:
+                            pass # instance already exists
+                    except:
+                        self.cp.append(Counter2Power(val_reg,member,off_tout = block)) # another Count2Power instance. 10s tout = 360W threshold if 1000 imp per kWh
+                        print('Counter2Power() instance cp['+str(cpi)+'] created for state svc '+val_reg+' member '+str(member)+', off_tout '+str(block))
+                    res=self.cp[cpi].calc(ots, raw, ts_now = self.ts) # power calculation based on raw counter increase
+                    raw=res[1] # on off = 0 1
+                    #print('got result from cp['+str(cpi)+']: '+str(res))  # debug
+                    if res[2] != 0: # on/off change
+                        chg=1 # immediate notification needed due to state change
+                
+                # SCALING
+                if (cfg&1024) == 0: # take sign into account, not counter ### SIGNED if not counter ##
+                    if raw >= (2**(wcount*16-1)): # negative!
+                        raw=raw-(2**(wcount*16))
+                        #print('read_all: converted to negative value',raw,'wcount',wcount) # debug
+                   
+                if raw != None and x1 != x2 and y1 != y2: # seems like normal input data
+                    value=(raw-x1)*(y2-y1)/(x2-x1)
+                    value=int(round(y1+value)) # integer values to be reported only
+                else:
+                    print("read_counters val_reg",val_reg,"member",member,"raw",raw,"ai2scale PARAMETERS INVALID:",x1,x2,'->',y1,y2,'conversion not used!') # debug
+                    value=None
+                   
+
+                if value != None:
+                    if avg>1 and abs(value-ovalue) < value/2:  # averaging the readings. big jumps (more than 50% change) are not averaged.
+                        value=int(((avg-1)*ovalue+value)/avg) # averaging with the previous value, works like RC low pass filter
+                        #print('counter avg on, value became ',value) # debug
+                    #print('acchannels: svc,val_reg,member,ovalue,value,avg,abs(value-ovalue),cfg',val_reg,member,ovalue,value,avg,abs(value-ovalue),cfg) # debug
+                    #Cmd="update "+self.in_sql+" set value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
+                    #print(Cmd) # debug  - teeme ALLPOOL KORRAGA
+                    #conn.execute(Cmd) # new value set in sql table ONLY if there was a valid result
+                    if (cfg&256) and abs(value-ovalue) > value/5.0: # change more than 20% detected, use num w comma!
+                        print('value change of more than 20% detected in '+val_reg+'.'+str(member)+', need to notify') # debug
+                        chg=1
+                        
+
+                    # counter2power and scaling done, status check begins ##########
                     
+                    if outhi != None:
+                        if value>outhi: # above hi limit
+                            if (cfg&4) and status == 0: # warning
+                                status=1
+                            if (cfg&8) and status<2: # critical
+                                status=2
+                            if (cfg&12) == 12: #  not to be sent
+                                status=3
+                                #block=block+1 # error count incr
+                        else: # return with hysteresis 5%
+                            if outlo != None:
+                                if value>outlo and value<outhi-0.05*(outhi-outlo): # value must not be below lo limit in order for status to become normal
+                                    status=0 # back to normal
+                                else:
+                                    if value<outhi: # value must not be below lo limit in order for status to become normal
+                                        status=0 # back to normal
+                                    
+                    if outlo != None:
+                        if value<outlo: # below lo limit
+                            if (cfg&1) and status == 0: # warning
+                                status=1
+                            if (cfg&2) and status<2: # critical
+                                status=2
+                            if (cfg&3) == 3: # not to be sent, unknown
+                                status=3
+                                #block=block+1 # error count incr
+                        else: # back with hysteresis 5%
+                            if outhi != None:
+                                if value<outhi and value>outlo+0.05*(outhi-outlo):
+                                    status=0 # back to normal
+                            else:
+                                if value>outlo:
+                                    status=0 # back to normal
+                                    
+                if status != ostatus:
+                    chg=1 # immediate notification within this method
+                    
+                Cmd="update "+self.in_sql+" set status='"+str(status)+"' and value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
+                conn.execute(Cmd) # who commits? the calling method!!!
+                    
+                #############   
+        
+                
+                if (cfg&32): # this must be done in service loop end, for the final status, not for each member!
+                    print('status inversion enabled for val_reg',val_reg,'initial status',status,',cfg',cfg) # debug
+                    if status == 0: 
+                        status = (cfg&3) # normal becomes warning or critical
+                    else:
+                        status = 0 # not normal becomes normal
+                    #print('status inversion enabled for val_reg',val_reg,'final status',status) # debug
+              
+            else: # setup values with no raw
+                value=ovalue # use the value in table without conversion or influence on status
+                if mba > 0 and member > 0:
+                    print('ERROR: raw None for svc',val_reg,member) # debug
+                    return None
+            
             if lisa != '': # not the first member
                 lisa=lisa+' ' # separator between member values
             lisa=lisa+str(int(round(value))) # adding member values into one string
 
-        if (cfg&32): # this must be done in service loop end, for the final status, not for each member!
-            print('status inversion enabled for val_reg',val_reg,'initial status',status,',cfg',cfg) # debug
-            if status == 0: 
-                status = (cfg&3) # normal becomes warning or critical
-            else:
-                status = 0 # not normal becomes normal
-            #print('status inversion enabled for val_reg',val_reg,'final status',status) # debug
-          
         # service done
         sendtuple=[sta_reg,status,val_reg,lisa] # sending service to buffer
-        if not (cfg&512): # bit weight 512 means not to be sent, internal services
+        if not (cfg&512) and chg == 1: # immediate notification
             udp.send(sendtuple) # to uniscada instance 
-            #print('acchannels sent',sendtuple) # debug
-        #else:
-            #print('skipped send due to cfg 512',sendtuple) # debug
-        return 0
+            
+        return sendtuple # for regular send or status check
         
         
     def doall(self): # do this regularly, executes only if time is is right

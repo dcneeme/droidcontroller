@@ -57,7 +57,7 @@ class WebServer(threading.Thread):
     class myHTTPRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
         def __init__(self, request, client_address, server):
-            datadir='/root/d4c/webui' # ei saa default ette anda klassi defin?
+            datadir='/root/d4c/webui' # olinuxino. ei saa default ette anda klassi defin?
             self.datadir=datadir
             BaseHTTPServer.BaseHTTPRequestHandler.__init__(self, request, client_address, server)
 
