@@ -2,7 +2,11 @@
 # combines previous achannels.py and cchannels.py into one universal acchannel.py. add cfg bit for counter?
 # 28 may 2014.... handle negative values
 # 27.06.2014 make_svc() handles change and age detection together with value (incl power) calc. svc stalled if a member is older than 10xself.readperiod
-
+''' For testing:
+    from main_energy_starman import *
+    comm_doall()  # read mb 
+    ac.make_svc('A2W','A2S') # ai values limits, status, returns ['A2S', 0, 'A2W', '6720 6480 6420 10000 15000']
+'''
 
 from droidcontroller.sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
 s=SQLgeneral() # init sisse?
@@ -67,7 +71,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         return 0
 
 
-    def parse_udp(self,data_dict): # search for setup or set counter
+    def parse_udp(self,data_dict): # search for setup or set counter values
         ''' Setup change for variables in sql or value preset for modbus cpountyer channels '''
         cur=conn.cursor()
         setup_changed = 0 # flag general setup change, data to be dumped into sql file
@@ -75,13 +79,16 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         mval=''
         res=0
         member=0
+        if data_dict == {}:
+            print('ac: nothing to parse in',data_dict)
+            return 0
         print('acchannels: parsing key:value data ',data_dict) # debug
         for key in data_dict: # process per key:value
             valmembers=data_dict[key].split(' ') # convert value to member list
             print('number of members for',key,len(valmembers),valmembers) # debug
             for valmember in range(len(valmembers)): # 0...N-1
                 Cmd="select mba,regadd,val_reg,member,value,regtype,wcount,mbi,x2,y2 from "+self.in_sql+" where val_reg='"+key+"' and member='"+str(valmember+1)+"'"
-                print(Cmd) # debug
+                #print(Cmd) # debug
                 cur.execute(Cmd)
                 conn.commit()
                 for row in cur: # single member
@@ -147,6 +154,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 print('going to dump table',self.in_sql)
                 try:
                     s.dump_table(self.in_sql)
+                    sendstring=self.make_svc(key,key[:-1]+'S')
+                    print('going to report back sendstring',sendstring)
+                    udp.send(sendstring)
                 except:
                     print('FAILED to dump table',self.in_sql)
                     traceback.print_exc() # debug
@@ -428,10 +438,10 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             #cur.execute(Cmd) # getting services to be read and reported
             #cpi=-1 # counter2power instance index, increase only if with cfg weight 64 true
             for row in cur: # SERVICES LOOP
-                val_reg=''
-                sta_reg=''
-                status=0 #
-                value=0
+                #val_reg=''
+                #sta_reg=''
+                #status=0 #
+                #value=0
                 val_reg=row[0] # service value register name
                 sta_reg=val_reg[:-1]+"S" # status register name
                 
@@ -660,7 +670,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             No value calculation here, this is done in read_all(). Status for service is found here. 
         '''
       
-        status=0 # initially
+        status=0 # initially for whole service
         cur=conn.cursor()
         lisa=''
         #print('acchannels.make_svc: reading aico values for val_reg,sta_reg',val_reg,sta_reg) # debug
@@ -685,7 +695,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             y2=0
             outlo=0
             outhi=0
-            ostatus=0 # eelmine
+            ostatus=0 # previous member status
             #tvalue=0 # test, vordlus
             oraw=0
             ovalue=0 # previous (possibly averaged) value
@@ -719,29 +729,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             wcount=int(srow[21]) if srow[21] != '' else 1  # word count
             chg=0 # member status change flag        
             
+            print('val_reg,cfg,raw,ovalue,outlo,outhi',val_reg,cfg,raw,ovalue,outlo,outhi) # debug
             ################ sat
             
-            # svc STATUS CHK. check the value limits and set the status, according to configuration byte cfg bits values
-            # use hysteresis to return from non-zero status values
-            
-            # CONFIG BYTE BIT MEANINGS
-            # 1 - below outlo warning,
-            # 2 - below outlo critical,
-                # NB! 3 - not to be sent  if value below outlo
-            # 4 - above outhi warning
-            # 8 - above outhi critical
-                # NB! 3 - not to be sent  if value above outhi
-            # 16 - - immediate notification on status change (USED FOR STATE FROM POWER)
-            # 32  - limits to state inversion
-            # 64 - power to be counted based on count increase and time period between counts
-            # 128 -  state from power flag
-            # 256 - notify on 10% value change (not only limit crossing that becomes activated by first 4 cfg bits)
-            # 512 - do not report at all, for internal usage
-            # 1024 - raw counter, no sign
-                # counters are normally located in 2 registers, but also ai values can be 32 bits. 
-                # negative wcount means swapped words (barionet, npe imod)
-            
-            status=0 # initially for each member
             if raw != None: # valid data for either energy or power value
                 if ots < ts_now - 10*self.readperiod: # data stalled
                     print('make_svc() cancelled due to stalled member data for',val_reg,member,'ots,ts_now',ots,ts_now)
@@ -788,7 +778,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     print("read_counters val_reg",val_reg,"member",member,"raw",raw,"ai2scale PARAMETERS INVALID:",x1,x2,'->',y1,y2,'conversion not used!') # debug
                     value=None
                    
-
+                if outhi == None or outlo == None:
+                    print('no limit chk for',val_reg,'due to outlo, outhi',outlo,outhi) # debug
+                    
                 if value != None:
                     if avg>1 and abs(value-ovalue) < value/2:  # averaging the readings. big jumps (more than 50% change) are not averaged.
                         value=int(((avg-1)*ovalue+value)/avg) # averaging with the previous value, works like RC low pass filter
@@ -803,58 +795,20 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         
 
                     # counter2power and scaling done, status check begins ##########
+                    mstatus=self.value2status(value,cfg,outlo,outhi,ostatus) # default hyst=5%
                     
-                    if outhi != None:
-                        if value>outhi: # above hi limit
-                            if (cfg&4) and status == 0: # warning
-                                status=1
-                            if (cfg&8) and status<2: # critical
-                                status=2
-                            if (cfg&12) == 12: #  not to be sent
-                                status=3
-                                #block=block+1 # error count incr
-                        else: # return with hysteresis 5%
-                            if outlo != None:
-                                if value>outlo and value<outhi-0.05*(outhi-outlo): # value must not be below lo limit in order for status to become normal
-                                    status=0 # back to normal
-                                else:
-                                    if value<outhi: # value must not be below lo limit in order for status to become normal
-                                        status=0 # back to normal
-                                    
-                    if outlo != None:
-                        if value<outlo: # below lo limit
-                            if (cfg&1) and status == 0: # warning
-                                status=1
-                            if (cfg&2) and status<2: # critical
-                                status=2
-                            if (cfg&3) == 3: # not to be sent, unknown
-                                status=3
-                                #block=block+1 # error count incr
-                        else: # back with hysteresis 5%
-                            if outhi != None:
-                                if value<outhi and value>outlo+0.05*(outhi-outlo):
-                                    status=0 # back to normal
-                            else:
-                                if value>outlo:
-                                    status=0 # back to normal
-                                    
-                if status != ostatus:
-                    chg=1 # immediate notification within this method
-                    
+                  
+                    if mstatus != ostatus: # member status change detected
+                        chg=1 # immediate notification within this method
+                        print('member status chg (after possible inversion) to',mstatus) # debug
+            
                 Cmd="update "+self.in_sql+" set status='"+str(status)+"' and value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
                 conn.execute(Cmd) # who commits? the calling method!!!
                     
                 #############   
         
                 
-                if (cfg&32): # this must be done in service loop end, for the final status, not for each member!
-                    print('status inversion enabled for val_reg',val_reg,'initial status',status,',cfg',cfg) # debug
-                    if status == 0: 
-                        status = (cfg&3) # normal becomes warning or critical
-                    else:
-                        status = 0 # not normal becomes normal
-                    #print('status inversion enabled for val_reg',val_reg,'final status',status) # debug
-              
+                
             else: # setup values with no raw
                 value=ovalue # use the value in table without conversion or influence on status
                 if mba > 0 and member > 0:
@@ -864,15 +818,105 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             if lisa != '': # not the first member
                 lisa=lisa+' ' # separator between member values
             lisa=lisa+str(int(round(value))) # adding member values into one string
-
-        # service done
+        
+            if mstatus>status:
+                    status=mstatus
+        
+        # service members done
         sendtuple=[sta_reg,status,val_reg,lisa] # sending service to buffer
         if not (cfg&512) and chg == 1: # immediate notification
             udp.send(sendtuple) # to uniscada instance 
             
         return sendtuple # for regular send or status check
         
+            
+    def value2status(self,value,cfg,outlo,outhi,ostatus=0,hyst=2):
+        ''' Returns svc member status based on value and limits, taking cfg and previous status into account.
+            If value to status inversion is in use (to define forbidden instead of allowed zones),
+            normalize old status ostatus first and then invert mstatus in the end.
+        '''
+        # svc STATUS CHK. check the value limits and set the status, according to configuration byte cfg bits values
+        # use hysteresis to return from non-zero status values
         
+        # CONFIG BYTE BIT MEANINGS
+        # 1 - below outlo warning,
+        # 2 - below outlo critical,
+            # NB! 3 - not to be sent  if value below outlo
+        # 4 - above outhi warning
+        # 8 - above outhi critical
+            # NB! 3 - not to be sent  if value above outhi
+        # 16 - - immediate notification on status change (USED FOR STATE FROM POWER)
+        # 32  - limits to state inversion
+        # 64 - power to be counted based on count increase and time period between counts
+        # 128 -  state from power flag
+        # 256 - notify on 10% value change (not only limit crossing that becomes activated by first 4 cfg bits)
+        # 512 - do not report at all, for internal usage
+        # 1024 - raw counter, no sign
+            # counters are normally located in 2 registers, but also ai values can be 32 bits. 
+            # negative wcount means swapped words (barionet, npe imod)
+        
+        mstatus=0 # initial service member status
+        bitvalue=0 # remember the important bitvalue for nonzero internal status 
+        #print('value,cfg,outlo,outhi',value,cfg,outlo,outhi) # debug
+        
+        if (cfg&32): # status inversion IN USE, normalize
+            if ostatus>0:
+                ostatus=0
+            else:
+                ostatus=1 # treating statuses 1 and 2 equally
+        
+        if outhi != None: # hi limit set
+            if value>outhi: # above hi limit
+                #print('value above outhi,cfg',cfg) # debug
+                if (cfg&4)>0: # warning
+                    mstatus=1
+                if (cfg&8)>0: # critical
+                    mstatus=2
+                if (cfg&12) == 12: #  not to be sent
+                    mstatus=3
+                #print('mstatus due to value above outhi',mstatus) # debug
+            else: # POSSIBLE return with hysteresis, even without existing outlo
+                if value<outhi-(hyst/100.0)*outhi and (outlo == None or (outlo != None and value>outlo+(hyst/100.0)*outlo)):
+                    mstatus=0 # below hyst limit
+                    #print('mstatus due to return below outhi',mstatus) # debug
+                else: # within dead zone or above
+                    if mstatus == 0 and ostatus > 0:
+                        mstatus=ostatus
+                        #print('no change for old mstatus due to dead zone hi',mstatus) # debug
+                    
+        if outlo != None: # lo limit set
+            if value<outlo: # below lo limit
+                #print('value below outlo') # debug
+                if (cfg&1): # warning
+                    mstatus=1
+                if (cfg&2): # critical
+                    mstatus=2
+                if (cfg&3) == 3: # not to be sent, unknown
+                    mstatus=3
+                #print('mstatus due to value below outlo',mstatus) # debug    
+            else: # POSSIBLE return with hysteresis, even without existing outlo
+                if value>outlo+(hyst/100.0)*outlo and (outhi == None or (outhi != None and value<outhi-(hyst/100.0)*outhi)):
+                    mstatus=0 # below hyst limits
+                    #print('mstatus due to return above outlo',mstatus) # debug
+                else: # within dead zone or below
+                    if mstatus == 0 and ostatus > 0:
+                        mstatus=ostatus
+                        #print('no change for old mstatus due to dead zone lo',mstatus) # debug
+                    
+        if (cfg&32): # possible status inversion for each member
+            #print('status inversion enabled,cfg,mstatus before inv',cfg,mstatus) # debug
+            if mstatus == 0: # within FORBIDDEN zone
+                if (cfg&5):
+                    mstatus = 1 # normal becomes warning
+                elif(cfg&10):
+                    mstatus = 2 # normal becomes critical, higher cfg bit  wins
+            else: # outside forbidden zone
+                mstatus = 0 # not normal becomes normal
+        else:
+            #print('no inversion used, unchanged mstatus',mstatus) # debug
+            pass
+        return mstatus
+    
     def doall(self): # do this regularly, executes only if time is is right
         ''' Does everything that is regularly needed in this class on time if executed often enough.
             Do not report too after early, counters may get restored from server.

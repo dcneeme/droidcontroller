@@ -422,7 +422,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
                         print(msg)
                         data_dict.update({ sregister : svalue }) # in and idf are not included in dict
                         #udp.syslog(msg) # cannot use udp here
-                        sendstring += sregister+":"+svalue+"\n"  # add to the answer
+                        #sendstring += sregister+":"+svalue+"\n"  # add to the answer - better to answer with real values immediately after change
                         
                     else:
                         if sregister == "in": # one such a key in message
