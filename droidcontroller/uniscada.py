@@ -60,7 +60,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
         self.UDPlogSock.setsockopt(SOL_SOCKET, SO_BROADCAST, 1) # broadcast allowed
 
         print('init: created uniscada and syslog connections to '+ip+':'+str(port)+' and '+loghost+':'+str(logport))
-        self.table = 'buff2server' # can be anything, not accessible to other objects
+        self.table = 'buff2server' # can be anything, not accessible to other objects WHY? would be useful to know the queue length...
         self.Initialize()
 
     def Initialize(self):
@@ -223,8 +223,8 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
                     #print repr(rida) # debug
                     mintscreated=rida[1]
                     maxtscreated=rida[2]
-                    print(delcount,'services lines waiting ack for',3*self.retrysend_delay,' s to be deleted')
-                    Cmd="delete from "+self.table+" where ts_created+0+"+str(3*self.retrysend_delay)+"<"+str(self.ts) # +" limit 10" # limit lisatud 23.03.2014
+                    print(delcount,'services lines waiting ack for',10*self.retrysend_delay,' s to be deleted')
+                    Cmd="delete from "+self.table+" where ts_created+0+"+str(10*self.retrysend_delay)+"<"+str(self.ts) # +" limit 10" # limit lisatud 23.03.2014 aga miks?
                     self.conn.execute(Cmd)
 
             Cmd="SELECT count(sta_reg),min(ts_created),max(ts_created) from "+self.table
@@ -356,14 +356,22 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
             return None
 
 
-    def read_buffer(self):
-        ''' reads the content of the buffer, debugging needs only '''
-        Cmd ="SELECT * from "+self.table
-        cur = self.conn.cursor()
-        cur.execute(Cmd)
-        for row in cur:
-            print(repr(row))
-
+    def read_buffer(self, mode = 0): # 0 prints content, 1 is silent but returns record count, min and max ts
+        ''' reads the content of the buffer, debugging needs mainly.
+            Returns the number of waiting to be deleted messages, the earliest and the latest timestamps. '''
+        if mode == 0: # just print the waiting messages
+            Cmd ="SELECT * from "+self.table
+            cur = self.conn.cursor()
+            cur.execute(Cmd)
+            for row in cur:
+                print(repr(row))
+        elif mode == 1: # stats 
+            Cmd ="SELECT count(ts_created),min(ts_created),max(ts_created) from "+self.table
+            cur = self.conn.cursor()
+            cur.execute(Cmd)
+            for row in cur:
+                return row[0],row[1],row[2] # print(repr(row))
+        
 
     def udpread(self):
         ''' Checks received data for monitoring server to see if the data contains key "in",
@@ -414,6 +422,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
                 if ":" in lines[i]:
                     #print "   "+lines[i]
                     line = lines[i].split(':')
+                    line = lines[i].split(':')
                     sregister = line[0] # setup reg name
                     svalue = line[1] # setup reg value
                     #print('received key:value',sregister,svalue) # debug
@@ -449,7 +458,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
                         self.udpsend(sendstring) # send the response right away to avoid multiple retransmits
                         # this answers to the server but does not update the setup or service table yet!
 
-        return data_dict # possible key:value pairs here for setup change or commands
+        return data_dict # possible key:value pairs here for setup change or commands. returns {} for just ack with no cmd
 
 
     def syslog(self, msg,logaddr=()): # sending out syslog message to self.logaddr.
@@ -473,7 +482,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
 
 
     def comm(self): # do this regularly, blocks for the time of socket timeout!
-        ''' Communicates with server, returns cmd and setup key:value'''
+        ''' Communicates with monitoring server, listens to return cmd and setup key:value and sends waiting data. '''
         self.ts = round(time.time(),1) # timestamp
         self.unsent() # delete old records
         udpgot = self.udpread() # check for incoming udp data

@@ -452,14 +452,14 @@ class RegularComm(SQLgeneral): # r
             self.sync_uptime()
             sendstring=''
             for svc in svclist:
-                if svc == 'UTW': # traffic
-                    sendstring += svc+':'+str(udp.traffic[0])+' '+str(udp.traffic[1])+' '+str(tcp.traffic[0])+' '+str(tcp.traffic[1])+'\nUTS:' # adding status
+                if svc == 'UTW' or svc == 'TCW': # traffic
+                    sendstring += svc+':'+str(udp.traffic[0])+' '+str(udp.traffic[1])+' '+str(tcp.traffic[0])+' '+str(tcp.traffic[1])+'\n'+svc[:-1]+'S' # adding status
                     if udp.traffic[0]+udp.traffic[1]+tcp.traffic[0]+tcp.traffic[1] < 10000000:
                         sendstring += '0\n' # ok
                     else:
                         sendstring += '1\n' # warning about recent restart
-                elif svc == 'ULW': # uptime
-                    sendstring += svc+':'+str(self.uptime[0])+' '+str(self.uptime[1])+'\nULS:' # diagnostic uptimes, add status!
+                elif svc == 'ULW' or svc == 'UPW': # uptime
+                    sendstring += svc+':'+str(self.uptime[0])+' '+str(self.uptime[1])+'\n'+svc[:-1]+'S' # diagnostic uptimes, add status!
                     if (self.uptime[0] > 1800) and (self.uptime[0] > 1800):
                         sendstring += '0\n' # ok
                     else:

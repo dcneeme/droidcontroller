@@ -250,7 +250,7 @@ class CommModbus(Comm):
 
 
 
-    def write(self, mba, reg, type = 'h', **kwargs):
+    def write(self, mba, reg, type = 'h', **kwargs): # add value or values tuple to write them!
         ''' Write Modbus register(s), either holding or coils. Returns exit status.
 
         :param 'mba': Modbus device address
