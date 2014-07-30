@@ -114,7 +114,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
         cur.execute(Cmd)
         conn.commit()
         for row in cur:
-            output.append(row) # tuple one member per line
+            output.append(row) 
         return output
 
 
@@ -390,7 +390,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
         if like == '':
             Cmd="select "+column+" from "+table+" order by "+column
         else:
-            Cmd="select "+column+" from "+table+" where "+column+" like '"+like+"' order by "+column
+            Cmd="select "+column+" from "+table+" where "+column+" like '"+like+"' order by "+column # filter
         #print(Cmd) # debug
         cur.execute(Cmd)
         value=[]
@@ -402,7 +402,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
         return value # tuple from member values
         
         
-    def get_value(self, svc, table='aichannels'): # returns raw,value,lo,hi,status values based on service name and member number
+    def get_value(self, svc, table='dichannels'): # returns tuple of service values if numeric
         ''' Returns member values as tuple from channel table (ai, di, counter) based on service name '''
         cur=conn.cursor()
         #Cmd="BEGIN IMMEDIATE TRANSACTION" # conn3, et ei saaks muutuda lugemise ajal
@@ -446,9 +446,11 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
             return 1  # update failure
 
 
-    def setbit_do(self, bit, value, mba, regadd, mbi=0):  # to set a readable output channel by the physical addresses
+    def setbit_do(self, bit, value, mba, regadd, mbi=0):  # to set a readable output channel by the physical
+        # parameter order should be changed!!! to mbi, mba, regadd, bit. chk tartu, starman!
         '''Sets the output channel by the physical addresses (mbi,mba,regadd,bit) '''
-        if mba == '' or regadd == '':
+        #if mba == '' or regadd == '':
+        if mba == 0 or regadd == None or mbi == None or bit == None:
             print('invalid parameters for setbit_do(), mba regadd',mba,regadd,'bit value mbi',bit,value,mbi)
             time.sleep(2)
             return 2
@@ -468,6 +470,27 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
             udp.syslog(msg)
             return 1
 
+            
+    def getbit_do(self, mbi, mba, regadd, bit):  # to set a readable output channel by the physical addresses
+        ''' Reads the wanted output channel value by the physical addresses (mbi,mba,regadd,bit) '''
+        if mba == 0 or regadd == None or mbi == None or bit == None:
+            print('invalid parameters for getbit_do(), mba regadd',mba,regadd,'bit value mbi',bit,value,mbi)
+            time.sleep(2)
+            return 2
+
+        Cmd="select value from dochannels where mba='"+str(mba)+"' and mbi="+str(mbi)+" and regadd='"+str(regadd)+"' and bit='"+str(bit)+"'"
+        #print(Cmd) # debug
+        try:
+            cur.execute(Cmd)
+            conn.commit()
+            for row in cur: # single row
+                value=int(row[0]) if row[0] != '' else 0
+            return value
+        except:
+            msg='output bit '+str(bit)+' setting to '+str(value)+' in table dochannels FAILED! '+str(sys.exc_info()[1])
+            print(msg)
+            udp.syslog(msg)
+            return None
 
     def setby_dimember_do(self, svc, member, value): # to set an output channel in dochannels by the DI service name and member (defined in dichannels)
         '''Sets  output channel by the service name and member using service name defined for this output in dichannels table '''
@@ -485,10 +508,10 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
         for row in cur: # should be one row only
             try:
                 value=(value&1) # only 0 or 1 allowed
-                mba=row[0] if row[0] != '' else 0 # flag illegal if 0
-                reg=row[1]
-                bit=row[2]
-                mbi=row[3]
+                mba=int(row[0]) if row[0] != '' else 0 # flag illegal if 0
+                reg=int(row[1]) if row[0] != '' else None
+                bit=int(row[2]) if row[0] != '' else None
+                mbi=int(row[3]) if row[0] != '' else None
                 if mba>0:
                     res=self.setbit_do(bit,value,mba,reg,mbi=mbi) # sets using physical channel parameters
                 else:
@@ -503,6 +526,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
                 msg='setbit_dochannels failed for bit '+str(bit)+': '+str(sys.exc_info()[1])
                 print(msg)
                 udp.syslog(msg)
+                traceback.print_exc() # debug
                 return 1
 
 

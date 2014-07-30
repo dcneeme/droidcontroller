@@ -408,7 +408,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
                 #syslog(msg)
                 data='' # data destroy
 
-            if "id:" in data: # first check based on host id existence in thge received message, must exist to be valid message!
+            if "id:" in data: # first check based on host id existence in the received message, must exist to be valid message!
                 in_id=data[data.find("id:")+3:].splitlines()[0]
                 if in_id != self.host_id:
                     print("invalid id "+in_id+" in server message from ", addr[0]) # this is not for us!

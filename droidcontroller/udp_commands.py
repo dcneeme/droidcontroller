@@ -58,7 +58,7 @@ class Commands(SQLgeneral): # p
         
     def parse_udp(self, data_dict): # #search for special commands
         ''' Incoming datagram members are dictionary members as key:value. 
-        If there is match with known command, the key:value is returned to prevent repeated sending from server.
+        If there is match with known command, the key:value is immediately returned to prevent repeated sending from server.
         Unknown commands are ignored. Setup values starting with B W or S are possible. 
         A dictionary member may also present a service value, in which case the according sql table is updated. 
         The dictionary members that are not recognized, are ignored and not returned.
@@ -70,6 +70,8 @@ class Commands(SQLgeneral): # p
         msg=''
         mval=''
         res=0
+        sendstring=''
+        
         for key in data_dict:
             value=data_dict[key]
             if (key[0] == 'W' or key[0] == 'B' or key[0] == 'S') and key[-1:] != 'S' and key[-1:] != 'V' and key[-1:] != 'W': # can be general setup value
@@ -89,30 +91,7 @@ class Commands(SQLgeneral): # p
                     else:
                         msg='invalid number of members in value from server: '+key+':'+value
                         
-                #elif key == 'LRW': # lighting state service. no dump to sql file needed. SHOULD BE IN MAIN!
-                #    if len(value.split(' ')) == 4: # valid message remote control via last member
-                #        mval=value.split(' ')[3] #  last member
-                #        res=s.set_membervalue(key,4,mval,'dichannels') # svc,member,value,table='aichannels'. mval as string here!
-                        #FIXME: allow any member with cfg true to be changed here, for any xxW key (to become universal)!!!
-                #        if res == 0: # success if 0
-                #            msg='set lighting state (value of LRW.3) to '+mval
-                #        else:
-                #            msg='set lighting state failure!'
-                #    else:
-                #        msg='invalid number of members in value from server: '+key+':'+value
-                        
-                #elif key == 'LSW': # lighting SENSOR SELECTION. SHOULD BE IN MAIN!
-                #    if len(value.split(' ')) == 3: # valid message remote control via last member
-                #        mval=value.split(' ')[2] #  last member (0 1 2)
-                #        res=s.set_membervalue(key,3,mval,'dichannels') # svc,member,value,table='aichannels'. mval as string here!
-                #        #FIXME: allow any member with cfg true to be changed here, for any xxW key (to become universal)!!!
-                #        if res == 0: # success if 0
-                #            msg='set lighting sensor selection value (LSW.3) to '+mval
-                #        else:
-                #            msg='set lighting state failure!'
-                #    else:
-                 #       msg='invalid number of members in value from server: '+key+':'+value
-                
+            
                 elif key == 'cmd': # commands
                     msg='remote command '+key+':'+value+' detected'
                     print(msg)
@@ -126,6 +105,10 @@ class Commands(SQLgeneral): # p
                 #else: # can be setup value for services
                     
                 
+                #return immediately the cmd to avoid unnecessary repeated execution
+                sendstring=key+':'+value+'\n' # return exactly the same what we got to clear newstate. 
+                    #the real value / state should be shortly refreshed however, via ts shift? in case of di via change detection?
+                udp.udpsend(sendstring) # cmd ack
                 
                 if len(msg)>0:
                     print(msg)
@@ -295,6 +278,8 @@ class Commands(SQLgeneral): # p
                         todocode=0
                 except:
                     todocode=1 # failure to delete *.log
+                    
+            
                     
             # start scripts in parallel (with 10s pause in this channelmonitor). cmd:run,nimi,0 # 0 or 1 means bg or fore
             # use background normally, the foreground process will open a window and keep it open until closed manually

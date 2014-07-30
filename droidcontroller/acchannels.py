@@ -79,7 +79,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         mval=''
         res=0
         member=0
-        if data_dict == {}:
+        if data_dict == {} or data_dict == '' or data_dict == None:
             print('ac: nothing to parse in',data_dict)
             return 0
         print('acchannels: parsing key:value data ',data_dict) # debug
@@ -322,8 +322,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         tcpdata = (result[step*i+1]<<16)+result[step*i]  # swapped word order, as in barionet
                         #print('swapped words counter',str(i),'result',tcpdata) # debug
                     elif wcount == 1:
-                        tcpdata = result[0]
-                    else: # something else
+                        tcpdata = result[i]
+                    else: # something else, lengths other than 1 2 -2 not yet supported!
                         print('unsupported counter word size',wcount)
                         return 1
 
@@ -666,24 +666,20 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
     def make_svc(self, val_reg, sta_reg):  # ONE svc, both val_reg and sta_reg exist for ai and counters
-        ''' Make a single service record WITH STATUS based on existing values of the counter members and send it away to UDPchannel.
-            No value calculation here, this is done in read_all(). Status for service is found here. 
-        '''
+        ''' Make a single service record WITH STATUS based on existing values and update the scaled value in sql table. '''
       
         status=0 # initially for whole service
         cur=conn.cursor()
         lisa=''
         #print('acchannels.make_svc: reading aico values for val_reg,sta_reg',val_reg,sta_reg) # debug
 
-        #Cmd="select * from "+self.in_sql+" where val_reg='"+val_reg+"'" # loeme yhe teenuse kogu info uuesti
         Cmd="select mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,regtype,grp,mbi,wcount from "+self.in_sql \
             +" where val_reg='"+val_reg+"' order by member asc" # avoid trouble with column order
-        #(mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc, regtype, grp integer,mbi integer,wcount integer,loref,hiref)
         #print Cmd # ajutine
         cur.execute(Cmd) # another cursor to read the same table
         ts_now=time.time() # time now in sec
         
-        for srow in cur: # service members
+        for srow in cur: # go through service members
             #print(repr(srow)) # debug
             mba=-1 #
             regadd=-1
@@ -729,7 +725,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             wcount=int(srow[21]) if srow[21] != '' else 1  # word count
             chg=0 # member status change flag        
             
-            print('val_reg,cfg,raw,ovalue,outlo,outhi',val_reg,cfg,raw,ovalue,outlo,outhi) # debug
+            print('val_reg,member,cfg,raw,ovalue,outlo,outhi',val_reg,member,cfg,raw,ovalue,outlo,outhi) # debug
             ################ sat
             
             if raw != None: # valid data for either energy or power value
@@ -785,10 +781,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     if avg>1 and abs(value-ovalue) < value/2:  # averaging the readings. big jumps (more than 50% change) are not averaged.
                         value=int(((avg-1)*ovalue+value)/avg) # averaging with the previous value, works like RC low pass filter
                         #print('counter avg on, value became ',value) # debug
-                    #print('acchannels: svc,val_reg,member,ovalue,value,avg,abs(value-ovalue),cfg',val_reg,member,ovalue,value,avg,abs(value-ovalue),cfg) # debug
-                    #Cmd="update "+self.in_sql+" set value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
-                    #print(Cmd) # debug  - teeme ALLPOOL KORRAGA
-                    #conn.execute(Cmd) # new value set in sql table ONLY if there was a valid result
+                    
                     if (cfg&256) and abs(value-ovalue) > value/5.0: # change more than 20% detected, use num w comma!
                         print('value change of more than 20% detected in '+val_reg+'.'+str(member)+', need to notify') # debug
                         chg=1
@@ -802,7 +795,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         chg=1 # immediate notification within this method
                         print('member status chg (after possible inversion) to',mstatus) # debug
             
-                Cmd="update "+self.in_sql+" set status='"+str(status)+"' and value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
+                Cmd="update "+self.in_sql+" set status='"+str(status)+"', value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
                 conn.execute(Cmd) # who commits? the calling method!!!
                     
                 #############   
