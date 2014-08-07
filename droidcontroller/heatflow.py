@@ -174,8 +174,9 @@ class HeatExchange:
         """Returns linearly interpolated value y based on x and
         two known points defined by x1,y1 and x2,y2
         """
-        if y1 != y2: # validate data to avoid division by zero
-            return y1+(x-x1)*(y2-y1)/(x2-x1)
-        else:
+        if x1 == y2:
             log.warning('invalid interpolation attempt')
-            return None
+            # return average in case ponts have the same x coordinate
+            return (y1+y2)/2
+        else:
+            return y1+(y2-y1)*(x-x1)/(x2-x1)
