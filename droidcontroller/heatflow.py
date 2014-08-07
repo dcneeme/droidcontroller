@@ -13,7 +13,10 @@ import logging
 log = logging.getLogger(__name__)
 
 class FlowRate:
-    ''' Class to calculate values related to heat exchange metering '''
+    ''' Class to calculate values related to heat exchange metering.
+    Suitable in cases where flow signal (like pump state) is available 
+    in addition to relatively rare S0 pulses from flowmeter.
+    '''
     def __init__(self, lpp = 10): # litres per pulse from metering device
         self.lpp = lpp
         self.flowrate = None
@@ -25,13 +28,13 @@ class FlowRate:
 
     def output(self, di_pump, di_pulse):
         ''' Returns flow rate l/s based on pulse count slow increment from
-            fluid flow meter, usually with symmetrical (50% active) pulse output.
-            Flowrate on output is calculated during continuous pumping only, based on
-            flowmeter pulse raising edge (this may be detected faster than
-            the counters are read). Not to be used with electric meters / fast pulse output.
-            Averages the flow rate with the last calculated result. Result is likely to
-            vary depending on the temperature of the pumped fluid.
-            Execute this at DI polling speed, will skip unnecessary execs.
+        fluid flow meter, usually with symmetrical (50% active) pulse output.
+        Flowrate on output is calculated during continuous pumping only, based on
+        flowmeter pulse raising edge (this may be detected faster than
+        the counters are read). Not to be used with electric meters / fast pulse output.
+        Averages the flow rate with the last calculated result. Result is likely to
+        vary depending on the temperature of the pumped fluid.
+        Execute this at DI polling speed, will skip unnecessary execs.
         '''
         tsnow = time.time()
         flowrate = 0
@@ -63,7 +66,9 @@ class FlowRate:
 
 
 class HeatExchange:
-    ''' Class to calculate values related to heat exchange metering '''
+    ''' Class to calculate values related to heat exchange metering. 
+    Suitable in cases where flow signal (like pump state) is available 
+    and the flow rate of the pump is known (can be updated). '''
     def __init__(self, flowrate, cp1 = 3776, tp1 = 26.7, cp2 = 3919, tp2 = 93.3, interval = 10): # ethylen-glycol 30%
         self.di_pump = 0 # pump off initally
         self.cp1 = cp1
@@ -81,7 +86,9 @@ class HeatExchange:
 
 
     def setflowrate(self, flowrate):
-        ''' Updates flow rate for pump based on actual flowmeter pulse processing '''
+        ''' Updates flow rate for pump based on actual flowmeter pulse processing. 
+        Use FlowRate class to find the flowrate value based on flowmeter pulses. 
+        '''
         self.flowrate = flowrate
 
 
@@ -89,13 +96,17 @@ class HeatExchange:
         ''' Returns flow rate for pump based on actual flowmeter pulse processing '''
         return self.flowrate
 
+    def getspecificheat(self):
+        ''' Returns specific heat of agent (J/(K*kg)) that depends on average agent temperature '''
+        return self.cp
+
 
     def output(self, di_pump, Ton, Tret):
         ''' Returns tuple of W, J, s based on pump state, Ton, Treturn,
-            flowrate, specific heat and temperature of pumped agent in 2 points.
-            Result also depends on changing flowrate (update often).
-            Execute this at DI polling speed, will skip unnecessary recalculatsions
-            during pumping session if interval is not passed since last execution.
+        flowrate, specific heat and temperature of pumped agent in 2 points.
+        Result also depends on changing flowrate (update often).
+        Execute this at DI polling speed, will skip unnecessary recalculatsions
+        during pumping session if interval is not passed since last execution.
         '''
       # average specific heat based on onflow nand return temperatures
         tsnow = time.time()
