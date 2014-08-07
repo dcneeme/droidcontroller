@@ -668,9 +668,10 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
     def make_svc(self, val_reg, sta_reg):  # ONE svc, both val_reg and sta_reg exist for ai and counters
         ''' Make a single service record WITH STATUS based on existing values and update the scaled value in sql table. '''
       
-        status=0 # initially for whole service
-        cur=conn.cursor()
-        lisa=''
+        status = 0 # initially for whole service
+        mstatus = 0
+        cur = conn.cursor()
+        lisa = ''
         #print('acchannels.make_svc: reading aico values for val_reg,sta_reg',val_reg,sta_reg) # debug
 
         Cmd="select mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,regtype,grp,mbi,wcount from "+self.in_sql \
