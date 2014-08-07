@@ -22,8 +22,8 @@ class FlowRate:
     Suitable in cases where flow signal (like pump state) is available
     in addition to relatively rare S0 pulses from flowmeter.
     """
-    def __init__(self, liters_per_pulse=10):
-        self.liters_per_pulse = liters_per_pulse
+    def __init__(self, litres_per_pulse=10):
+        self.litres_per_pulse = litres_per_pulse
         self.flowrate = None
         self.di_pulse = 0
         self.di_pump = 0
@@ -62,7 +62,7 @@ class FlowRate:
                     else:
                         if tsnow > self.ts_start and self.ts_start != 0:
                             # update on every pulse
-                            flowrate = self.liters_per_pulse /
+                            flowrate = self.litres_per_pulse /
                                        (tsnow - self.ts_start)
                             # count again for each pulse
                             self.ts_start = tsnow
