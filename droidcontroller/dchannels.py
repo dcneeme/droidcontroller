@@ -72,7 +72,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             try:
                 if mb[mbi]:
                     result = mb[mbi].read(mba, regadd, count=count, type='h') # client.read_holding_registers(address=regadd, count=1, unit=mba)
-                    #print('di read result',result) # debug
+                    
             except:
                 print('read_di_grp: mb['+str(mbi)+'] missing, device with mba '+str(mba)+' not defined in devices.sql?')
                 traceback.print_exc()
@@ -83,7 +83,8 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             
         if result != None:
             try:
-                for i in range(count): # tuple to table rows. tuple len is twice count!
+                for i in range(len(result)): # register values in tuple
+                #for i in range(count): # tuple to table rows. tuple len is twice count!
                     # bitwise processing now - only bits not words can be saved!
                     Cmd="select bit,value from "+self.in_sql+" where mba='"+str(mba)+"' and mbi="+str(mbi)+" and regadd='"+str(regadd+i)+"' group by bit" # handle repeated bits in one go
                     #print(Cmd)
@@ -98,10 +99,14 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                             bit=int(srow[0]) # bit 0..15
                         if srow[1] != '':
                             ovalue=int(float(srow[1])) # bit 0..15, old bit value
-                        print('old value for mbi, mba, regadd, bit',mbi,mba,regadd+i,bit,'was',ovalue) # debug
+                        #print('old value for mbi, mba, regadd, bit',mbi,mba,regadd+i,bit,'was',ovalue) # debug
                         
-                        value=int((result[i]&2**bit)>>bit) # new bit value
-                        print('decoded new value for mbi, mba, regadd, bit',mbi,mba,regadd+i,bit,'is',value,'was',ovalue) # debug
+                        try:
+                            value=int((result[i]&2**bit)>>bit) # new bit value
+                            #print('decoded new value for mbi, mba, regadd, bit',mbi,mba,regadd+i,bit,'is',value,'was',ovalue) # debug
+                        except:
+                            print('read_di_grp problem: result, i, bit',result,i,bit)
+                            traceback.print_exc()
 
                         # check if outputs must be written
                         try:
@@ -127,7 +132,10 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 traceback.print_exc()
                 return 1
         else:
-            msg='di grp data reading FAILED!'
+            #failure, recreate mb[mbi]
+            #print('recreating modbus channel due to error to', mbhost[mbi])
+            mb[mbi] = CommModbus(host=mbhost[mbi])
+            msg='recreated mb['+str(mbi)+'], this di grp data read FAILED for mbi,mba,regadd,count '+str(mbi)+', '+str(mba)+', '+str(regadd)+', '+str(count)
             print(msg)
             return 1
             
@@ -183,7 +191,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                     if mbi == bmbi and mba == bmba and regadd == blast+1: # next regadd found, sequential group still growing
                         blast = regadd # shift the end address
                         bcount=bcount+1 # register count to read
-                        print('di group starting from '+str(bfirst)+': end shifted to',blast) # debug
+                        #print('di group starting from '+str(bfirst)+': end shifted to',blast) # debug
                     else: # a new group started, make a query for previous 
                         #print('di group end detected at regadd',blast,'bcount',bcount) # debugb
                         #print('going to read di registers from',bmba,bfirst,'to',blast,'regcount',bcount) # debug

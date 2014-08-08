@@ -43,7 +43,8 @@ except:
             print('creating table from file',file,'FAILED!')
             traceback.print_exc()
 
-    mb=[]
+    mb=[] # modbus comm instance
+    mbhost=[] # tcp or tty 
     Cmd="select mbi, tcpaddr from devices group by mbi"
     cur=conn.cursor()
     cur.execute(Cmd)
@@ -52,13 +53,17 @@ except:
         #print('sqlgeneral debug:',row) # debug
         if ':' in row[1]:
             mb.append(CommModbus(host=row[1].split(':')[0], port=int(row[1].split(':')[1]))) # modbustcp over tcp
+            mbhost.append(row[1])
         else:
             if row[1] == 'npe_io': # using subprocess on techbase npe
                 mb.append(CommModbus(host=row[1], type='n')) # npe_io, subexec / subprocess
+                mbhost.append(row[1]) 
             elif row[1] == 'npe_udpio': # using socat on techbase npe
                 mb.append(CommModbus(host=row[1], type='u')) # npe_udpio, socat 
+                mbhost.append(row[1])
             else: # probably using dev/tty, rtu
                 mb.append(CommModbus(host=row[1])) # probably olinuxino serial. speed, parity in comm_modbus
+                mbhost.append(row[1]) # to be used in recreation in dchannels or acchannels
             
         #FIXME handle serial or xport connections too! also npe_io via subprocess!
     print('sqlgeneral: opened setup, devices tables and created '+str(len(mb))+' modbus connection(s)')
@@ -295,7 +300,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
                 regok=0
                 msg='setup record '+str(repr(row))
                 print(msg)
-                syslog(msg)
+                udp.syslog(msg)
                 register=row[0] # contains W<mba>.<regadd> or R<mba>.<regadd>
                 # do not read value here, can be string as well
 
@@ -326,7 +331,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
                                 if tcpdata == value: # the actual value verified
                                     msg=msg+' - setup register value already OK, '+str(value)
                                     print(msg)
-                                    syslog(msg)
+                                    udp.syslog(msg)
                                     #prepare data for the monitoring server
                                     #sendstring += "W"+str(mba)+"."+str(regadd)+":"+str(tcpdata)+"\n"  # register content reported as decimal
                                 else:

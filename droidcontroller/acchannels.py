@@ -13,6 +13,8 @@ s=SQLgeneral() # init sisse?
 from droidcontroller.counter2power import *  # Counter2Power() handles power calculation based on pulse count increments
 
 import time
+import logging
+log = logging.getLogger(__name__)
 
 class ACchannels(SQLgeneral): # handles aichannels and counters, modbus registers and sqlite tables
     ''' Access to io by modbus analogue register addresses (and also via services?). Modbus client must be opened before.
@@ -322,7 +324,10 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         tcpdata = (result[step*i+1]<<16)+result[step*i]  # swapped word order, as in barionet
                         #print('swapped words counter',str(i),'result',tcpdata) # debug
                     elif wcount == 1:
-                        tcpdata = result[i]
+                        if len(result) - 1 >= i:
+                            tcpdata = result[i]
+                        else:
+                            print('read_grp invalid i',i,'while result',result)
                     else: # something else, lengths other than 1 2 -2 not yet supported!
                         print('unsupported counter word size',wcount)
                         return 1
@@ -335,17 +340,22 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         oraw=int(row[0]) if row[0] !='' else -1
                         cfg=int(row[1]) if row[1] != '' else 0
                     #if tcpdata != oraw or oraw == -1: # update only if change needed or empty so far - NO! value CAN stay the same, but age is needed!
-                    Cmd="UPDATE "+self.in_sql+" set raw='"+str(tcpdata)+"', ts='"+str(self.ts)+ \
-                        "' where mba='"+str(mba)+"' and regadd='"+str(regadd+i*step)+"' and mbi="+str(mbi) # koigile korraga selle mbi, mba, regadd jaoks
-                    #print('counters i',i,Cmd) # debug
-                    conn.execute(Cmd)
-                time.sleep(0.05) # ainult seriali puhul? ##########  FIXME
+                    if str(regadd)[0] == '6' and tcpdata == 2560: #  failing temperature sensor, do not update
+                        log.warning('failing temperature sensor on address '+str(regadd+i*step))
+                        pass
+                    else:
+                        Cmd="UPDATE "+self.in_sql+" set raw='"+str(tcpdata)+"', ts='"+str(self.ts)+ \
+                            "' where mba='"+str(mba)+"' and regadd='"+str(regadd+i*step)+"' and mbi="+str(mbi) # koigile korraga selle mbi, mba, regadd jaoks
+                        conn.execute(Cmd)   
+                #time.sleep(0.05) # ainult seriali puhul? ##########  FIXME
                 return 0
             except:
                 traceback.print_exc()
                 return 1
         else:
-            msg='aicochannels grp read FAILED for mbi,mba,regadd,count '+str(mbi)+', '+str(mba)+', '+str(regadd)+', '+str(count)
+            #print('recreating modbus channel due to error to', mbhost[mbi])
+            mb[mbi] = CommModbus(host=mbhost[mbi])
+            msg='recreated mb['+str(mbi)+'], this aicochannels grp read FAILED for mbi,mba,regadd,count '+str(mbi)+', '+str(mba)+', '+str(regadd)+', '+str(count)
             print(msg)
             return 1
 

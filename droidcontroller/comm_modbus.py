@@ -2,6 +2,7 @@
 
 from droidcontroller.comm import Comm
 from pymodbus import * # from pymodbus.register_read_message import *
+from pymodbus.register_read_message import ReadHoldingRegistersResponse
 import traceback
 import subprocess # could not use p.subexec()
 import sys # to return sys.exc_info()[1])
@@ -68,6 +69,7 @@ class CommModbus(Comm):
             elif '/dev/tty' in kwargs.get('host'): # direct serial connection defined via host
                 from pymodbus.client.sync import ModbusSerialClient as ModbusClient
                 self.client = ModbusClient(method='rtu', stopbits=1, bytesize=8, parity='E', baudrate=19200, timeout=0.2, port=kwargs.get('host'))
+                # timeout 0.2 oli enne, tekkis vastuste nihe vahel
                 print('CommModbus() init2: created CommModbus instance for ModbusRTU over RS485 using port',kwargs)
             else: #tcp, possibly rtu over tcp
                 from pymodbus.client.sync import ModbusTcpClient as ModbusClient
@@ -172,13 +174,15 @@ class CommModbus(Comm):
             #res = self.client.read_holding_registers(address=reg, count=count, unit=mba)
             try: #if (isinstance(res, ReadHoldingRegistersResponse)): # ei funka!
                 res = self.client.read_holding_registers(address=reg, count=count, unit=mba)
-                #dummy=res.registers[0]
-                self.errorcount = 0
-                return res.registers
+                if isinstance(res, ReadHoldingRegistersResponse):
+                    self.errorcount = 0
+                    return res.registers
+                else:
+                    print('modbus read (h) failed from mba,reg,count',mba,reg,count,' - no registers')
+                    self.errorcount += 1
+                    return None
             except:
                 print('modbus read (h) failed from mba,reg,count',mba,reg,count,' error: '+str(sys.exc_info()[1]))
-                #traceback.print_exc()
-                #self.on_error(id, **kwargs) # ei funka
                 self.errorcount += 1
                 return None
 
