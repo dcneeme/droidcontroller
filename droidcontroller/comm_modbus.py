@@ -178,7 +178,7 @@ class CommModbus(Comm):
                     self.errorcount = 0
                     return res.registers
                 else:
-                    print('modbus read (h) failed from mba,reg,count',mba,reg,count,' - no registers')
+                    #print('modbus read (h) failed from mba,reg,count',mba,reg,count,' - no registers') # debug
                     self.errorcount += 1
                     return None
             except:

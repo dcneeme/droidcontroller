@@ -342,6 +342,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     #if tcpdata != oraw or oraw == -1: # update only if change needed or empty so far - NO! value CAN stay the same, but age is needed!
                     if str(regadd)[0] == '6' and tcpdata == 2560: #  failing temperature sensor, do not update
                         log.warning('failing temperature sensor on address '+str(regadd+i*step))
+                        print('failing temperature sensor on address '+str(regadd+i*step)) # temp
                         pass
                     else:
                         Cmd="UPDATE "+self.in_sql+" set raw='"+str(tcpdata)+"', ts='"+str(self.ts)+ \
@@ -357,6 +358,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             mb[mbi] = CommModbus(host=mbhost[mbi])
             msg='recreated mb['+str(mbi)+'], this aicochannels grp read FAILED for mbi,mba,regadd,count '+str(mbi)+', '+str(mba)+', '+str(regadd)+', '+str(count)
             print(msg)
+            time.sleep(0.5) # hopefully helps to avoid sequential error / recreations
             return 1
 
 
@@ -510,15 +512,17 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 regadd=0
                 mba=0
 
-                if row[0] != '':
-                    mba=int(row[0]) # must be a number
-                if row[1] != '':
-                    regadd=int(row[1]) # must be a number
-                if row[1] != '':
-                    value=int(float(row[2])) # komaga nr voib olla, teha int!
-                msg='sync_ao: going to write value '+str(value)+' to register mba.regadd '+str(mba)+'.'+str(regadd) 
-                print(msg) # debug
-                #syslog(msg)
+                mba=int(eval(row[0])) if row[0] != '' else 0 # must be a number
+                regadd=int(eval(row[1])) if row[1] != '' else 0 # must be a number
+                value=int(eval(row[2])) if row[2] != '' else 0  # komaga nr voib olla, teha int!
+                
+                if mba == 0:
+                    msg='sync_ao: going to write value '+str(value)+' to register mba.regadd '+str(mba)+'.'+str(regadd) 
+                    print(msg) # debug
+                    #udp.syslog(msg)
+                else:
+                    msg='sync_ao: invalid mba '+str(mba)+' for register '+str(regadd) 
+                    print(msg) # debug
 
                 #client.write_register(address=regadd, value=value, unit=mba)
                 ''' write(self, mba, reg, type = 'h', **kwargs):
@@ -569,10 +573,10 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             #print(repr(row)) # debug
             found=1
             #raw=int(float(row[0])) if row[0] != '' and row[0] != None else 0
-            value=int(float(row[0])) if row[0] != '' and row[0] != None else 0
-            outlo=int(float(row[1])) if row[1] != '' and row[1] != None else 0
-            outhi=int(float(row[2])) if row[2] != '' and row[2] != None else 0
-            status=int(float(row[3])) if row[3] != '' and row[3] != None else 0
+            value=int(eval(row[0])) if row[0] != '' and row[0] != None else 0
+            outlo=int(eval(row[1])) if row[1] != '' and row[1] != None else 0
+            outhi=int(eval(row[2])) if row[2] != '' and row[2] != None else 0
+            status=int(eval(row[3])) if row[3] != '' and row[3] != None else 0
         if found == 0:
             msg='get_aivalue failure, no member '+str(member)+' for '+svc+' found!'
             print(msg)
@@ -651,14 +655,13 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 val_reg=row[0] # teenuse nimi
                 sta_reg=val_reg[:-1]+"S" # nimi ilma viimase symbolita ja S - statuse teenuse nimi, analoogsuuruste ja temp kohta
 
-                sendstring=self.make_svc(val_reg,sta_reg)
-                if sendstring != None: # == 0: # successful svc insertion into buff2server
-                    udp.send(sendstring) #may send to buffer double if make_svc found change. no dblk sending if ts is the same.
-                    #print('regular report of svc',val_reg,sta_reg)
+                sendtuple=self.make_svc(val_reg,sta_reg)
+                if sendtuple != None: # == 0: # successful svc insertion into buff2server
+                    udp.send(sendtuple) #may send to buffer double if make_svc found change. no dblk sending if ts is the same.
+                    print('report_all: buffered for reporting',str(sendtuple))
                 else:
                     print('FAILED to report svc',val_reg,sta_reg)
-                    return 1 #cancel
-
+                    # return 1 # other services still need to be reported, commit needs to be done.
 
             conn.commit() # aicochannels svc_report transaction end
             return 0
@@ -727,7 +730,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             avg=int(srow[11]) if srow[11] != '' else 0  #  averaging strength, values 0 and 1 do not average!
             #block=int(srow[12]) if srow[12] != '' else 0 # - loendame siin vigu, kui kasvab yle 3? siis enam ei saada
             raw=int(srow[13]) if srow[13] != '' else None # 0
-            ovalue=float(srow[14]) if srow[14] != '' else 0 # teenuseliikme endine vaartus
+            ovalue=eval(srow[14]) if srow[14] != '' else 0 # teenuseliikme endine vaartus
             ostatus=int(srow[15]) if srow[15] != '' else 0 # teenusekomponendi status - ei kasuta / votame kasutusele
             ots=eval(srow[16]) if srow[16] != '' else 0
             #desc=srow[17]

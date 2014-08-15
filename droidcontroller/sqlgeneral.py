@@ -420,9 +420,11 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
         status=0
         found=0
         value=[]
+        membervalue = None
         for row in cur: # one row per member
             #print('get_value() row:', row) # debug
-            value.append(int(float(row[0]))) if row[0] != '' else 0 # make a value tuple
+            membervalue = eval(row[0]) if row[0] != '' else None
+            value.append(membervalue)  # make a value tuple
         if len(value) == 0: # got nothing
             msg='get_value() failure for '+svc+' from table '+table
             print(msg)
@@ -478,6 +480,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
             
     def getbit_do(self, mbi, mba, regadd, bit):  # to set a readable output channel by the physical addresses
         ''' Reads the wanted output channel value by the physical addresses (mbi,mba,regadd,bit) '''
+        value = None
         if mba == 0 or regadd == None or mbi == None or bit == None:
             print('invalid parameters for getbit_do(), mba regadd',mba,regadd,'bit value mbi',bit,value,mbi)
             time.sleep(2)
@@ -496,6 +499,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
             print(msg)
             udp.syslog(msg)
             return None
+            
 
     def setby_dimember_do(self, svc, member, value): # to set an output channel in dochannels by the DI service name and member (defined in dichannels)
         '''Sets  output channel by the service name and member using service name defined for this output in dichannels table '''

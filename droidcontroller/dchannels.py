@@ -98,7 +98,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                         if srow[0] != '':
                             bit=int(srow[0]) # bit 0..15
                         if srow[1] != '':
-                            ovalue=int(float(srow[1])) # bit 0..15, old bit value
+                            ovalue=int(eval(srow[1])) # bit 0..15, old bit value
                         #print('old value for mbi, mba, regadd, bit',mbi,mba,regadd+i,bit,'was',ovalue) # debug
                         
                         try:
@@ -137,6 +137,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             mb[mbi] = CommModbus(host=mbhost[mbi])
             msg='recreated mb['+str(mbi)+'], this di grp data read FAILED for mbi,mba,regadd,count '+str(mbi)+', '+str(mba)+', '+str(regadd)+', '+str(count)
             print(msg)
+            time.sleep(0.5) # hopefully helps to avoid sequential error / recreations
             return 1
             
             
@@ -337,9 +338,9 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 cfg=int(srow[5]) # configuration byte
             # block?? to prevent sending service with errors. to be added!
             if srow[7] != '':
-                value=int(float(srow[7])) # new value
+                value=int(eval(srow[7])) # new value
             if srow[8] != '':
-                ostatus=int(float(srow[8])) # old status
+                ostatus=int(eval(srow[8])) # old status
             if srow[9] != '':
                 ots=eval(srow[9]) # value ts timestamp
             if srow[10] != '':
@@ -428,14 +429,14 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 di_value=0
                 do_value=0
                 mbi=0
-                #syslog('change in output needed for mba,regadd,bit '+str(int(float(row[0])))+", "+str(int(float(row[1])))+", "+str(int(float(row[2])))+' from value '+str(int(float(row[4])))+' to '+str(int(float(row[3]))))
+                #udp.syslog('change in output needed for mba,regadd,bit '+str(int(eval(row[0])))+", "+str(int(eval(row[1])))+", "+str(int(eval(row[2])))+' from value '+str(int(eval(row[4])))+' to '+str(int(eval(row[3]))))
                 try:
                     mbi=row[5] if row[5] != '' else 0 # num
-                    mba=int(float(row[0])) # must be number
-                    regadd=int(float(row[1])) # must be a number. 0..255
-                    bit=(int(float(row[2]))) # bit 0..15
-                    tmp_array.append(int(float(row[3])))  # do_value=int(row[3]) # 0 or 1 to be written
-                    tmp_array.append(int(float(row[4]))) # di_value=int(row[4]) # 0 or 1 to be written
+                    mba=int(eval(row[0])) # must be number
+                    regadd=int(eval(row[1])) # must be a number. 0..255
+                    bit=(int(eval(row[2]))) # bit 0..15
+                    tmp_array.append(int(eval(row[3])))  # do_value=int(row[3]) # 0 or 1 to be written
+                    tmp_array.append(int(eval(row[4]))) # di_value=int(row[4]) # 0 or 1 to be written
                     bit_dict.update({bit : tmp_array}) # regadd:[bit,do,di] dict member
                     reg_dict.update({regadd : bit_dict})
                     mba_dict.update({mba : reg_dict})

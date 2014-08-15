@@ -181,7 +181,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
 
 
     def send(self, servicetuple): # store service components to buffer for send and resend
-        ''' adds service components into buffer to be sent as a string message
+        ''' Adds service components into buffer table to be sent as a string message
             the components are sta_reg = '', status = 0, val_reg = '', value = ''
         '''
         try:

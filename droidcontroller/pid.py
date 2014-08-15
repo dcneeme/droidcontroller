@@ -239,11 +239,15 @@ class ThreeStep:
 
 
     def interpolate(self, x, x1 = 0, y1 = 0, x2 = 0, y2 = 0):
-        """ Returns linearly interpolated value y based on x and two known points defined by x1y1 and x2y2 """
-        if y1 != y2: # valid data to avoid division by zero
-            return y1+(x-x1)*(y2-y1)/(x2-x1)
+        """ Returns linearly interpolated value y based on x and 
+        two known points defined by x1y1 and x2y2 
+        """
+        if x1 == x2:
+            log.warning('invalid interpolation attempt')
+            # return average in case points have the same x coordinate
+            return (y1+y2)/2
         else:
-            return None
+            return y1+(y2-y1)*(x-x1)/(x2-x1)
 
 
     def output(self, invar): # actual as parameter
