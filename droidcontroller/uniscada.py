@@ -17,7 +17,9 @@ import gzip
 import tarfile
 import requests
 #from udp_commands import *
-
+if os.environ['OSTYPE'] == 'archlinux':
+    from droidcontroller.gpio_led import *
+    led=GPIOLED() # cpuLED, commLED, alarmLED param 0 or 1
 
 #FIXME: syslog() usage.
 #FIXME: gz tgz bak not needed, throw out
@@ -339,10 +341,13 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
 
         self.traffic[1]=self.traffic[1]+len(sendstring) # adding to the outgoing UDP byte counter
 
+        if led:
+            led.commLED(0)
+        
         try:
             sendlen=self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr) # tagastab saadetud baitide arvu
             self.traffic[1]=self.traffic[1]+sendlen # traffic counter udp out
-            msg='sent to '+str(repr(self.saddr))+' '+sendstring.replace('\n',' ')   # show as one line
+            msg='=== sent ' +str(sendlen)+' bytes to '+str(repr(self.saddr))+' '+sendstring.replace('\n',' ')   # show as one line
             print(msg)
             #syslog(msg)
             sendstring=''
@@ -353,6 +358,8 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
             #syslog(msg)
             print(msg)
             traceback.print_exc()
+            if led:
+                led.alarmLED(1)
             return None
 
 
@@ -458,8 +465,10 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
                         self.udpsend(sendstring) # send the response right away to avoid multiple retransmits
                         # this answers to the server but does not update the setup or service table yet!
 
-        return data_dict # possible key:value pairs here for setup change or commands. returns {} for just ack with no cmd
-
+            return data_dict # possible key:value pairs here for setup change or commands. returns {} for just ack with no cmd
+        else:
+            return None
+            
 
     def syslog(self, msg,logaddr=()): # sending out syslog message to self.logaddr.
         msg=msg+"\n" # add newline to the end

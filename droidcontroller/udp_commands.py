@@ -429,8 +429,11 @@ class RegularComm(SQLgeneral): # r
 
 
     def regular_svc(self, svclist = ['UTW','ip','ULW']): # default are uptime and traffic services
-        ''' sends regular service messages that are not related to aichannels, dichannels or counters  '''
+        ''' sends regular service messages that are not related to aichannels, dichannels or counters. 
+            Returns number of bytes sent, None if send queue was not appended at this time.
+        '''
         self.ts=time.time()
+        res=None
         if self.ts > self.ts_regular + self.interval: # time to send again
             
                 
@@ -467,10 +470,8 @@ class RegularComm(SQLgeneral): # r
                 traceback.print_exc() # debug
                 pass
             
-            #return res # 0 is ok 
-        #else:
-            #print('next regular_svc() in '+str(int(round(self.ts_regular + self.interval - self.ts)))+' s',self.ts_regular,self.interval,self.ts) # debug
-    
+            return res # None if nothing sent
+        
     def alive_fork(self, alivecmd, interval = 0): # spawn a process indicating activity, start via regular actions (not too often)
         ''' to enable checking application activity the process with lifetime of 2*interval is started via subexec() '''
         if interval == 0:

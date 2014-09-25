@@ -67,7 +67,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             
         cur=conn.cursor()
         msg='reading data for dichannels group from mba '+str(mba)+' regadd '+str(regadd)+' count '+str(count)
-        print(msg) # debug
+        #print(msg) # debug
         if count>0 and mba != 0:
             try:
                 if mb[mbi]:

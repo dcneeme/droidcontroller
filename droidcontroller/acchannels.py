@@ -113,25 +113,25 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                     msg='setup changed for key '+key+', member '+str(member)+' to value '+str(value)
                                     setup_changed=1
                                     print(msg)
-                                    udp.syslog(msg)
+                                    #udp.syslog(msg)
                                 else:
                                     msg='svc member setting problem for key '+key+', member '+str(member)+' to value '+str(value)
                                     print(msg)
-                                    udp.syslog(msg)
+                                    #udp.syslog(msg)
                                     res+=1
                             else:
                                 msg='acchannels.udp_parse: setup value cannot have mba,regadd defined!'
                                 print(msg)
-                                udp.syslog(msg)
+                                #udp.syslog(msg)
                                 res+=1
                         elif regtype == 'h': # holding register, probably counter
-                            if (eval(row[0]) > 0 and eval(row[1]) >= 0): # mba,regadd probably valid
-                                mba=eval(row[0]) if row[0] != '' else 0
-                                regadd=eval(row[1]) if row[1] != '' else None
+                            if (row(0) != '' and row[1] != ''): # mba,regadd probably valid
+                                mba=int(row[0]) if row[0] != '' else 0
+                                regadd=int(row[1]) if row[1] != '' else None
                                 wcount=int(row[6]) if row[6] != '' else 1
                                 mbi=int(row[7]) if row[7] != '' else None
-                                x2=eval(row[8]) if row[8] != '' else 0
-                                y2=eval(row[9]) if row[9] != '' else 0
+                                x2=int(row[8]) if row[8] != '' else 0
+                                y2=int(row[9]) if row[9] != '' else 0
                                 
                                 #if self.set_counter(val_reg=key, member=member,value=value, wcount=wcount) == 0: # faster to use physical data instead of svc
                                 if self.set_counter(mbi=mbi, mba=mba, regadd=regadd, value=value, wcount=wcount, x2=x2, y2=y2) == 0: # set counter
@@ -343,7 +343,6 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     if str(regadd)[0] == '6' and tcpdata == 2560: #  failing temperature sensor, do not update
                         log.warning('failing temperature sensor on address '+str(regadd+i*step))
                         print('failing temperature sensor on address '+str(regadd+i*step)) # temp
-                        pass
                     else:
                         Cmd="UPDATE "+self.in_sql+" set raw='"+str(tcpdata)+"', ts='"+str(self.ts)+ \
                             "' where mba='"+str(mba)+"' and regadd='"+str(regadd+i*step)+"' and mbi="+str(mbi) # koigile korraga selle mbi, mba, regadd jaoks

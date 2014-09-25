@@ -62,8 +62,7 @@ class FlowRate:
                     else:
                         if tsnow > self.ts_start and self.ts_start != 0:
                             # update on every pulse
-                            flowrate = self.litres_per_pulse /
-                                       (tsnow - self.ts_start)
+                            flowrate = self.litres_per_pulse / (tsnow - self.ts_start)
                             # count again for each pulse
                             self.ts_start = tsnow
                         else:
@@ -101,10 +100,10 @@ class HeatExchange:
         self.Tdiff = 0 # degC
         self.energy = 0 # cumulative J
         self.ptime = 0 # cumulative s
-        self.setflowrate(flowrate) # may change with temperature change
+        self.set_flowrate(flowrate) # may change with temperature change
         log.info('HeatExchange init')
 
-    def setflowrate(self, flowrate):
+    def set_flowrate(self, flowrate):
         """Updates flow rate for pump based on actual flowmeter pulse
         processing.
 
@@ -113,13 +112,13 @@ class HeatExchange:
         """
         self.flowrate = flowrate
 
-    def getflowrate(self):
+    def get_flowrate(self):
         """Returns flow rate for pump based on actual flowmeter pulse
         processing
         """
         return self.flowrate
 
-    def getspecificheat(self):
+    def get_specificheat(self):
         """Returns specific heat of agent (J/(K*kg)) that depends on
         average agent temperature
         """

@@ -43,6 +43,7 @@ class CommModbus(Comm):
 
         self.errorcount = 0 # add here modbus problems
         self.type = type # default h
+        print(kwargs) # debug
         if ('host' in kwargs):
             self.host=kwargs.get('host','127.0.0.1')
             ###############
@@ -88,10 +89,11 @@ class CommModbus(Comm):
                             port=kwargs.get('port', 502))
                     print('CommModbus() init4: created CommModbus instance for ModbusTCP over TCP',kwargs)
         else:
+            port=kwargs.get('port')
             from pymodbus.client.sync import ModbusSerialClient as ModbusClient
-            self.client = ModbusClient(method='rtu', stopbits=1, bytesize=8, parity='E', baudrate=19200, timeout=0.2, port=kwargs.get('host'))
-            print('CommModbus() init5: created CommModbus instance for ModbusRTU over RS485 using port',kwargs)
-        Comm.__init__(self, **kwargs)
+            self.client = ModbusClient(method='rtu', stopbits=1, bytesize=8, parity='E', baudrate=19200, timeout=0.2, port=port)
+            print('CommModbus() init5: created CommModbus instance for ModbusRTU over RS485 using port:',port)
+        #Comm.__init__(self, **kwargs) # for scheduler, not used
 
 
     def get_errorcount(self):
