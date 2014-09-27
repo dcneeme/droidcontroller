@@ -35,6 +35,7 @@ except:
     # several connections may be needed, tuple of modbus connections! also direct rtu, rtu via tcp-serial or tcp-modbustcp
     for file in ['devices.sql','setup.sql','calendar.sql']:
         sql=open(file).read() # (num integer,rtuaddr integer,tcpaddr)
+        print('reading',file)
         try:
             conn.executescript(sql) # read table into database
             conn.commit()
