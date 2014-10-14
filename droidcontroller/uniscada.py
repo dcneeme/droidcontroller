@@ -17,12 +17,10 @@ import gzip
 import tarfile
 import requests
 #from udp_commands import *
-if os.environ['OSTYPE'] == 'archlinux':
+OSTYPE = os.environ['OSTYPE']
+if OSTYPE == 'archlinux':
     from droidcontroller.gpio_led import *
     led=GPIOLED() # cpuLED, commLED, alarmLED param 0 or 1
-
-#FIXME: syslog() usage.
-#FIXME: gz tgz bak not needed, throw out
 
     
             
@@ -341,8 +339,9 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
 
         self.traffic[1]=self.traffic[1]+len(sendstring) # adding to the outgoing UDP byte counter
 
-        if led:
+        if OSTYPE == 'archlinux': # "if led:" gives error on npe
             led.commLED(0)
+            print('commled off, sent') # debug
         
         try:
             sendlen=self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr) # tagastab saadetud baitide arvu
@@ -358,8 +357,8 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
             #syslog(msg)
             print(msg)
             traceback.print_exc()
-            if led:
-                led.alarmLED(1)
+            if OSTYPE == 'archlinux': # "if led:" gives error on npe
+                led.alarmLED(1) # send failure
             return None
 
 
@@ -424,6 +423,10 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
                 else:
                     self.ts_udpgot=self.ts # timestamp of last udp received
 
+            if OSTYPE == 'archlinux': # "if led:" gives error on npe
+                led.commLED(1) # data from server, comm OK
+                print('got from server, commled on') # debug, comm ok
+                
             lines=data.splitlines() # split message into key:value lines
             for i in range(len(lines)): # looking into every member of incoming message
                 if ":" in lines[i]:

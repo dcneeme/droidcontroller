@@ -281,7 +281,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                     udp.send(self.make_dichannel_svc(val_reg)) # sends this service tuple away via udp.send()
                 
             else:
-                msg='DI service to be rereported due to setup change attempt: '+val_reg
+                msg='DI service '+svc+' to be rereported'
                 print(msg)
                 udp.send(self.make_dichannel_svc(svc)) # sends this service as a correction 
                 

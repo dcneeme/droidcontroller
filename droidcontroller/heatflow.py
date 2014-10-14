@@ -2,7 +2,7 @@
 # Copyright 2014 droid4control
 #
 
-"""Classes and methods to calculate heat agent flow
+''' Classes and methods to calculate heat agent flow
 and transported energy
 
 usage:
@@ -11,7 +11,7 @@ usage:
     he = HeatExchange(0.05)
     fr.output(1,1)
     he.output(1,40,30)
-"""
+'''
 
 import time
 import logging
@@ -86,6 +86,8 @@ class HeatExchange:
     and the flow rate of the pump is known (can be updated).
 
     Default parameters correspond to ethylen-glycol 30%
+    
+    for water use cp1=4200, tp1=20, cp2=4200, tp2=50
     """
     def __init__(self, flowrate, cp1=3776, tp1=26.7,
                                  cp2=3919, tp2=93.3, interval=10):

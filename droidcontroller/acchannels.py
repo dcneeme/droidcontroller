@@ -125,7 +125,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                 #udp.syslog(msg)
                                 res+=1
                         elif regtype == 'h': # holding register, probably counter
-                            if (row(0) != '' and row[1] != ''): # mba,regadd probably valid
+                            if (row[0] != '' and row[1] != ''): # mba,regadd probably valid
                                 mba=int(row[0]) if row[0] != '' else 0
                                 regadd=int(row[1]) if row[1] != '' else None
                                 wcount=int(row[6]) if row[6] != '' else 1
