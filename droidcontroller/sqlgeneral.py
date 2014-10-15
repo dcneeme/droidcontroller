@@ -191,8 +191,6 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
         sendstring=''
         loghost=''
 
-        #sendstring += "AVV:"+self.APVER+"\nAVS:0\n"  # main juba saadab
-        udp.udpsend(sendstring) # sending directly to the monitoring server
         cur=conn.cursor()
         try:
             Cmd="BEGIN IMMEDIATE TRANSACTION" # conn1 buff2server
