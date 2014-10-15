@@ -1,18 +1,25 @@
 import os, traceback, sqlite3, time
-from droidcontroller.sqlgeneral import * # SQLgeneral  
+from droidcontroller.sqlgeneral import * # SQLgeneral
 s=SQLgeneral()
 
-''' Class and methods to read events from monitoring server handing access to google calendar '''
+''' Class and methods to read events from monitoring server handing access to google calendar.
+    Usage:
+    from droidcontroller.gcal.py import *
+    cal=Gcal('00101200006')
+    cal.sync()
+    cal.check('S')
+      the last one returns value for S (1 if just 'S' in event summary, 22 if 'S=22' in summary)
+'''
 
 class Gcal:
     ''' Class containing methods to read events from monitoring server handing access to google calendar '''
 
-    def __init__(self, host_id, days=3):
+    def __init__(self, host_id, days=3): # add sync_interval?
         self.host_id = host_id
         self.days = days
         s.sqlread('calendar')
         self.cur=conn.cursor()
-            
+
     def sync(self): # query to SUPPORTHOST, returning all events
         ''' Updates the local event buffer for days ahead. Should happen in background according to some interval... '''
         # example:   http://www.itvilla.ee/cgi-bin/gcal.cgi?mac=000101000001&days=10
@@ -37,7 +44,7 @@ class Gcal:
             #log.warning(msg)
             traceback.print_exc() # debug
             return 1 # kui ei saa normaalseid syndmusi, siis ka lopetab
-            
+
         #print(repr(events)) # debug
         Cmd = "BEGIN IMMEDIATE TRANSACTION"
         try:
@@ -62,15 +69,15 @@ class Gcal:
             #log.warning(msg)
             traceback.print_exc() # debug
             return 1 # kui insert ei onnestu, siis ka delete ei toimu
-            
-            
+
+
     def check(self, title): # set a new setpoint if found in table calendar (sharing database connection with setup)
         ''' Returns the current value for the event with title from the local event buffer '''
         ts = time.time()
         value='' # local string value
         if title == '':
             return None
-        
+
         Cmd = "BEGIN IMMEDIATE TRANSACTION"
         try:
             conn.execute(Cmd)
