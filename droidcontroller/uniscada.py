@@ -341,7 +341,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
 
         if OSTYPE == 'archlinux': # "if led:" gives error on npe
             led.commLED(0)
-            print('commled off, sent') # debug
+            #print('commled off, sent') # debug
         
         try:
             sendlen=self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr) # tagastab saadetud baitide arvu
@@ -425,7 +425,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
 
             if OSTYPE == 'archlinux': # "if led:" gives error on npe
                 led.commLED(1) # data from server, comm OK
-                print('got from server, commled on') # debug, comm ok
+                #print('got from server, commled on') # debug, comm ok
                 
             lines=data.splitlines() # split message into key:value lines
             for i in range(len(lines)): # looking into every member of incoming message

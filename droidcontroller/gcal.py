@@ -87,7 +87,7 @@ class Gcal:
                 value=row[0] # overwrite with the last value before now
                 #print(Cmd,', value',value) # debug. voib olla mitu rida, viimane value jaab iga title jaoks kehtima
             conn.commit()
-            return value # last one for given title becomes effective. can be empty string too, then use default value for setpoint related to title
+            return str(value) # last one for given title becomes effective. can be empty string too, then use default value for setpoint related to title
         except:
             traceback.print_exc()
             return None

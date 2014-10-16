@@ -88,7 +88,7 @@ class Sauna:
             self.heater = 0
             self.ready = 0
             self.alarm = 1
-            log.warning('invalid temperature', actTemp, 'missing or faulty sensor?')
+            log.warning('invalid sauna temperature '+ str(actTemp) + ', missing or faulty sensor?')
             return self.state, self.heater, self.alarm, self.ready
 
         if now > self.startTS + 60*self.setTime or now > self.startTS + 60*self.maxTime:
