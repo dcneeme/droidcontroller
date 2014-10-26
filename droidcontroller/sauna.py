@@ -113,9 +113,10 @@ class Sauna:
         ''' Sets the level signal to enable sauna from calendar, to catch the changes '''
         if (1&input) != self.cal_enable:
             log.info('sauna control signal change from calendar detected, new level '+str(1&input))
-            self.set_state(1&input)
             self.cal_enable = (1&input)
-
+            if self.cal_enable == 1: # only starts from calendar, stop by timeout or remote panel or local button
+                self.set_state(1)
+                
     def get_cal(self):
         ''' Returns the calendar_enable status '''
         return self.cal_enable
@@ -189,11 +190,11 @@ class Sauna:
                 self.heater = 0
                 log.info('sauna stopped due to timeout reached')
 
-            if actTemp > self.setTemp + self.hyst:
+            if actTemp > self.setTemp + self.hyst and self.heater == 1: # so far on
                 self.heater = 0
                 self.ready = 1
                 log.info('heater off')
-            elif actTemp < self.setTemp - self.hyst:
+            elif actTemp < self.setTemp - self.hyst and self.heater == 0: # so far off
                 self.heater = 1
                 log.info('heater on')
         else:
