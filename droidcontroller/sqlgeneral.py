@@ -1,6 +1,6 @@
 #to be imported into modbus_sql. needs mb and conn
 '''  Creates multiple modbus access channels for various access channels defined in devices.sql '''
- 
+
 import time, datetime
 import sqlite3
 import traceback
@@ -33,7 +33,7 @@ try:
         print('modbus connection(s) already existing')
 except:
     # several connections may be needed, tuple of modbus connections! also direct rtu, rtu via tcp-serial or tcp-modbustcp
-    for file in ['devices.sql','setup.sql']:
+    for file in ['devices.sql','setup.sql']: # channel tables opened by dchannels or acchannels
         sql=open(file).read() # (num integer,rtuaddr integer,tcpaddr)
         print('reading',file)
         try:
@@ -45,7 +45,7 @@ except:
             traceback.print_exc()
 
     mb=[] # modbus comm instance
-    mbhost=[] # tcp or tty 
+    mbhost=[] # tcp or tty
     Cmd="select mbi, tcpaddr from devices group by mbi"
     cur=conn.cursor()
     cur.execute(Cmd)
@@ -58,14 +58,14 @@ except:
         else:
             if row[1] == 'npe_io': # using subprocess on techbase npe
                 mb.append(CommModbus(host=row[1], type='n')) # npe_io, subexec / subprocess
-                mbhost.append(row[1]) 
+                mbhost.append(row[1])
             elif row[1] == 'npe_udpio': # using socat on techbase npe
-                mb.append(CommModbus(host=row[1], type='u')) # npe_udpio, socat 
+                mb.append(CommModbus(host=row[1], type='u')) # npe_udpio, socat
                 mbhost.append(row[1])
             else: # probably using dev/tty, rtu
                 mb.append(CommModbus(host=row[1])) # probably olinuxino serial. speed, parity in comm_modbus
                 mbhost.append(row[1]) # to be used in recreation in dchannels or acchannels
-            
+
         #FIXME handle serial or xport connections too! also npe_io via subprocess!
     print('sqlgeneral: opened setup, devices tables and created '+str(len(mb))+' modbus connection(s)')
 
@@ -91,13 +91,13 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
 
         except: # some linux
             import os
-            if 'ARCH' in os.uname()[2]:  # olinuxino
+            if 'ARCH' in os.environ: # uname()[2]:  # olinuxino
                 self.OSTYPE='archlinux'
                 print('running on archlinux')
                 #os.chdir('/root/d4c') # OLINUXINO
                 #from droidcontroller.webserver import WebServer
 
-            elif 'techbase' in os.environ['HOSTNAME']: # npe, backgroundis ei ole kattesaadav!!!
+            elif 'techbase' in os.environ: # : # npe, backgroundis ei ole kattesaadav!!!
                 self.OSTYPE='techbaselinux'
                 # kumb (rtu voi tcp) importida, on maaratud devices tabeliga!
 
@@ -120,7 +120,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
         cur.execute(Cmd)
         conn.commit()
         for row in cur:
-            output.append(row) 
+            output.append(row)
         return output
 
 
@@ -179,6 +179,23 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
             traceback.print_exc()
             time.sleep(1)
             return 1
+
+
+    def get_setup(self, register, table = 'setup'):
+        ''' Returns value for one register '''
+        Cmd="select value from '+table+' where register='"+register+"'"
+        #print(Cmd) # debug
+        cur.execute(Cmd)
+        value='' # string!
+        for row in cursor: # should be one row only
+        value=row[0]
+        conn.commit() # setup database
+        if value == '':
+        msg='no setup value '+register+'! using 0 instead!'
+        value='0'
+        print(msg) # debug
+        udp.syslog(msg)
+        return value
 
 
     def report_setup(self): # READ and send setup data to server
@@ -401,11 +418,11 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
         for row in cur: # one row per member
             #print('get_value() row:', row) # debug
             value.append(row[0])
-        
+
         conn.commit()
         return value # tuple from member values
-        
-        
+
+
     def get_value(self, svc, table='dichannels'): # returns tuple of service values if numeric
         ''' Returns member values as tuple from channel table (ai, di, counter) based on service name '''
         cur=conn.cursor()
@@ -476,7 +493,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
             udp.syslog(msg)
             return 1
 
-            
+
     def getbit_do(self, mbi, mba, regadd, bit):  # to set a readable output channel by the physical addresses
         ''' Reads the wanted output channel value by the physical addresses (mbi,mba,regadd,bit) '''
         value = None
@@ -498,7 +515,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
             print(msg)
             udp.syslog(msg)
             return None
-            
+
 
     def setby_dimember_do(self, svc, member, value): # to set an output channel in dochannels by the DI service name and member (defined in dichannels)
         '''Sets  output channel by the service name and member using service name defined for this output in dichannels table '''
@@ -548,7 +565,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
         #print('bit_replace var: ',format("%04x" % word),bit,value,format("%04x" % ((word & (65535 - 2**bit)) + (value<<bit)))) # debug
         return ((word & (65535 - 2**bit)) + (value<<bit))
 
-        
+
     def check_setup(self, table):
         ''' Looks for conflicts in sql tables and prints the channels defined '''
         cur=conn.cursor()
@@ -566,12 +583,12 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
             tmp_array.append(int(row[1])) # slaves on this mb channel
             dev_dict.update({mbi : tmp_array})
         print('defined in devices (mbi:mba)',dev_dict)
-            
+
         Cmd="select mbi,mba,regadd,val_reg,member from "+table+" where mba+0>0 group by mbi,mba,regadd"
         cur.execute(Cmd)
         for row in cur:
             if row[0] in dev_dict: # in keys
-                if int(row[1]) in dev_dict[row[0]]: # 
+                if int(row[1]) in dev_dict[row[0]]: #
                     print('channel mbi,mba,regadd,member '+str(row[0])+','+str(row[1])+','+str(row[2])+','+str(row[3])+' correctly defined in '+table)
                 else:
                     bad=1

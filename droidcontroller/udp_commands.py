@@ -368,8 +368,11 @@ class RegularComm(SQLgeneral): # r
         self.ts_regular=self.app_start - interval # for immediate sending on start
         self.ts=self.app_start
         self.uptime=[0,0,0]
-        self.uptime[0]=int(self.subexec('cut -f1 -d. /proc/uptime',1)) # should be avoided on npe, use only once
-        self.uptime[2]=self.uptime[0] # counting on from app init 
+        try:
+            self.uptime[0]=int(self.subexec('cut -f1 -d. /proc/uptime',1)) # should be avoided on npe, use only once
+            self.uptime[2]=self.uptime[0] # counting on from app init 
+        except: # not unix&linux
+            pass
         self.set_pyalivecmd() # to watch the process list for this as process a mark of being alive
         self.set_udpalivecmd() # to watch udp conn being alive
       

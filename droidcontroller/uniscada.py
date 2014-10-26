@@ -820,6 +820,7 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
             
             
     def chk_calevents(self, title = ''): # set a new setpoint if found in table calendar (sharing database connection with setup)
+        ''' Obsolete, functionality moved to gcal.py '''
         ts=time.time()
         cur=self.conn.cursor()
         value='' # local string value
