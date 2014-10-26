@@ -13,9 +13,13 @@
     Related services.
       1) SEW:0 1 0  # cal_enable man_enable, critalarm(ready)
       2) SRW:0 1 0  # state, heater, critalarm(malfunction)
-         problems could be too cold or too hot or not stopping in time.
+         problems to output alarm could be too cold or too hot or not stopping in time.
 
-    nagios services are stacked from bottom to up , keep heater the last!
+    These external enable signals as levels are converted to start/stop pulses,
+    to enable stopping from another source than the start came. Action via set_state.
+    Local buttons or special calendar commands included via set_state command directly.
+
+    Nagios services are stacked from bottom to up , keep heater the last!
 
     usage:
     from droidcontroller.sauna import *
@@ -24,29 +28,48 @@
     sa.heater(1)
     sa.setTemp(87)
     sa.setLen(180)
-    Enabling signal can be manual (button or app) or from calendar
-
+    Enabling signal can be manual (button or app) or from calendar.
+    To stop sauna from remote if started by calendar, start and stop remotely.
+    Local button stops immediately, also uptime reaching timeout.
 '''
 
-import time
+import time, sys
 import logging
+#log = logging.getLogger(__name__)
+#log.addHandler(logging.NullHandler())
+
+# define a Handler which writes INFO messages or higher to the sys.stderr
+console = logging.StreamHandler(sys.stdout)
+console.setLevel(logging.INFO)
+# set a format which is simpler for console use
+formatter = logging.Formatter('%(name)-12s: %(levelname)-8s %(message)s')
+# tell the handler to use this format
+console.setFormatter(formatter)
+# add the handler to the root logger
+logging.getLogger('').addHandler(console)
 log = logging.getLogger(__name__)
+log.setLevel(logging.INFO)
 
 class Sauna:
     ''' Class to control electric sauna and it's heater. '''
-    def __init__(self, temp=85, time=120, hyst=2):
+    def __init__(self, temp=85, time=60*120, hyst=2):
         self.set_temp(temp) # degC, to keep during enabled state
-        self.set_time(time)
+        self.set_time(time) # in seconds
         self.state = 0
+        self.sens_errorcount = 0 # temperature sensor missing if 256 degC
         self.set_state(0) # test for off
         self.startTS = 0 # ts of start if not 0
+        self.alarmTS = 0 # to keep temperature alarm up for 5 minutes at least
         self.heater = 0
         self.ready = 0
         self.alarm = 0
+        self.alarm_desc = ''
         self.maxTemp = 120 # absolute limit degC
-        self.maxTime = 360 # absolute limit minutes
+        self.maxTime = 60*360 # absolute limit seconds
         self.hyst = hyst
-        self.enabled_time = 0
+        self.uptime = 0 # sauna uptime, counting from start
+        self.cal_enable = 0 # control from calendar, keeping the current state
+        self.rem_enable = 0  # control from remote panel, keeping the current state
         log.info('Sauna init')
 
     def set_temp(self, input):
@@ -63,8 +86,8 @@ class Sauna:
         if self.state == 0 and (1&input) == 1: # so far disabled, starting
             self.startTS = time.time()
             log.info('sauna on')
-        else: # must be stopping
-            self.startTS = 0 # or should we keep the last start ts?
+        elif self.state == 1 and (1&input) == 0: # stopping
+            #self.startTS = 0 # or should we keep the last start ts?
             log.info('sauna off')
         self.state = (1&input) # 0 or 1 allowed
 
@@ -75,31 +98,97 @@ class Sauna:
     def set_time(self, input):
         ''' If this time of state being enabled is elapsed, sauna will be autodisabled '''
         self.setTime = input
-        log.info('sauna working time changed to '+str(self.setTime)+' minutes')
+        log.info('sauna working time changed to '+str(self.setTime)+' seconds')
 
     def get_time(self):
-        ''' Returns the working time length set for sauna '''
+        ''' Returns the working time length set for sauna in seconds '''
         return self.setTime
 
-    def output(self, actTemp):
-        ''' Outputs self.state, self.heater, self.alarm, self.ready as a list of int values.  '''
-        now = time.time()
-        if actTemp == 256: # temp sensor error
-            self.heater = 0
-            self.ready = 0
-            self.alarm = 1
-            log.warning('invalid sauna temperature '+ str(actTemp) + ', missing or faulty sensor?')
-            return self.state, self.heater, self.alarm, self.ready
+    def get_uptime(self):
+        ''' Returns the working time from sauna start in seconds '''
+        return self.uptime
 
-        if now > self.startTS + 60*self.setTime or now > self.startTS + 60*self.maxTime:
-            self.set_state(0) # switch off
-            self.heater = 0
-            log.info('sauna off')
+
+    def set_cal(self,input):
+        ''' Sets the level signal to enable sauna from calendar, to catch the changes '''
+        if (1&input) != self.cal_enable:
+            log.info('sauna control signal change from calendar detected, new level '+str(1&input))
+            self.set_state(1&input)
+            self.cal_enable = (1&input)
+
+    def get_cal(self):
+        ''' Returns the calendar_enable status '''
+        return self.cal_enable
+
+    def set_rem(self,input):
+        ''' Sets the level signal to enable sauna from remote panel, to catch the changes '''
+        if (1&input) != self.rem_enable:
+            log.info('sauna control signal change from remote panel detected, new level '+str(1&input))
+            self.set_state(1&input)
+            self.rem_enable = (1&input)
+
+
+    def get_rem(self):
+        ''' Returns the calendar_enable status '''
+        return self.cal_enable
+
+    def set_alarm(self,input):
+        ''' Sets or resets the alarm '''
+        if (1&input) != self.alarm:
+            log.info('alarm state changed to '+str(1&input))
+            self.alarm = (1&input)
+            self.alarm_desc = 'alarm level external change to '+str(self.alarm)+' at '+str(int(time.time()))
+
+    def get_alarm(self):
+        ''' Returns the alarm status and description '''
+        return self.alarm, self.alarm_desc # int, string
+
+
+    def output(self, actTemp):
+        ''' Returns state, heater, alarm, ready as a list of int values.  '''
+        now = time.time()
+        if self.alarm == 0:
+            if actTemp == 256: # temp sensor error
+                self.sens_errorcount += 1
+                if self.sens_errorcount  > 5:
+                    self.alarm_desc = 'temperature sensor disconnected or faulty!'
+                    self.alarm = 1
+            elif actTemp < 10:
+                self.alarm_desc = 'temperature sensor must be faulty, temperature too low:'+str(actTemp)
+                self.alarm = 1
+
+            elif actTemp > self.maxTemp:
+                self.alarm = 1
+                self.alarm_desc = 'Sauna temperature '+str(actTemp)+' degC too high!'
+
+            elif actTemp < self.setTemp/2.0 and self.uptime > self.maxTime/3 and self.state == 1: # not in alarm previosly
+                self.alarm = 1 # alarm too cold, heater failure
+
+            if self.alarm > 0:
+                alarmTS = now
+                self.heater = 0
+                self.ready = 0
+                self.set_state(0)
+                self.heater = 0
+                log.warning(self.alarm_desc)
+                return self.state, self.heater, self.alarm, self.ready
+        else:
+            if actTemp > 10 and actTemp < self.setTemp and now > self.alarmTS + 300: # alarm length at least 5 minutes
+                self.alarm = 0
+                self.alarm_desc = 'sauna temperature alarm was reset at '+str(now)
+                log.warning(self.alarm_desc)
+            # other alarms to be reset via external process, using set_alarm(0), time will be recorded
 
         if actTemp < self.setTemp - 10:
-            self.ready = 0
+            self.ready = 0 # can be ready even if sauna off
 
         if self.state == 1:
+            self.uptime = now - self.startTS # seconds from sauna start
+            if self.uptime > self.setTime or self.uptime > self.maxTime:
+                self.set_state(0)
+                self.heater = 0
+                log.info('sauna stopped due to timeout reached')
+
             if actTemp > self.setTemp + self.hyst:
                 self.heater = 0
                 self.ready = 1
@@ -109,13 +198,8 @@ class Sauna:
                 log.info('heater on')
         else:
             self.heater = 0
-
-        if self.alarm == 0 and (actTemp > self.maxTemp or \
-                (actTemp < self.setTemp/2.0 and (now > self.startTS + 60*self.maxTime/3) and self.state == 1)): # not in alarm previosly
-            self.set_state(0)
-            self.heater = 0
-            self.alarm = 1 # alarm too cold, heater failure
-            self.ready = 0
-            log.warning('abnormal sauna temperature '+str(actTemp)+' degC - either too high or too low. ')
+            self.uptime = 0
 
         return self.state, self.heater, self.alarm, self.ready
+
+
