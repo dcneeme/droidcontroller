@@ -1,31 +1,34 @@
-# to be imported to access modbus registers as analogue io 
+# to be imported to access modbus registers as analogue io
 # 03.04.2014 neeme
-# 04.04.2014 
+# 04.04.2014
 # 06.04.2014 seguential register read for optimized reading
 
 
-''' mb[mbi].read(mba, reg, count = 1, type = 'h'):  # modbus read example 
-    
-    mb[mbi].write(mba, reg, type = 'h', **kwargs):  # modbus write example 
+''' mb[mbi].read(mba, reg, count = 1, type = 'h'):  # modbus read example
+
+    mb[mbi].write(mba, reg, type = 'h', **kwargs):  # modbus write example
         :param 'mba': Modbus device address
         :param 'reg': Modbus register address
         :param 'type': Modbus register type, h = holding, c = coil
         :param kwargs['count']: Modbus registers count for multiple register write
         :param kwargs['value']: Modbus register value to write
         :param kwargs['values']: Modbus registers values array to write
-''' 
+'''
 
 
 
-from droidcontroller.sqlgeneral import * # SQLgeneral  
-s=SQLgeneral() 
+from droidcontroller.sqlgeneral import * # SQLgeneral
+s=SQLgeneral()
+import time
+import logging
+log = logging.getLogger(__name__)
 
 class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
     ''' Access to io by modbus binary register bits (and also via services?)
         SQLgeneral will open shared Modbus client.
         Able to sync input and output channels and accept changes to service members by their sta_reg code
     '''
-    
+
     def __init__(self, in_sql = 'dichannels.sql', out_sql = 'dochannels.sql', readperiod = 0, sendperiod = 30): # sends immediately on change too!
         # readperiod 0 means read on every execution. this is usually wanted behaviour to detect any di changes as soon as possible.
         self.setReadPeriod(readperiod)
@@ -44,11 +47,11 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         ''' Set the refresh period, executes sync if time from last read was earlier than period ago '''
         self.sendperiod = invar
 
-        
+
     def sqlread(self,table):
         s.sqlread(table) # read dichannels
-        
-        
+
+
     def Initialize(self): # before using this create s=SQLgeneral()
         ''' initialize delta t variables, create tables and modbus connection '''
         self.ts = round(time.time(),1)
@@ -57,30 +60,35 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         #self.conn = sqlite3.connect(':memory:')
         self.sqlread(self.in_sql) # read dichannels
         self.sqlread(self.out_sql) # read dochannels if exist
-        
-        
-        
-    def read_di_grp(self,mba,regadd,count,mbi=0): # using self,in_sql as the table to store in.
+
+
+
+    def read_di_grp(self,mba,regadd,count,mbi=0, regtype='h'): # using self,in_sql as the table to store in.
         ''' Read sequential register group and store raw into table self.in_sql. Inside transaction! '''
         if self.ts == 0:
-            self.ts=int(round(time.time())) # for debugging time is needed 
-            
+            self.ts=int(round(time.time())) # for debugging time is needed
+
         cur=conn.cursor()
-        msg='reading data for dichannels group from mba '+str(mba)+' regadd '+str(regadd)+' count '+str(count)
-        #print(msg) # debug
+        msg='d_grp read from mba '+str(mba)+', regadd '+str(regadd)+', count '+str(count)+', regtype '+regtype
+
         if count>0 and mba != 0:
             try:
                 if mb[mbi]:
-                    result = mb[mbi].read(mba, regadd, count=count, type='h') # client.read_holding_registers(address=regadd, count=1, unit=mba)
-                    
+                    result = mb[mbi].read(mba, regadd, count=count, type=regtype)
+                    msg += ' OK, raw '+str(result)
+                else:
+                    msg += ' -- FAIL, no mb[] for '+str(mbi)
+                print(msg)
             except:
-                print('read_di_grp: mb['+str(mbi)+'] missing, device with mba '+str(mba)+' not defined in devices.sql?')
+                msg += ' -- FAILED!'
+                print(msg)
                 traceback.print_exc()
                 return 2
         else:
-            print('invalid parameters for read_di_grp()!',mba,regadd,count)
+            msg += '-- FAIL, invalid parameters of mba '+str(mba)+' or count '+str(count)
+            print(msg)
             return 2
-            
+
         if result != None:
             try:
                 for i in range(len(result)): # register values in tuple
@@ -100,7 +108,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                         if srow[1] != '':
                             ovalue=int(eval(srow[1])) # bit 0..15, old bit value
                         #print('old value for mbi, mba, regadd, bit',mbi,mba,regadd+i,bit,'was',ovalue) # debug
-                        
+
                         try:
                             value=int((result[i]&2**bit)>>bit) # new bit value
                             #print('decoded new value for mbi, mba, regadd, bit',mbi,mba,regadd+i,bit,'is',value,'was',ovalue) # debug
@@ -126,7 +134,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                             conn.execute(Cmd) # write
                         except:
                             traceback.print_exc()
-                
+
                 return 0
             except:
                 traceback.print_exc()
@@ -139,12 +147,12 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             print(msg)
             time.sleep(0.5) # hopefully helps to avoid sequential error / recreations
             return 1
-            
-            
+
+
     def sync_di(self): # binary input readings to sqlite, to be executed regularly.
         #global MBerr
         res=0 # returncode
-        mba=0 
+        mba=0
         val_reg=''
         mcount=0
         block=0 # vigade arv
@@ -161,11 +169,13 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         bmba=0 # modbus address
         bmbi=0 # modbus channel numbered from 0
         bcount=0 # number of registers to read
-        
+        regtype=''
+        bregtype=''
+
         # -- DI CONF BITS
         # 1 - value 1 = warningu (values can be 0 or 1 only)
-        # 2 - value 1 = critical, 
-        # 4 - value inversion 
+        # 2 - value 1 = critical,
+        # 4 - value inversion
         # 8 - value to status inversion
         # 16 - immediate notification on value change (whole multivalue service will be (re)reported)
         # 32 - this channel is actually a writable coil output, not a bit from the register (takes value 0000 or FF00 as value to be written, function code 05 instead of 06!)
@@ -174,43 +184,46 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         try:
             Cmd="BEGIN IMMEDIATE TRANSACTION" # hoiab kinni kuni mb suhtlus kestab? teised seda ei kasuta samal ajal nagunii. iga tabel omaette.
             conn.execute(Cmd)
-            Cmd="select mba,regadd,mbi from "+self.in_sql+" where mba != '' and regadd != '' group by mbi,mba,regadd" # tsykkel lugemiseks, tuleks regadd kasvavasse jrk grupeerida
-            cur.execute(Cmd) # selle paringu alusel raw update, hiljem teha value arvutused iga teenuseliikme jaoks eraldi 
+            Cmd="select mba,regadd,mbi,regtype from "+self.in_sql+" where mba != '' and regadd != '' group by mbi,mba,regtype,regadd" # tsykkel lugemiseks, tuleks regadd kasvavasse jrk grupeerida
+            cur.execute(Cmd) # selle paringu alusel raw update, hiljem teha value arvutused iga teenuseliikme jaoks eraldi
             for row in cur: # find sequential group size to read
                 mba=int(row[0])
                 regadd=int(row[1])
                 mbi=int(row[2]) # tegelt num niigi
+                regtype=row[3] if row[3] != '' else 'h'
                 if bfirst == -1: # unassigned so far
                     bfirst = regadd # register address to start with sequential block
-                    blast = regadd 
+                    blast = regadd
                     bcount=1
                     bmba=mba
                     bmbi=mbi
+                    bregtype= regtype
                     #print('di first group mba '+str(bmba)+' start from reg ',bfirst) # debug, count yet unknown
-                    
+
                 else: # not the first
                     if mbi == bmbi and mba == bmba and regadd == blast+1: # next regadd found, sequential group still growing
                         blast = regadd # shift the end address
                         bcount=bcount+1 # register count to read
                         #print('di group starting from '+str(bfirst)+': end shifted to',blast) # debug
-                    else: # a new group started, make a query for previous 
+                    else: # a new group started, make a query for previous
                         #print('di group end detected at regadd',blast,'bcount',bcount) # debugb
                         #print('going to read di registers from',bmba,bfirst,'to',blast,'regcount',bcount) # debug
-                        res=res+self.read_di_grp(bmba,bfirst,bcount,bmbi) # reads and updates table with previous data
+                        res=res+self.read_di_grp(bmba,bfirst,bcount,bmbi,bregtype) # reads and updates table with previous data
                         bfirst = regadd # new grp starts immediately
                         blast = regadd
                         bcount=1
                         bmba=mba
                         bmbi=mbi
+                        bregtype= regtype
                         #print('di next group found: mba '+str(bmba)+', starting from reg ',bfirst) # debug
-                        
+
             if bfirst != -1: # last group yet unread
                 #print('di group end detected at regadd',blast) # debugb
                 #print('2going to read di registers from',bmba,bfirst,'to',blast,'regcount',bcount) # debug
-                res=res+self.read_di_grp(bmba,bfirst,bcount,bmbi) # reads and updates table
-            
+                res=res+self.read_di_grp(bmba,bfirst,bcount,bmbi,bregtype) # reads and updates table
+
             #  bit values updated for all dichannels
-            
+
             conn.commit()  # dichannel-bits transaction end
             if res == 0:
                 #print('.',) # debug, to mark di polling interval
@@ -233,8 +246,8 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
 
 
-    def make_dichannels(self, svc = ''): # chk all if svc empty 
-        ''' Send di svc with changed member or (lapsed sendperiod AND 
+    def make_dichannels(self, svc = ''): # chk all if svc empty
+        ''' Send di svc with changed member or (lapsed sendperiod AND
             updated less than 5 s ago (still fresh). ts_chg used as update ts).
             If svc != '' then that svc is resent without ts check
         '''
@@ -253,20 +266,20 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         try:
             Cmd="BEGIN IMMEDIATE TRANSACTION" # transaction, dichannels
             conn.execute(Cmd) # dichannels
-    
+
             # dichannels(mba,regadd,bit,val_reg,member,cfg,block,value,status,ts_chg,chg,desc,comment,ts_msg,type integer)
             if svc == '':
                 Cmd="select val_reg, max((chg+0) & 1), min(ts_msg+0) from \
                     dichannels where ((chg+0 & 1) and ((cfg+0) & 16)) or \
                     ("+str(self.ts)+">ts_msg+"+str(self.sendperiod)+") \
                     group by val_reg"
-                # take into account cfg! not all changes are to be reported immediately! 
+                # take into account cfg! not all changes are to be reported immediately!
                 # cfg is also for application needs, not only monitoring!
-               
+
                 cur.execute(Cmd)
 
                 for row in cur: # services to be processed. either just changed or to be resent
-                    
+
                     #lisa='' # string of space-separated values
                     val_reg=''
                     sta_reg=''
@@ -279,15 +292,15 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                         msg='DI service to be reported due to change: '+val_reg
                         print(msg)
                     udp.send(self.make_dichannel_svc(val_reg)) # sends this service tuple away via udp.send()
-                
+
             else:
                 msg='DI service '+svc+' to be rereported'
                 print(msg)
-                udp.send(self.make_dichannel_svc(svc)) # sends this service as a correction 
-                
+                udp.send(self.make_dichannel_svc(svc)) # sends this service as a correction
+
             conn.commit() # dichannels transaction end
             return 0
-            
+
         except:
             traceback.print_exc()
             #syslog('err: '+repr(err))
@@ -302,7 +315,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
 
     def make_dichannel_svc(self,val_reg): # one service. find status and send away.
-        ''' Find service status and return tuple of sta_reg,status, val_reg,value to be sent away. 
+        ''' Find service status and return tuple of sta_reg,status, val_reg,value to be sent away.
             Execute by make_dichannels() to get transaction
            '''
         # no transaction started here because we are in transaction (started make_dichannels())
@@ -345,7 +358,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 ots=eval(srow[9]) # value ts timestamp
             if srow[10] != '':
                 chg=eval(srow[10]) # change flag 0..3
-            
+
             #print 'make_dichannel_svc():',val_reg,'member',member,'value before status proc',value,', lisa',lisa  # temporary debug
 
             if lisa != "": # not the first member any nmore
@@ -374,7 +387,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             #dichannels table update with new chg ja status values. no changes for values! chg bit 0 off! set ts_msg!
             Cmd="UPDATE "+self.in_sql+" set ts_msg='"+str(self.ts)+"', chg='"+str(chg&2)+"' where val_reg='"+str(val_reg)+"'" # koik liikmed korraga sama ts_msg
             conn.execute(Cmd)
-        
+
         sta_reg=val_reg[:-1]+"S" # service status register name
         if sta_reg == val_reg: # only status will be sent then!
             val_reg=''
@@ -382,8 +395,8 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
         return sta_reg,sumstatus,val_reg,lisa  # returns tuple to send. to be send to udp.send([])
 
-            
-            
+
+
     def sync_do(self): # synchronizes DO bits (output channels) with data in dochannels table, checking actual values via dichannels table
         # find out which do channels need to be changed based on dichannels and dochannels value differencies
         # and use write_register() write modbus registers (not coils) to get the desired result (all do channels must be also defined as di channels in dichannels table!)
@@ -403,9 +416,9 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         #Cmd4=''
         ts_created=self.ts # selle loeme teenuse ajamargiks
         cur=conn.cursor()
-        
+
         # coils not handled yet
-            
+
         # only write the new word if at least one bits in dochannel is not equal to the corresponding bit in dichannels
         Cmd="select dochannels.mba, dochannels.regadd, dochannels.bit, dochannels.value, dichannels.value, dichannels.mbi from \
             dochannels left join dichannels on dochannels.mba = dichannels.mba AND dochannels.mbi = dichannels.mbi AND \
@@ -419,10 +432,10 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             reg_dict={} # {reg:bit_dict}
             mba_dict={} # {mba:reg_dict)
             mbi_dict={} # {mbi: mba_dict}
-            
+
             for row in cur: # for every bit, sorted by mbi, mba, regadd, bit
                 tmp_array=[] # do,di bits together
-                #print('got row about change needed from dochannels-dichannels left join',row) # debug 
+                #print('got row about change needed from dochannels-dichannels left join',row) # debug
                 regadd=0
                 mba=0
                 bit=0
@@ -446,11 +459,11 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                     print(msg)
                     #udp.syslog(msg)
                     traceback.print_exc()
-                    
+
                 #print('sync_do mbi_dict',mbi_dict) # debug
-                
-                
-                
+
+
+
             # nested dictionaries ready, let's process
             for mbi in mbi_dict.keys(): # this key is string!
                 #print('processing mbi',mbi)
@@ -464,7 +477,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                         except:
                             print('device mbi,mba',mbi,mba,'not defined in devices.sql')
                             return 2
-                            
+
                         for bit in bit_dict.keys():
                             #print('do di bit,[do,di]',bit,bit_dict[bit]) # debug
                             word2=s.bit_replace(word,bit,bit_dict[bit][0]) # changed the necessary bit. can't reuse / change word directly!
@@ -481,7 +494,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                         #udp.syslog(msg)
                         print(msg)
 
-                    
+
         except:
             msg='problem with dichannel grp select in write_do_channels! '+str(sys.exc_info()[1])
             print(msg)
@@ -496,9 +509,9 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         #print(msg) # debug
         #syslog(msg) # debug
         return 0
-        # write_dochannels() end. 
-        
-        
+        # write_dochannels() end.
+
+
     def parse_udp(self,data_dict): # search for setup or set di remote control signals
         ''' Setup change for variables in sql for modbus di channels '''
         cur=conn.cursor()
@@ -519,22 +532,22 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                     conn.commit()
                     for row in cur: # single member
                         print('srow:',row) # debug
-                        sqlvalue=int(row[4]) if row[4] != '' else 0 # eval(row[4]) if row[4] != '' else 0 # 
+                        sqlvalue=int(row[4]) if row[4] != '' else 0 # eval(row[4]) if row[4] != '' else 0 #
                         try:
                             value=eval(valmembers[valmember])
                         except:
                             value = sqlvalue # no change!
                             #log.warning('invalid value in message from server for key '+key)
-                            
-                        regtype=row[5] # 'h' 'i' 's!' 
-                        
+
+                        regtype=row[5] # 'h' 'i' 's!'
+
                         if (sqlvalue != value and regtype == 's!'): # ok to change value
-                            # replace actual counters only if bigger than existing or zero, no limits for setup type 's!' 
+                            # replace actual counters only if bigger than existing or zero, no limits for setup type 's!'
                             member=valmember+1
-                            
+
                             print('going to replace '+key+' member '+str(member)+' existing value '+str(sqlvalue)+' with '+str(value)) # debug
                             # faster to use physical data instead of svc. also clear counter2power buffer if cp[] exsists!
-                            
+
                             if regtype == 's!': # setup row, external modif allowed (!)
                                 if (row[0] == '' and row[1] == ''): # mba, regadd
                                     if self.set_divalue(str(key),member,value) == 0: # set setup value in sql table
@@ -552,12 +565,12 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                                     print(msg)
                                     udp.syslog(msg)
                                     res+=1
-                            
+
                         else: # skip
                             print('dchannels.parse_udp: member value write for key '+key+' SKIPPED due to sqlvalue,value,regtype',sqlvalue,value,regtype)
                             self.make_dichannels(key) # to correct illegal data just received and replied for this service NOT HERE!!!
-                            
-                #if setup_changed == 1: # no need to dump di, too much dumping. ask di states after reboot, if regtype == 's!' 
+
+                #if setup_changed == 1: # no need to dump di, too much dumping. ask di states after reboot, if regtype == 's!'
                 #    print('going to dump table',self.in_sql)
                 #    try:
                 #        s.dump_table(self.in_sql)
@@ -566,18 +579,18 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                  #       traceback.print_exc() # debug
             #if res == 0:
                 #self.read_all() # reread the changed channels to avoid repeated restore - no need
-                
+
         return res # kui setup_changed ==1, siis todo = varlist! aga kui samal ajal veel miski ootel?
-        
-        
+
+
     def set_divalue(self,svc,member,value): # sets binary variables within services for remote control, based on service name and member number
         ''' Setting member value using sqlgeneral set_membervalue. adding sql table below for that '''
         return s.set_membervalue(svc,member,value,self.in_sql)
-        
+
     def set_dovalue(self,svc,member,value): # sets binary variables within services for remote control, based on service name and member number
         ''' Setting member value using sqlgeneral set_membervalue. adding sql table below for that '''
         return s.set_membervalue(svc,member,value,self.out_sql)
-        
+
     def doall(self): # do this regularly, blocks for the time of socket timeout!
         ''' Does everything on time if executed regularly '''
         res=0 # returncode
@@ -585,7 +598,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         if self.ts - self.ts_read>self.readperiod:
             self.ts_read = self.ts
             try:
-                res = res + self.sync_di() # 
+                res = res + self.sync_di() #
                 res = res + self.sync_do() # writes output registers to be changed via modbus, based on feedback on di bits
                 res = res + self.make_dichannels() # compile services and send away on change or based on ts_last regular basis
             except:

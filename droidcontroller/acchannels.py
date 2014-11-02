@@ -1,7 +1,9 @@
 # to be imported to access modbus registers as counters
 # combines previous achannels.py and cchannels.py into one universal acchannel.py. add cfg bit for counter?
 # 28 may 2014.... handle negative values
-# 27.06.2014 make_svc() handles change and age detection together with value (incl power) calc. svc stalled if a member is older than 10xself.readperiod
+# 27.06.2014 make_svc() handles state change and age detection together with value (incl power) calc. 
+#      svc stalled if a member is older than 10xself.readperiod
+
 ''' For testing:
     from main_energy_starman import *
     comm_doall()  # read mb 
@@ -82,20 +84,20 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         res=0
         member=0
         if data_dict == {} or data_dict == '' or data_dict == None:
-            print('ac: nothing to parse in',data_dict)
+            log.warning('ac: nothing to parse in',data_dict)
             return 0
-        print('acchannels: parsing key:value data ',data_dict) # debug
+        log.debug('acchannels: parsing key:value data ',data_dict) # debug
         for key in data_dict: # process per key:value
             if key[-1] == 'W': # must end with W to be multivalue service containing setup values
                 valmembers=data_dict[key].split(' ') # convert value to member list 
-                print('number of members for',key,len(valmembers),valmembers) # debug
+                log.debug('number of members for',key,len(valmembers),valmembers) # debug
                 for valmember in range(len(valmembers)): # 0...N-1
                     Cmd="select mba,regadd,val_reg,member,value,regtype,wcount,mbi,x2,y2 from "+self.in_sql+" where val_reg='"+key+"' and member='"+str(valmember+1)+"'"
                     #print(Cmd) # debug
                     cur.execute(Cmd)
                     conn.commit()
                     for row in cur: # single member
-                        print('srow:',row) # debug
+                        log.debug('srow:',row) # debug
                         sqlvalue=int(row[4]) if row[4] != '' else 0 # eval(row[4]) if row[4] != '' else 0 # 
                         try:
                             value=eval(valmembers[valmember])
@@ -105,12 +107,11 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                             
                         regtype=row[5] # 'h' 'i' 's!' 
                         
-                        if sqlvalue != value and ((regtype == 'h' and value == 0 or value > sqlvalue) \
-                                or (regtype == 's!')): 
+                        if sqlvalue != value and ((regtype == 'h' and value == 0 or value > sqlvalue) or (regtype == 's!')): 
                             # replace actual counters only if bigger than existing or zero, no limits for setup type 's!' 
                             member=valmember+1
                             
-                            print('going to replace '+key+' member '+str(member)+' existing value '+str(sqlvalue)+' with '+str(value)) # debug
+                            log.debug('going to replace '+key+' member '+str(member)+' existing value '+str(sqlvalue)+' with '+str(value)) # debug
                             # faster to use physical data instead of svc. also clear counter2power buffer if cp[] exsists!
                             
                             if regtype == 's!': # setup row, external modif allowed (!)
@@ -118,16 +119,16 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                     if self.set_aivalue(str(key),member,value) == 0: # set setup value in sql table
                                         msg='setup changed for key '+key+', member '+str(member)+' to value '+str(value)
                                         setup_changed=1
-                                        print(msg)
+                                        log.debug(msg)
                                         #udp.syslog(msg)
                                     else:
                                         msg='svc member setting problem for key '+key+', member '+str(member)+' to value '+str(value)
-                                        print(msg)
+                                        log.warning(msg)
                                         #udp.syslog(msg)
                                         res+=1
                                 else:
                                     msg='acchannels.udp_parse: setup value cannot have mba,regadd defined!'
-                                    print(msg)
+                                    log.warning(msg)
                                     #udp.syslog(msg)
                                     res+=1
                             elif regtype == 'h': # holding register, probably counter
@@ -143,30 +144,30 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                     if self.set_counter(mbi=mbi, mba=mba, regadd=regadd, value=value, wcount=wcount, x2=x2, y2=y2) == 0: # set counter
                                         #set_counter also cleared counter2power buffer if cp[] exsisted!
                                         msg='counter set for key '+key+', member '+str(member)+' to value '+str(value)
-                                        print(msg)
+                                        log.debug(msg)
                                         #udp.syslog(msg)
                                     else:
                                         msg='member value setting problem for key '+key+', member '+str(member)+' to value '+str(value)
-                                        print(msg)
+                                        log.warnnig(msg)
                                         #udp.syslog(msg)
                                         res+=1
                                 else:
                                     msg='acchannels.udp_parse: holding register must have mba,regadd defined!'
-                                    print(msg)
+                                    log.warning(msg)
                                     #udp.syslog(msg)
                                     res+=1
                         else: # skip
-                            print('parse_udp: member value write for key '+key+' SKIPPED due to sqlvalue,value,regtype',sqlvalue,value,regtype)
+                            log.debug('parse_udp: member value write for key '+key+' SKIPPED due to sqlvalue,value,regtype',sqlvalue,value,regtype)
                 
             if setup_changed == 1:
-                print('going to dump table',self.in_sql)
+                log.debug('going to dump table',self.in_sql)
                 try:
                     s.dump_table(self.in_sql)
                     sendstring=self.make_svc(key,key[:-1]+'S')
-                    print('going to report back sendstring',sendstring)
-                    udp.send(sendstring)
+                    log.debug('going to report back sendstring',sendstring)
+                    #udp.send(sendstring)
                 except:
-                    print('FAILED to dump table',self.in_sql)
+                    log.warning('FAILED to dump table',self.in_sql)
                     traceback.print_exc() # debug
         #if res == 0:
             #self.read_all() # reread the changed channels to avoid repeated restore - no need
@@ -203,10 +204,10 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 val_reg=kwargs.get('val_reg')
                 member=kwargs.get('member')
                 if val_reg == '' or member == 0:
-                    print('set_counter: invalid parameters val_reg,member',val_reg,member)
+                    log.debug('set_counter: invalid parameters val_reg,member',val_reg,member)
                     return 1
             except:
-                print('invalid parameters for set_counter()',kwargs)
+                log.debug('invalid parameters for set_counter()',kwargs)
                 return 2
 
             Cmd="select mbi,mba,regadd,wcount,x2,y2 from "+self.in_sql+" where val_reg='"+val_reg+"' and member='"+str(member)+"'"
@@ -226,7 +227,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         if x2 != 0 and y2 != 0: #convert
             value=round(1.0*value*x2/y2) # assuming x1=x2=0, only counter registers to be written this way...
         else:
-            print('set_counter: invalid scaling x2,y2',x2,y2)
+            log.warning('set_counter: invalid scaling x2,y2',x2,y2)
             return 1
         
         value=(int(value)&0xFFFFFFFF) # to make sure the value to write is 32 bit integer    
@@ -247,11 +248,11 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 res=mb[mbi].write(mba, regadd, value=(value&0xFFFF)) # single register write
                 
             else:
-                print('set_counter: unsupported word count! mba,regadd,wcount',mba,regadd,wcount)
+                log.warning('set_counter: unsupported word count! mba,regadd,wcount',mba,regadd,wcount)
                 res=1
                 
             if res == 0:
-                print('set_counter: write success to mba,regadd',mba,regadd)
+                log.debug('set_counter: write success to mba,regadd',mba,regadd)
                 
                 #check if there are counter2power instances (cp[]) related to that register, intialize them
                 Cmd="select mbi,mba,regadd,val_reg,member from "+self.in_sql+" where (cfg+0 & 192) order by val_reg,member" # counter2power bits 64+128
@@ -263,10 +264,10 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     #print('cp init prep select row (j,mbi,mba,regadd):',j,row) # debug
                     try:
                         if self.cp and mbi == int(row[0]) and mba == int(row[1]) and regadd == int(row[2]): # cp[j] must be initialized
-                            print('initializing counter2power instance cp['+str(j)+'] due to counter setting')
+                            log.debug('initializing counter2power instance cp['+str(j)+'] due to counter setting')
                             self.cp[j].init() # cp[] may not exist on start, but init is then not needed either...
                     except:    
-                        print('FAILED initializing counter2power instance cp['+str(j)+'], tried due to counter setting')
+                        log.warning('FAILED initializing counter2power instance cp['+str(j)+'], tried due to counter setting')
                         traceback.print_exc() # debug
                 # end power init
             else:
@@ -276,14 +277,14 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         except:  # set failed
             msg='failed set_counter mbi.mba.regadd'+str(mbi)+'.'+str(mba)+'.'+str(regadd)
             #udp.syslog(msg)
-            print(msg)
+            log.warning(msg)
             traceback.print_exc()
             return 1
         # no need for commit, this method is used in transaction
 
 
 
-    def read_grp(self,mba,regadd,count,wcount,mbi=0): # update raw in self.in_sql with data from modbus registers
+    def read_grp(self,mba,regadd,count,wcount,mbi=0,regtype='h'): # update raw in self.in_sql with data from modbus registers
         ''' Reads sequential register group, process numbers according to counter size and store raw into table self.in_sql. Inside transaction!
             Compares the raw value from mobdbus register with old value in the table. If changed, ts is set to the modbus readout time self.ts.
 
@@ -300,24 +301,29 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         step=int(abs(wcount))
         cur=conn.cursor()
         oraw=0
-        if step == 0:
-            print('illegal wcount',wcount,'in read_grp()')
-            return 2
 
-        msg=' from mba '+str(mba)+'.'+str(regadd)+', cnt '+str(count)+', wc '+str(wcount)+', mbi '+str(mbi)
+        msg='grp read from mba '+str(mba)+'.'+str(regadd)+', cnt '+str(count)+', wc '+str(wcount)+', mbi '+str(mbi)+', regtype '+regtype
+        
         if count>0 and mba != 0 and wcount != 0:
             try:
                 if mb[mbi]:
-                    result = mb[mbi].read(mba, regadd, count=count, type='h') # client.read_holding_registers(address=regadd, count=1, unit=mba)
-                    msg=msg+', raw: '+str(result)
-                    print(msg) # debug
+                    result = mb[mbi].read(mba, regadd, count=count, type=regtype) # client.read_holding_registers(address=regadd, count=1, unit=mba)
+                    msg += ', raw: '+str(result)
+                else:
+                    msg += ' -- no mb[]!'
+                
+                log.debug(msg)
+                
             except:
-                print('read_grp: mb['+str(mbi)+'] missing, device with mba '+str(mba)+' not defined in devices.sql?')
+                msg += ' -- FAILED!'
+                log.warning(msg)
                 return 2
         else:
-            print('invalid parameters for read_counter_grp()!',mba,regadd,count,wcount,mbi)
+            msg += ' -- invalid count, mba, wcount or regtype!'
+            log.warning(msg)
             return 2
 
+        
         if result != None: # got something from modbus register
             try:
                 for i in range(int(count/step)): # ai-co processing loop. tuple to table rows. tuple len is twice count! int for py3 needed
@@ -333,9 +339,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         if len(result) - 1 >= i:
                             tcpdata = result[i]
                         else:
-                            print('read_grp invalid i',i,'while result',result)
+                            log.warning('read_grp invalid, i=',i,'while result',result)
                     else: # something else, lengths other than 1 2 -2 not yet supported!
-                        print('unsupported counter word size',wcount)
+                        log.warning('unsupported counter word size',wcount)
                         return 1
 
                     #Cmd="select raw from "+self.in_sql+" where mbi="+str(mbi)+" and mba='"+str(mba)+"' and regadd='"+str(regadd+i*step)+"' group by mbi,mba,regadd"
@@ -348,7 +354,6 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     #if tcpdata != oraw or oraw == -1: # update only if change needed or empty so far - NO! value CAN stay the same, but age is needed!
                     if str(regadd)[0] == '6' and tcpdata == 2560: #  failing temperature sensor, do not update
                         log.warning('failing temperature sensor on address '+str(regadd+i*step))
-                        print('failing temperature sensor on address '+str(regadd+i*step)) # temp
                     else:
                         Cmd="UPDATE "+self.in_sql+" set raw='"+str(tcpdata)+"', ts='"+str(self.ts)+ \
                             "' where mba='"+str(mba)+"' and regadd='"+str(regadd+i*step)+"' and mbi="+str(mbi) # koigile korraga selle mbi, mba, regadd jaoks
@@ -362,13 +367,13 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             #print('recreating modbus channel due to error to', mbhost[mbi])
             mb[mbi] = CommModbus(host=mbhost[mbi])
             msg='recreated mb['+str(mbi)+'], this aicochannels grp read FAILED for mbi,mba,regadd,count '+str(mbi)+', '+str(mba)+', '+str(regadd)+', '+str(count)
-            print(msg)
+            log.warning(msg)
             time.sleep(0.5) # hopefully helps to avoid sequential error / recreations
             return 1
 
 
 
-    def read_all(self): # read all defined modbus counters to sql, usually 32 bit / 2 registers.
+    def read_all(self): # read all defined modbus ai and counters to sql in groups by regtype, usually 32 bit / 2 registers.
         ''' Must read the counter registers by sequential regadd blocks if possible (if regadd increment == wcount.
             Also converts the raw data (incl member rows wo mba) into services and sends away to UDPchannel.
             '''
@@ -395,23 +400,27 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         bcount=0
         tcpdata=0
         sent=0
-
+        regtype=''
+        bregtype=''
+        
         try:
             Cmd="BEGIN IMMEDIATE TRANSACTION" # combines several read/writes into one transaction
-            # read mbi,mba,regadd,wcount from table to define groups
+            # read mbi,mba,regadd,wcount,regtype from channels table to define groups
             # read modbus registers in groups and write raw into table
             # read svc from table to calculate and update value
             # 
             
             conn.execute(Cmd)
-            Cmd="select mba,regadd,wcount,mbi from "+self.in_sql+" where mba != '' and regadd != '' group by mbi,mba,regadd" # tsykkel lugemiseks, tuleks regadd kasvavasse jrk grupeerida
+            Cmd="select mba,regadd,wcount,mbi,regtype from "+self.in_sql+" where mba != '' and regadd != '' group by mbi,mba,regtype,regadd" # tsykkel lugemiseks, tuleks regadd kasvavasse jrk grupeerida
             cur.execute(Cmd) # selle paringu alusel raw update, hiljem teha value arvutused iga teenuseliikme jaoks eraldi
             for row in cur: # these groups can be interrupted into pieces to be queried!
                 mba=int(row[0]) if int(row[0]) != '' else 0
                 regadd=int(row[1]) if int(row[1]) != '' else 0
                 wcount=int(row[2]) if int(row[2]) != '' else 0 # wordcount for the whole group!!
                 mbi=int(row[3]) if int(row[3]) != '' else 0 # modbus connection indexed
-                #print 'found counter mbi,mba,regadd,wcount',mbi,mba,regadd,wcount # debug
+                regtype=row[4] if row[4] != '' else 'h' # modbus register holding or input
+                #print('found channel mbi,mba,regadd,wcount,regtype',mbi,mba,regadd,wcount,regtype) # debug
+                
                 if bfirst == 0:
                     bfirst = regadd
                     blast = regadd
@@ -419,16 +428,17 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     bcount=int(abs(wcount)) # word count is the count
                     bmba=mba
                     bmbi=mbi
+                    bregtype= regtype
                     #print('counter group mba '+str(bmba)+' start ',bfirst) # debug
                 else: # not the first
-                    if mbi == bmbi and mba == bmba and regadd == blast+abs(wcount): # sequential group still growing
+                    if mbi == bmbi and regtype == bregtype and mba == bmba and regadd == blast+abs(wcount): # sequential group still growing
                         blast = regadd
                         bcount=bcount+int(abs(wcount)) # increment by word size
                         #print('counter group end shifted to',blast) # debug
                     else: # a new group started, make a query for previous
                         #print('counter group end detected at regadd',blast,'bcount',bcount, 'mbi',mbi,'bmbi',bmbi) # debugb
-                        #print('going to read non-last counter group, registers from',bmba,bfirst,'to',blast,'regcount',bcount) # debug
-                        self.read_grp(bmba,bfirst,bcount,bwcount,bmbi) # reads and updates table with previous data #####################  READ MB  ######
+                        #print('going to read non-last counter group, registers from',bmba,bfirst,'to',blast,'regcount',bcount,'regtype',bregtype) # debug
+                        self.read_grp(bmba,bfirst,bcount,bwcount,bmbi,bregtype) # reads and updates table with previous data #####################  READ MB  ######
                         bfirst = regadd # new grp starts immediately
                         blast = regadd
                         #bwcount = wcount # does not change inside group
@@ -436,12 +446,13 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         bwcount=wcount
                         bmba=mba
                         bmbi=mbi
+                        bregtype=regtype
                         #print('counter group mba '+str(bmba)+' start ',bfirst) # debug
 
             if bfirst != 0: # last group yet unread
                 #print('counter group end detected at regadd',blast) # debug
-                #print('going to read last counter group, registers from',bmba,bfirst,'to',blast,'regcount',bcount) # debug
-                self.read_grp(bmba,bfirst,bcount,bwcount,bmbi) # reads and updates table with previous data #####################  READ MB  ######
+                #print('going to read last counter group, registers from',bmba,bfirst,'to',blast,'regcount',bcount,'regtype',bregtype) # debug
+                self.read_grp(bmba,bfirst,bcount,bwcount,bmbi,bregtype) # reads and updates table with previous data #####################  READ MB  ######
 
             # raw sync (from modbus to sql) done.
 
