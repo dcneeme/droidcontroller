@@ -16,16 +16,19 @@
 # f=ThreeStep(setpoint=3)
 # print f.output(10)
 
-# last change 02.03.2014 by neeme
+# last change 2.11.2014 by neeme
 
 import time
-
+import logging
+log = logging.getLogger(__name__)
+    
 class PID:
     """ Simple PID control.
         This class implements a simplistic PID control algorithm.
     """
     def __init__(self, setpoint = 0, P = 1.0, I = 0.01, D = 0.0, min = None, max = None): # initialize gains
-        self.setSetpoint(setpoint)
+        self.Vars = {} # to be returned with almost all internal variables
+        self.setSetpoint(setpoint) # this value will be compared to output() parameter to produce output value
         self.setKp(P)
         self.setKi(I)
         self.setKd(D)
@@ -55,17 +58,62 @@ class PID:
             self.Ki = invar
 
 
-    def resetIntegral(self):
-        """ reset integral part   """
-        self.Ci = 0
-
     def setKd(self, invar):
         """ Set derivative gain   """
         self.Kd = invar
 
+
+    def getKp(self):
+        ''' Returns proportional gain '''
+        return self.Kp
+
+
+    def getKi(self):
+        ''' Returns integral gain '''
+        return self.Ki
+
+
+    def getKd(self):
+        ''' Returns derivative gain '''
+        return self.Kd
+
+
+    def getVars(self, filter = None):
+        ''' Returns internal variables as dictionary '''
+        self.Vars.update({'Kp' : self.Kp})
+        self.Vars.update({'Ki' : self.Ki})
+        self.Vars.update({'Kd' : self.Kd})
+        self.Vars.update({'outMin' : self.outMin})
+        self.Vars.update({'outMax' : self.outMax})
+        self.Vars.update({'outP' : self.Cp})
+        self.Vars.update({'outI' : self.Ki * self.Ci})
+        self.Vars.update({'outD' : self.Kd * self.Cd})
+        self.Vars.update({'setPoint' : self.setPoint})
+        if filter is None:
+            return self.Vars
+        else:
+            if filter in self.Vars:
+                return self.Vars.get(filter)
+        
+    def setVars(self, *kwargs):
+        ''' Updates variables for PID computation '''
+        for var in kwargs:
+            if var in kwargs.get:
+                self.Vars.update({var : kwargs.get(var)})
+                log.debug(var+' updated to '+str(kwargs.get(var)))
+            else:
+                log.warning('cannot set unknown variable '+str(var))
+                
+            
+    def resetIntegral(self):
+        """ reset integral part   """
+        self.Ci = 0
+
+
     def setPrevErr(self, invar):
         """ Set previous error value    """
         self.prev_err = invar
+
 
     def setMin(self, invar):
         """ Set lower limit for output    """
@@ -80,6 +128,11 @@ class PID:
         except:
             self.outMin = invar
 
+
+    def getMin(self):
+        return self.outMin
+
+
     def setMax(self, invar):
         """ Set upper limit for output     """
         try:
@@ -92,6 +145,10 @@ class PID:
                 self.outMax = invar
         except:
             self.outMax = invar
+
+
+    def getMax(self):
+        return self.outMax
 
 
     def Initialize(self):
@@ -110,11 +167,12 @@ class PID:
         self.Cd = 0
         print('pid: initialized')
 
+
     def output(self, invar):
-        """ Performs a PID computation and returns a control value based on
-            the elapsed time (dt) and the difference between actual value and setpoint.
+        """ Performs PID computation and returns a control value and it's components (and error and saturation)
+            based on the elapsed time (dt) and the difference between actual value and setpoint.
         """
-        dir=['down','','up'] # up or down
+        dir=['down','','up'] # up or down / FIXME use enum here! add Limit class! reusable for everybody...
         try:
             error=self.setPoint - invar            # error value
         except:
@@ -192,8 +250,14 @@ class ThreeStep:
 
 
     def setSetpoint(self, invar):
-        """ Set the setpoint for the actual value """
+        """ Set the setpoint for the actual value to follow """
         self.Setpoint = invar
+
+
+    def setSetpoint(self, invar):
+        """ Returns the setpoint """
+        return self.Setpoint
+
 
     def setMotorTime(self, invar):
         """ Sets motor running time in seconds to travel from one limit to another
@@ -201,9 +265,11 @@ class ThreeStep:
         """
         self.MotorTime = abs(invar)
 
+
     def setMaxpulseLength(self, invar):
         """ Sets maximum pulse time in seconds to use """
         self.MaxpulseLength = abs(invar)
+
 
     def setMaxpulseError(self, invar):
         """ Ties maximum error to maximum pulse length in seconds to use.
@@ -211,14 +277,17 @@ class ThreeStep:
         """
         self.MaxpulseError = abs(invar)
 
+
     def setMinpulseLength(self, invar):
         """ Sets minimum pulse length in seconds to use """
         self.MinpulseLength = abs(invar)
+
 
     def setMinpulseError(self, invar):
         """ Ties the minimum pulse length to the error level. This also sets the dead zone,
         where there is no output (motor run) below this (absolute) value on either direction """
         self.MinpulseError = abs(invar)
+
 
     def setRunPeriod(self, invar):
         """ Sets the time for no new pulse to be started """
@@ -239,8 +308,8 @@ class ThreeStep:
 
 
     def interpolate(self, x, x1 = 0, y1 = 0, x2 = 0, y2 = 0):
-        """ Returns linearly interpolated value y based on x and 
-        two known points defined by x1y1 and x2y2 
+        """ Returns linearly interpolated value y based on x and
+        two known points defined by x1y1 and x2y2
         """
         if x1 == x2:
             log.warning('invalid interpolation attempt')
