@@ -183,19 +183,19 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
 
     def get_setup(self, register, table = 'setup'):
         ''' Returns value for one register '''
-        Cmd="select value from '+table+' where register='"+register+"'"
+        Cmd="select value from "+table+" where register='"+register+"'"
         #print(Cmd) # debug
         cur.execute(Cmd)
         value='' # string!
-        for row in cursor: # should be one row only
-        value=row[0]
+        for row in cur: # should be one row only
+            value=row[0]
         conn.commit() # setup database
         if value == '':
-        msg='no setup value '+register+'! using 0 instead!'
-        value='0'
-        print(msg) # debug
-        udp.syslog(msg)
-        return value
+            msg='no setup value '+register+'! using 0 instead!'
+            value='0'
+            print(msg) # debug
+            udp.syslog(msg)
+        return value # str
 
 
     def report_setup(self): # READ and send setup data to server
@@ -584,16 +584,18 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
             dev_dict.update({mbi : tmp_array})
         print('defined in devices (mbi:mba)',dev_dict)
 
-        Cmd="select mbi,mba,regadd,val_reg,member from "+table+" where mba+0>0 group by mbi,mba,regadd"
+        Cmd="select mbi,mba,regadd,val_reg,member,regtype from "+table+" where mba+0>0 group by mbi,mba,regadd"
+        #print(Cmd) # di korral bit eristust ei toimu, reeglina reg 0 ja 1!
+        
         cur.execute(Cmd)
         for row in cur:
-            if row[0] in dev_dict: # in keys
-                if int(row[1]) in dev_dict[row[0]]: #
-                    print('channel mbi,mba,regadd,member '+str(row[0])+','+str(row[1])+','+str(row[2])+','+str(row[3])+' correctly defined in '+table)
+            if row[0] in dev_dict: # mbi in keys
+                if int(row[1]) in dev_dict[row[0]]: # mba 
+                    print('channel mbi,mba,regadd,register,member,regtype '+str(row[0])+','+str(row[1])+','+str(row[2])+','+str(row[3])+','+row[4]+','+row[5]+' correctly defined in '+table)
                 else:
                     bad=1
-                    print('channel mbi,mba,regadd,member '+str(row[0])+','+str(row[1])+','+str(row[2])+','+str(row[3])+' in '+table+' NOT found in devices!')
+                    print('channel mbi '+str(row[0])+' in '+table+' NOT found in devices!')
             else:
                 bad=2
-                print('channel mbi,mba,regadd,member '+str(row[0])+','+str(row[1])+','+str(row[2])+','+str(row[3])+' in '+table+' NOT found in devices!')
+                print('channel mbi '+str(row[0])+' in '+table+' NOT found in devices!')
         return bad

@@ -103,7 +103,7 @@ class PID:
         self.Vars.update({'outP' : self.Cp})
         self.Vars.update({'outI' : self.Ki * self.Ci})
         self.Vars.update({'outD' : self.Kd * self.Cd})
-        self.Vars.update({'setPoint' : self.setPoint})
+        self.Vars.update({'setpoint' : self.setPoint})
         self.Vars.update({'error' : self.error})
         if filter is None:
             return self.Vars
@@ -267,6 +267,7 @@ class ThreeStep:
     """
     def __init__(self, setpoint = 0, motortime = 100, maxpulse = 10, maxerror = 100, minpulse =1 , minerror = 1, runperiod = 20):
         self.error = 0
+        self.Vars = {} # to be returned with almost all internal variables
         self.setSetpoint(setpoint)
         self.setMotorTime(motortime)
         self.setMaxpulseLength(maxpulse)
@@ -277,6 +278,18 @@ class ThreeStep:
         self.Initialize()
 
 
+    def getVars(self, filter = None):
+        ''' Returns internal variables as dictionary '''
+        self.Vars.update({'motortime' : self.MotorTime})
+        self.Vars.update({'setpoint' : self.Setpoint})
+        self.Vars.update({'error' : self.error})
+        if filter is None:
+            return self.Vars
+        else:
+            if filter in self.Vars:
+                return self.Vars.get(filter)
+   
+   
     def setSetpoint(self, invar):
         """ Set the setpoint for the actual value to follow """
         self.Setpoint = invar
@@ -366,7 +379,7 @@ class ThreeStep:
         try:
             self.error=self.Setpoint - invar            # self.error value
         except:
-            self.error=0 # for the case of invalid actual
+            self.error = 0 # for the case of invalid actual
             msg='invalid actual '+repr(invar)+' for 3step self.error calculation, self.error zero used!'
             print(msg)
 
