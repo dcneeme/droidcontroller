@@ -4,7 +4,7 @@ try:
     import iMX233_GPIO as GPIO
 except:
     print('could not import iMX233_GPIO for GPIOLED')
-    traceback.print_exc()
+    #traceback.print_exc()
             
 class GPIOLED:
     ''' Olinuxino LED control, needs archlinux as OSTYPE env variable 
