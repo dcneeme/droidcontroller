@@ -18,6 +18,10 @@
 
 # last change 3.11.2014 by neeme
 
+# starmanis 5.11.2014 (appd.log failis)
+# pid: fixing onLimit value 1 to zero!
+# pid: fixing onLimit value -1 to zero!
+
 import time
 import logging
 log = logging.getLogger(__name__)
@@ -177,7 +181,7 @@ class PID:
         log.debug('pid: initialized')
 
 
-    def getLimit(self):
+    def get_onlimit(self):
         ''' Returns the limit state and the saturation age as list '''
         if self.onLimit != 0:
             age = int(self.currtime - self.tsLimit)
@@ -186,7 +190,7 @@ class PID:
         return self.onLimit, age
 
 
-    def output(self, invar):
+    def output(self, invar): # actual as parameter for PID control
         """ Performs PID computation and returns a control value and it's components (and self.error and saturation)
             based on the elapsed time (dt) and the difference between actual value and setpoint.
         """
@@ -240,7 +244,7 @@ class PID:
         if self.outMin is not None and self.outMax is not None: # to be sure about onLimit, double check
             if out > self.outMin and out < self.outMax:
                 if self.onLimit != 0:
-                    log.warning('pid: fixing onLimit self.error value '+str(self.onLimit)+' to zero!')
+                    log.debug('pid: fixing onLimit value '+str(self.onLimit)+' to zero!')
                     self.onLimit = 0 # fix possible self.error
 
         if out == self.outMax and self.onLimit == -1: # swapped min/max and onlimit values for some reason?
@@ -259,7 +263,11 @@ class PID:
 
 class ThreeStep:
     """ Three-step motor control.
-        Outputs pulse length to run the motor in one or another direction
+        Outputs pulse length to run the motor in one or another direction. 
+        Another pulse may not start before runperiod is over. 
+        State is usable for level control, output returns pulse length. 
+        onlimit is active (not zero) if abs(runtime) reaches motortime.
+        No output to sstart a new pulse if error is below minerror (usable for dead zone setting).
     """
     def __init__(self, setpoint = 0, motortime = 100, maxpulse = 10, maxerror = 100, minpulse =1 , minerror = 1, runperiod = 20, outmode = 'nolist'):
         self.outmode = outmode # remove later, temporary help to keep list output for some installations
@@ -366,16 +374,32 @@ class ThreeStep:
             return y1+(y2-y1)*(x-x1)/(x2-x1)
 
 
-    def get_limit(self):
+    def get_onlimit(self):
         ''' Returns the limit state and the saturation age as list '''
         if self.onLimit != 0:
-            age = self.currtime - self.tsLimit
+            age = int(time.time() - self.tsLimit)
         else:
             age = 0
         return self.onLimit, age
+        
+        
+    def set_onlimit(self, invar):
+        ''' Sets the 3step instance into saturated state based on external signal (limit switch for example) '''
+        try:
+            if invar <2 and invar > -2 and int(invar) != self.onLimit:
+                self.onLimit = int(invar)
+                if self.onLimit != 0:
+                    self.runtime = self.onLimit * self.MotorTime # to keep the limit active and runtime logical
+                    self.tsLimit = time.time() # timestamp  of new state begin
+                    log.debug('threestep onlimit set to '+str(self.onLimit))
+                
+            else:
+                log.debug('invalid value for set_onlimit or no need for state change')
+        except:
+            log.warning('invalid value for set_onlimit: '+str(invar))
+        
 
-
-    def output(self, invar): # actual as parameter
+    def output(self, invar): # actual as parameter otr 3T control
         """ Performs pulse generation if needed and if no previous pulse is currently active.
         Returns output value for pulse length in s. Other variables available via getvars() as dict.
         All output values can be either positive or negative depending on the direction towards higher or lower limit.
