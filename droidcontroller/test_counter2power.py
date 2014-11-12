@@ -34,7 +34,7 @@ class Test(unittest.TestCase):
     def test_power(self):
         pm = PowerMeter()
         cnt = 0
-        c2p = Count2Power(svc_name = 'test', svc_member = 99, mininc = 10, maxinc = 100, minvalue = 0, maxvalue = None)
+        c2p = Counter2Power(svc_name = 'test', svc_member = 99, off_tout = 100)
         for ts in range(3600):
             cnt = pm.getpulses(ts, 2000)
             data = c2p.calc(ts, cnt)
