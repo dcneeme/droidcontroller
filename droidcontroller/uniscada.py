@@ -16,12 +16,17 @@ import os
 import gzip
 import tarfile
 import requests
+import logging
+log = logging.getLogger(__name__)
+
 #from udp_commands import *
 OSTYPE = os.environ['OSTYPE']
 if OSTYPE == 'archlinux':
-    from droidcontroller.gpio_led import *
-    led=GPIOLED() # cpuLED, commLED, alarmLED param 0 or 1
-
+    try:
+        from droidcontroller.gpio_led import *
+        led = GPIOLED() # cpuLED, commLED, alarmLED param 0 or 1
+    except:
+        log.warning('no GPIOLED loaded!')
     
             
             
@@ -340,8 +345,9 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
         self.traffic[1]=self.traffic[1]+len(sendstring) # adding to the outgoing UDP byte counter
 
         if OSTYPE == 'archlinux': # "if led:" gives error on npe
-            led.commLED(0)
-            #print('commled off, sent') # debug
+            if led:
+                led.commLED(0)
+                #print('commled off, sent') # debug
         
         try:
             sendlen=self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr) # tagastab saadetud baitide arvu
@@ -358,7 +364,8 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
             print(msg)
             traceback.print_exc()
             if OSTYPE == 'archlinux': # "if led:" gives error on npe
-                led.alarmLED(1) # send failure
+                if led:
+                    led.alarmLED(1) # send failure
             return None
 
 
@@ -424,8 +431,9 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
                     self.ts_udpgot=self.ts # timestamp of last udp received
 
             if OSTYPE == 'archlinux': # "if led:" gives error on npe
-                led.commLED(1) # data from server, comm OK
-                #print('got from server, commled on') # debug, comm ok
+                if led:
+                    led.commLED(1) # data from server, comm OK
+                    #print('got from server, commled on') # debug, comm ok
                 
             lines=data.splitlines() # split message into key:value lines
             for i in range(len(lines)): # looking into every member of incoming message
