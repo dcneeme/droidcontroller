@@ -9,6 +9,8 @@ import sys
 from pymodbus import *
 from droidcontroller.comm_modbus import CommModbus  # contains CommModbus, .read(), .write()
 from droidcontroller.uniscada import *
+import logging
+log = logging.getLogger(__name__)
 
 try:
     if udp:
