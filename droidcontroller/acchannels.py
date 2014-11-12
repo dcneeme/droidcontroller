@@ -12,7 +12,7 @@
 
 from droidcontroller.sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
 s=SQLgeneral() # init sisse?
-from droidcontroller.counter2power import *  # Counter2Power() handles power calculation based on pulse count increments
+from droidcontroller.counter2power import *  # Counter2Power() as cp handles power calculation based on pulse count increments
 
 import time
 import logging
@@ -31,7 +31,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         self.in_sql = in_sql.split('.')[0]
         self.out_sql = out_sql.split('.')[0]
         #self.s = SQLgeneral()
-        self.cp=[] # possible counter2value calculation instances
+        self.cp = [] # possible counter2value calculation instances
         self.Initialize()
 
 
@@ -148,14 +148,14 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                         #udp.syslog(msg)
                                     else:
                                         msg='member value setting problem for key '+key+', member '+str(member)+' to value '+str(value)
-                                        log.warnnig(msg)
+                                        log.warning(msg)
                                         #udp.syslog(msg)
-                                        res+=1
+                                        res += 1
                                 else:
                                     msg='acchannels.udp_parse: holding register must have mba,regadd defined!'
                                     log.warning(msg)
                                     #udp.syslog(msg)
-                                    res+=1
+                                    res += 1
                         else: # skip
                             log.debug('parse_udp: member value write for key '+key+' SKIPPED due to sqlvalue,value,regtype',sqlvalue,value,regtype)
                 
@@ -464,6 +464,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             Cmd="select val_reg from "+self.in_sql+" group by val_reg" # find ervices
             #print "Cmd=",Cmd
             #cur.execute(Cmd) # getting services to be read and reported
+            
             #cpi=-1 # counter2power instance index, increase only if with cfg weight 64 true
             for row in cur: # SERVICES LOOP
                 #val_reg=''
@@ -701,6 +702,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         mstatus = 0
         cur = conn.cursor()
         lisa = ''
+        cpi = -1 # count2pwr index
+        
         #print('acchannels.make_svc: reading aico values for val_reg,sta_reg',val_reg,sta_reg) # debug
 
         Cmd="select mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,regtype,grp,mbi,wcount from "+self.in_sql \
@@ -744,7 +747,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             outlo=int(srow[9]) if srow[9] != '' else None
             outhi=int(srow[10]) if srow[10] != '' else None
             avg=int(srow[11]) if srow[11] != '' else 0  #  averaging strength, values 0 and 1 do not average!
-            #block=int(srow[12]) if srow[12] != '' else 0 # - loendame siin vigu, kui kasvab yle 3? siis enam ei saada
+            block=int(srow[12]) if srow[12] != '' else 0 # off-tout for power related on/off
             raw=int(srow[13]) if srow[13] != '' else None # 0
             ovalue=eval(srow[14]) if srow[14] != '' else 0 # teenuseliikme endine vaartus
             ostatus=int(srow[15]) if srow[15] != '' else 0 # teenusekomponendi status - ei kasuta / votame kasutusele
@@ -765,36 +768,27 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 
                 #POWER?
                 if (cfg&64): # power, no sign, increment to be calculated! divide increment to time from the last reading to get the power
-                    cpi=cpi+1 # counter2power index
+                    cpi += 1 # counter2power index
                     try:
-                        if self.cp[cpi]:
-                            pass # instance already exists
+                        if cpi != -1 and self.cp[cpi]:
+                            pass # this instance already exists
                     except:
                         self.cp.append(Counter2Power(val_reg,member,off_tout = block)) # another Count2Power instance. 100s  = 36W threshold if 1000 imp per kWh
                         print('Counter2Power() instance cp['+str(cpi)+'] created for pwr svc '+val_reg+' member '+str(member)+', off_tout '+str(block))
-                    res=self.cp[cpi].calc(ots, raw, ts_now = self.ts) # power calculation based on raw counter increase
-                    raw=res[0]
-                    #print('got result[0] from cp['+str(cpi)+']: '+str(res))  # debug
-                
-                
-                if (cfg&128) > 0: # 
-                    cpi=cpi+1 # counter2power index on /off jaoks
-                    try:
-                        if self.cp[cpi]:
-                            pass # instance already exists
-                    except:
-                        self.cp.append(Counter2Power(val_reg,member,off_tout = block)) # another Count2Power instance. 10s tout = 360W threshold if 1000 imp per kWh
-                        print('Counter2Power() instance cp['+str(cpi)+'] created for state svc '+val_reg+' member '+str(member)+', off_tout '+str(block))
-                    res=self.cp[cpi].calc(ots, raw, ts_now = self.ts) # power calculation based on raw counter increase
-                    raw=res[1] # on off = 0 1
-                    #print('got result from cp['+str(cpi)+']: '+str(res))  # debug
-                    if res[2] != 0: # on/off change
-                        chg=1 # immediate notification needed due to state change
-                
+                    
+                    res = self.cp[cpi].calc(ots, raw, ts_now = self.ts) # power calculation based on raw counter increase
+                    print('got result from cp['+str(cpi)+']: '+str(res)+', params ots '+str(ots)+', raw '+str(raw)+', ts_now '+str(self.ts))  # debug
+                    if (cfg&128) > 0: # 
+                        raw = res[1] # on off = 0 1, asendab eelmise raw
+                        if res[2] != 0: # on/off change
+                            chg = 1 # immediate notification needed due to state change
+                    else:
+                        raw = res[0]
+                        
                 # SCALING
-                if (cfg&1024) == 0: # take sign into account, not counter ### SIGNED if not counter ##
+                if (cfg&1024) == 0 and raw != None: # take sign into account, not counter ### SIGNED if not counter ##
                     if raw >= (2**(wcount*16-1)): # negative!
-                        raw=raw-(2**(wcount*16))
+                        raw = raw-(2**(wcount*16))
                         #print('read_all: converted to negative value',raw,'wcount',wcount) # debug
                    
                 if raw != None and x1 != x2 and y1 != y2: # seems like normal input data
@@ -807,14 +801,14 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 if outhi == None or outlo == None:
                     print('no limit chk for',val_reg,'due to outlo, outhi',outlo,outhi) # debug
                     
-                if value != None:
-                    if avg>1 and abs(value-ovalue) < value/2:  # averaging the readings. big jumps (more than 50% change) are not averaged.
-                        value=int(((avg-1)*ovalue+value)/avg) # averaging with the previous value, works like RC low pass filter
+                if value != None and avg != None and ovalue != None:
+                    if avg > 1 and abs(value - ovalue) < value / 2:  # averaging the readings. big jumps (more than 50% change) are not averaged.
+                        value=int(((avg - 1) * ovalue+value)/avg) # averaging with the previous value, works like RC low pass filter
                         #print('counter avg on, value became ',value) # debug
                     
-                    if (cfg&256) and abs(value-ovalue) > value/5.0: # change more than 20% detected, use num w comma!
+                    if (cfg&256) and abs(value - ovalue) > value / 5.0: # change more than 20% detected, use num w comma!
                         print('value change of more than 20% detected in '+val_reg+'.'+str(member)+', need to notify') # debug
-                        chg=1
+                        chg = 1
                         
 
                     # counter2power and scaling done, status check begins ##########
@@ -822,7 +816,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     
                   
                     if mstatus != ostatus: # member status change detected
-                        chg=1 # immediate notification within this method
+                        chg = 1 # immediate notification within this method
                         print('member status chg (after possible inversion) to',mstatus) # debug
             
                 Cmd="update "+self.in_sql+" set status='"+str(status)+"', value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
@@ -833,20 +827,23 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 
                 
             else: # setup values with no raw
-                value=ovalue # use the value in table without conversion or influence on status
+                value = ovalue # use the value in table without conversion or influence on status
                 if mba > 0 and member > 0:
-                    print('ERROR: raw None for svc',val_reg,member) # debug
+                    log.warning('ERROR: raw None for svc '+val_reg+'.'+str(member)) # debug
                     return None
             
             if lisa != '': # not the first member
-                lisa=lisa+' ' # separator between member values
-            lisa=lisa+str(int(round(value))) # adding member values into one string
+                lisa += ' ' # separator between member values
+            try:
+                lisa += str(int(round(value))) # adding member values into one string
+            except:
+                log.warning('invalid value to use as service '+val_reg+'.'+str(member)+' member: '+str(value))
         
-            if mstatus>status:
+            if mstatus > status:
                     status=mstatus
         
         # service members done
-        sendtuple=[sta_reg,status,val_reg,lisa] # sending service to buffer
+        sendtuple = [sta_reg,status,val_reg,lisa] # sending service to buffer
         if not (cfg&512) and chg == 1: # immediate notification
             udp.send(sendtuple) # to uniscada instance 
             
