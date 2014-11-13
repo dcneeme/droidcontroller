@@ -27,21 +27,21 @@ class Mbus:
         self.port = port
         self.model = model
         self.ser = serial.Serial(self.port, self.speed, timeout=tout, parity=serial.PARITY_EVEN) # opening the port
-        self.mbm = '' # last message 
-        
-        
+        self.mbm = '' # last message
+
+
     def set_model(self, invar):
         if invar in ['kamstrup602', 'sensusPE']:
             self.model = invar
-            
-            
+
+
     def get_model(self):
         return self.model
-        
-    
+
+
     def mb_decode(self, invar, key=''): # invar is the byte index in the read result from tty!
         ''' Returns decoded value from Mbus binary string self.mbm.
-            If key (2 bytes as hex string before data start) is given, 
+            If key (2 bytes as hex string before data start) is given,
             then it iwill used for data verification.
         '''
         try:
@@ -58,13 +58,13 @@ class Mbus:
             traceback.print_exc()
             log.debug('hex string decoding failed')
             return None
-            
-        
+
+
     def read(self):
         ''' Read and keep the answer from the Mbus device '''
-        #self.ser.write('\x10\x7B\xFE\x79\x16') # OK for py2.7 BU T NOT 3.x! 
+        #self.ser.write('\x10\x7B\xFE\x79\x16') # OK for py2.7 BU T NOT 3.x!
         self.ser.write(b'\x10\x7B\xFE\x79\x16') # works for both
-        
+
         self.mbm = self.ser.read(253) # should be 254 bytes, but the first byte E5 disappears??
         if len(self.mbm) > 0:
             log.debug('got from mbus ' + str(len(self.mbm)) + ' bytes')
@@ -73,11 +73,11 @@ class Mbus:
         else:
             log.debug('no answer from mbus device')
             return 1
-        
-        
+
+
     def debug(self, invar = ''):
         ''' Prints out the last response in 4 byte chunks as hex strings,
-            shifting the starting byte one by one. 
+            shifting the starting byte one by one.
             Use lower or upper case hex string for searching matches, or lists all.
             DO NOT mix upper and lower case characters though!
         '''
@@ -88,8 +88,8 @@ class Mbus:
                         print(i, encode(self.mbm[i-2:i], 'hex_codec'), encode(self.mbm[i:i+4], 'hex_codec'))
                 else:
                     print(i, str(encode(self.mbm[i-2:i], 'hex_codec')), str(encode(self.mbm[i:i+4], 'hex_codec')))
-        
-        
+
+
     def get_energy(self):
         ''' Return energy from the last read result. Chk the datetime in self.mbm as well! '''
         key = ''
@@ -103,10 +103,10 @@ class Mbus:
         else:
             log.warning('unknown model '+self.model)
             return None
-            
+
         return self.mb_decode(start, key) * coeff
-            
-    
+
+
     def get_volume(self):
         ''' Return volume from the last read result. Chk the datetime in self.mbm as well! '''
         key = ''
@@ -120,10 +120,10 @@ class Mbus:
         else:
             log.warning('unknown model '+self.model)
             return None
-            
+
         return self.mb_decode(start, key) * coeff
-        
-        
+
+
     def get_power(self):
         ''' Return power from the last read result. Chk the datetime in self.mbm as well! '''
         key= ''
@@ -137,10 +137,10 @@ class Mbus:
         else:
             log.warning('unknown model '+self.model)
             return None
-            
+
         return self.mb_decode(start, key) * coeff
-    
-    
+
+
     def get_temperature(self):
         ''' Return temperature reading extracted from the last read result. Chk the datetime in self.mbm as well! '''
         key =''
@@ -155,14 +155,13 @@ class Mbus:
         else:
             log.warning('unknown model '+self.model)
             return None
-            
+
         return self.mb_decode(start, key) * coeff # converted to degC
-        
+
 
 if __name__ == '__main__':
     m=Mbus()
     m.read()
     print('result',m.mb_decode(45))
     m.debug(45)
-    
-    
+
