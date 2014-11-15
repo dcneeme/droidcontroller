@@ -455,7 +455,18 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
     def set_membervalue(self, svc, member, value, table): # setting value in table based on svc and member
         ''' Sets variables like setpoints or limits to be reported within services, based on service name and member number.
             Table can be either dichannels, aichannels or counters and must be known! FIXME: could be detected automatically!
+            Must tolerate but ignore None as value
         '''
+        if value is None:
+            log.warning('no '+table+' update due to value='+str(value)+' instead of expected num value')
+            return 2
+        
+        try:
+            value=str(int(round(float(value),0)))
+        except:
+            log.warning('no update due to value'+str(value)+' instead of expected num value')
+            return 2
+        
         Cmd="BEGIN IMMEDIATE TRANSACTION" # conn, fot setbit_dochannels in fact
         conn.execute(Cmd)
         Cmd="update "+table+" set value='"+str(value)+"' where val_reg='"+svc+"' and member='"+str(member)+"'"
@@ -463,11 +474,13 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
         try:
             conn.execute(Cmd)
             conn.commit()
+            log.debug(table + ' updated with value='+str(value)+' for '+svc+'.'+str(member))
             return 0
         except:
             msg='set_membervalue failure: '+str(sys.exc_info()[1])
             print(msg)
-            udp.syslog(msg)
+            log.warning(table+' update failure')
+            #udp.syslog(msg)
             return 1  # update failure
 
 

@@ -39,21 +39,21 @@ class Mbus:
         return self.model
 
 
-    def mb_decode(self, invar, key=''): # invar is the byte index in the read result from tty!
-        ''' Returns decoded value from Mbus binary string self.mbm.
+    def mb_decode(self, invar, key='', coeff = 1.0): # invar is the byte index in the read result from tty!
+        ''' Returns decoded value from Mbus binary string self.mbm, 4 bytes starting from invar.
             If key (2 bytes as hex string before data start) is given,
-            then it iwill used for data verification.
+            then it iwill used for data verification. Coeff is used for unit normalization.
         '''
         try:
             res = 0
             for i in range(4):
                 #res += int(ord(self.mbm[invar + i])) << (i * 8) # ok for py2, but not for py3
                 res += self.mbm[invar + i] << (i * 8) # py3
-            if key != '' and str(key.lower()) != self.mbm[invar-2:invar].encode('hex_codec') and str(key.upper()) != self.mbm[invar-2:invar].encode('hex_codec'):
-                log.warning('possible non-matching key '+key+' in key+data '+ self.mbm[invar-2:invar].encode('hex_codec')+' '+self.mbm[invar:invar+4].encode('hex_codec'))
+            if key != '' and str(key.lower()) not in str(encode(self.mbm[invar-2:invar], 'hex_codec')) and str(key.upper()) not in str(encode(self.mbm[invar-2:invar], 'hex_codec')):
+                log.warning('possible non-matching key '+str(key)+' in key+data ' + str(encode(self.mbm[invar-2:invar], 'hex_codec'))+' '+str(encode(self.mbm[invar:invar+4], 'hex_codec')))
                 return None
             else:
-                return res
+                return res * coeff
         except:
             traceback.print_exc()
             log.debug('hex string decoding failed')
@@ -93,7 +93,7 @@ class Mbus:
     def get_energy(self):
         ''' Return energy from the last read result. Chk the datetime in self.mbm as well! '''
         key = ''
-        coeff = 1 # kwh
+        coeff = 1.0 # kwh
         if self.model == 'kamstrup602':
             start = 27 # check with mtools and compare with debug output
             key = '0406' # 2 hex bytes before data, to be sure
@@ -104,24 +104,24 @@ class Mbus:
             log.warning('unknown model '+self.model)
             return None
 
-        return self.mb_decode(start, key) * coeff
+        return self.mb_decode(start, key, coeff)
 
 
     def get_volume(self):
         ''' Return volume from the last read result. Chk the datetime in self.mbm as well! '''
         key = ''
-        coeff = 1
+        coeff = 1.0
         if self.model == 'kamstrup602':
             start = 33
             key = '0414'
-            coeff = 10 # l
+            coeff = 10.0 # l
         elif self.model == 'sensusPE':
             start = 33
         else:
             log.warning('unknown model '+self.model)
             return None
 
-        return self.mb_decode(start, key) * coeff
+        return self.mb_decode(start, key, coeff)
 
 
     def get_power(self):
@@ -131,21 +131,20 @@ class Mbus:
         if self.model == 'kamstrup602':
             start = 63
             key = '042d' # use lower or upper case, no difference
-            coeff = 100 # W
+            coeff = 100.0 # W
         elif self.model == 'sensusPE':
             start = 63
         else:
             log.warning('unknown model '+self.model)
             return None
 
-        return self.mb_decode(start, key) * coeff
-
+        return self.mb_decode(start, key, coeff)
+        
 
     def get_temperature(self):
         ''' Return temperature reading extracted from the last read result. Chk the datetime in self.mbm as well! '''
         key =''
-        coeff = 1
-        coeff = 1
+        coeff = 1.0
         if self.model == 'kamstrup602':
             start = 45
             key = '0459'
@@ -156,7 +155,7 @@ class Mbus:
             log.warning('unknown model '+self.model)
             return None
 
-        return self.mb_decode(start, key) * coeff # converted to degC
+        return self.mb_decode(start, key, coeff) # converted to degC
 
 
 if __name__ == '__main__':
