@@ -22,14 +22,34 @@ class Counter2Power():
         self.svc_name = svc_name
         self.svc_member=svc_member
         self.state = 0 # OFF
-        self.off_tout = off_tout
-        self.pulses4kWh = pulses4kWh
+        try:
+            if off_tout >0:
+                self.off_tout = off_tout
+            else:
+                log.warning('INVALID off_tout='+str(off_tout)+', using value 60 instead')
+                self.off_tout = 60
+                
+            if pulses4kWh > 0:
+                self.pulses4kWh = pulses4kWh
+            else:
+                log.warning('INVALID off_tout='+str(off_tout)+', using value 1000 instead')
+                self.pulses4kWh = 1000
+                
+        except:
+            log.warning('INVALID off_tout='+str(off_tout)+', using value 60 instead')
+            self.off_tout = 60
+            
+            
         self.init() # clear buffer dictionary
+        print('prn Counter2Power() instance created for pwr svc '+svc_name+' member '+str(self.svc_member)+', off_tout '+str(self.off_tout))
+        log.debug('log Counter2Power() instance created for pwr svc '+svc_name+' member '+str(self.svc_member)+', off_tout '+str(self.off_tout))
+        
 
     def init(self): # to be used in case of counter (re)setting, to avoid jump to power calculation
         self.ts_last = 0 # time stamp of last count increase
         self.count_last = 0 # last received count
         self.inc_dict = {} # averaging buffer to be filled with count increment only, {ts:count}
+        
 
     def get_svc(self):
         ''' Reports handled svc_name and member number as a tuple '''
@@ -74,14 +94,14 @@ class Counter2Power():
             self.countfrom = self.inc_dict[self.timefrom] # min count in dict, to be used in power calculation
 
         # add new item into dictonary
-        if count > self.count_last and (ts - self.ts_last) > 0: # both count and ts must be monothonic
+        if count > self.count_last and timedelta > 0: # both count and ts must be monothonic
             log.debug('consider_on: ts_now, ts_last, off_tout',int(round(ts_now)), int(round(self.ts_last)), self.off_tout) # debug
             self.inc_dict[round(ts,2)] = count # added new item
             count_inc = count - self.countfrom if count > self.countfrom else 0
             ts_inc = ts - self.timefrom if ts - self.timefrom > 0 else 0
             log.debug('counter: increase both in ts '+str(ts - self.ts_last)+' and count '+str(int(round(count-self.count_last)))+' since last chg, buffer span ts_inc '+str(int(round(ts_inc)))+', count_inc, '+str(count_inc))  # debug
 
-            if (ts - self.ts_last < 0.99*self.off_tout): # pulse increase below off_tout, hysteresis plus-minus 1% added
+            if (ts - self.ts_last < 0.99*self.off_tout) and ts_inc > 0: # pulse increase below off_tout, hysteresis plus-minus 1% added
                 if self.state == 0:
                     self.state = 1  # swithed ON #######################################################################
                     chg = 1
@@ -95,7 +115,7 @@ class Counter2Power():
                 return None, self.state, chg, timedelta, 0, 'no switch ON or off yet'
 
         elif count == self.count_last: # no count increase, no change in count_last or ts_last!
-            if (ts_now - self.ts_last > 1.01*self.off_tout): # no new pulses, possible switfOFF with hysteresis 1%
+            if (timedelta > 1.01*self.off_tout): # no new pulses, possible switfOFF with hysteresis 1%
                 log.debug('consider_off: ts_now, ts_last, off_tout',int(round(ts_now)), int(round(self.ts_last)), self.off_tout) # debug
                 if self.state >0:
                     self.state = 0 # swithed OFF #######################################################################
@@ -105,5 +125,6 @@ class Counter2Power():
                 return None, self.state, chg, timedelta, 0, 'no switch OFF yet'
 
         else:
-            return None, self.state, chg, timedelta, 0, 'something must be wrong'  # no power can be calculated, no state change for now
+            log.warning('unexpected state: count='+str(count)+', count_last='+str(self.count_last)+', timedelta='+str(timedelta))
+            return None, self.state, chg, timedelta, 0, 'unexpected (negative?) count/time change'  # no power can be calculated, no state change for now
 
