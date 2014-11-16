@@ -1,11 +1,6 @@
 # send and receive monitoring and control messages to from UniSCADA monitoring system
 # udp kuulamiseks thread?
-# neeme 01.04.2014
-# 02.04.2014  intial success. no external sql needed.
-# 03.04.2013 UDPsock moved into UDPchannel __init__
-# 06.04.2014 send() takes tuple now
-# 07.04.2014 send() tuple members to string or int
-# 29.04.2014 added syslog() and TCPchannel class 
+# neeme 
 
 import time, datetime
 import sqlite3
@@ -19,41 +14,32 @@ import requests
 import logging
 log = logging.getLogger(__name__)
 
-#from udp_commands import *
-OSTYPE = os.environ['OSTYPE']
-if OSTYPE == 'archlinux':
-    try:
-        from droidcontroller.gpio_led import *
-        led = GPIOLED() # cpuLED, commLED, alarmLED param 0 or 1
-    except:
-        log.warning('no GPIOLED loaded!')
-    
-            
-            
-class UDPchannel: # for one host only. if using 2 servers, create separate UDPchannels but a single MessageBuffer.. probably not necessary, can be separate too!
+#OSTYPE = os.environ['OSTYPE']
+
+
+
+class UDPchannel(): 
     ''' Sends away the messages, combining different key:value pairs and adding host id and time. Listens for incoming commands and setup data.
     Several UDPchannel instances can be used in parallel, to talk with different servers.
 
-    Usage example:
-    from droidcontroller.uniscada import *
-    f=UDPchannel(ip='46.183.73.35', id='000000000000', port=44445)
-    f.send('BRS',0,'','') # store to buffer
-    f.buff2server() # sends to server and resends earlier messages if any w.o ack
-    f.udpread() # possible ack or other data from the server
-
-    for regular send/receive use
-    f.comm() # returns possible data as key:value dictionary
+    Used by sqlgeneral.py
 
     '''
 
     def __init__(self, id = '000000000000', ip = '127.0.0.1', port = 44445, receive_timeout = 0.1, retrysend_delay = 5, loghost = '0.0.0.0', logport=514): # delays in seconds
+        from droidcontroller.connstate import ConnState
+        self.cu= ConnState() # conn state with up/down times
+        
+        from droidcontroller.gpio_led import GPIOLED
+        self.led = GPIOLED() # led alarm and conn
+        
         self.host_id = id
         self.ip = ip
         self.port = port
         self.loghost = loghost
         self.logport = logport
         self.logaddr = (self.loghost,self.logport) # tuple
-        
+
         self.traffic = [0,0] # UDP bytes in, out
         self.UDPSock = socket(AF_INET,SOCK_DGRAM)
         self.UDPSock.settimeout(receive_timeout)
@@ -86,7 +72,7 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
         ''' Set the monitoring server ip address '''
         self.ip = invar
         self.saddr = (self.ip,self.port) # refresh needed
-        
+
     def setLogIP(self, invar):
         ''' Set the syslog monitor ip address '''
         self.loghost = invar
@@ -124,8 +110,8 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
     def getLogIP(self):
         ''' returns syslog server ip for this instance '''
         return self.loghost
-        
-    
+
+
     def get_traffic(self):
         return self.traffic # tuple in, out
 
@@ -150,8 +136,8 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
 
     def get_inum(self):  #get message counter
         return self.inum
-        
-        
+
+
     def get_ts_udpgot(self):  #get ts of last ack from monitoring server
         return self.ts_udpgot
 
@@ -344,11 +330,8 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
 
         self.traffic[1]=self.traffic[1]+len(sendstring) # adding to the outgoing UDP byte counter
 
-        if OSTYPE == 'archlinux': # "if led:" gives error on npe
-            if led:
-                led.commLED(0)
-                #print('commled off, sent') # debug
-        
+        self.led.commLED(0) # off, blinking shows sending and time to ack
+                
         try:
             sendlen=self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr) # tagastab saadetud baitide arvu
             self.traffic[1]=self.traffic[1]+sendlen # traffic counter udp out
@@ -363,9 +346,8 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
             #syslog(msg)
             print(msg)
             traceback.print_exc()
-            if OSTYPE == 'archlinux': # "if led:" gives error on npe
-                if led:
-                    led.alarmLED(1) # send failure
+            
+            self.led.alarmLED(1) # send failure
             return None
 
 
@@ -378,17 +360,17 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
             cur.execute(Cmd)
             for row in cur:
                 print(repr(row))
-        elif mode == 1: # stats 
+        elif mode == 1: # stats
             Cmd ="SELECT count(ts_created),min(ts_created),max(ts_created) from "+self.table
             cur = self.conn.cursor()
             cur.execute(Cmd)
             for row in cur:
                 return row[0],row[1],row[2] # print(repr(row))
-        
+
 
     def udpread(self):
         ''' Checks received data for monitoring server to see if the data contains key "in",
-            then deletes the rows with this inum in the sql table. 
+            then deletes the rows with this inum in the sql table.
             If the received datagram contains more data, these key:value pairs are
             returned as dictionary.
         '''
@@ -430,64 +412,64 @@ class UDPchannel: # for one host only. if using 2 servers, create separate UDPch
                 else:
                     self.ts_udpgot=self.ts # timestamp of last udp received
 
-            if OSTYPE == 'archlinux': # "if led:" gives error on npe
-                if led:
-                    led.commLED(1) # data from server, comm OK
-                    #print('got from server, commled on') # debug, comm ok
-                
-            lines=data.splitlines() # split message into key:value lines
-            for i in range(len(lines)): # looking into every member of incoming message
-                if ":" in lines[i]:
-                    #print "   "+lines[i]
-                    line = lines[i].split(':')
-                    line = lines[i].split(':')
-                    sregister = line[0] # setup reg name
-                    svalue = line[1] # setup reg value
-                    #print('received key:value',sregister,svalue) # debug
-                    if sregister != 'in' and sregister != 'id': # may be setup or command (cmd:)
-                        msg='got setup/cmd reg:val '+sregister+':'+svalue  # need to reply in order to avoid retransmits of the command(s)
-                        print(msg)
-                        data_dict.update({ sregister : svalue }) # in and idf are not included in dict
-                        #udp.syslog(msg) # cannot use udp here
-                        #sendstring += sregister+":"+svalue+"\n"  # add to the answer - better to answer with real values immediately after change
-                        
-                    else:
-                        if sregister == "in": # one such a key in message
-                            inumm=eval(data[data.find("in:")+3:].splitlines()[0].split(',')[0]) # loodaks integerit
-                            if inumm >= 0 and inumm<65536:  # valid inum, response to message sent if 1...65535. datagram including "in:0" is a server initiated "fast communication" message
-                                #print "found valid inum",inum,"in the incoming message " # temporary
-                                msg='got ack '+str(inumm)+' in message: '+data.replace('\n',' ')
-                                print(msg)
-                                #syslog(msg)
+                #if OSTYPE == 'archlinux': # "if led:" gives error on npe
+                self.led.commLED(1) # data from server, comm OK
+                #print('got from server, commled on') # debug, comm ok
+                self.cu.up()
 
-                                Cmd="BEGIN IMMEDIATE TRANSACTION" # buff2server, to delete acknowledged rows from the buffer
-                                self.conn.execute(Cmd) # buff2server ack transactioni algus, loeme ja kustutame saadetud read
-                                Cmd="DELETE from "+self.table+" WHERE inum='"+str(inumm)+"'"  # deleting all rows where inum matches server ack
-                                try:
-                                    self.conn.execute(Cmd) # deleted
-                                except:
-                                    msg='problem with '+Cmd+'\n'+str(sys.exc_info()[1])
+                lines=data.splitlines() # split message into key:value lines
+                for i in range(len(lines)): # looking into every member of incoming message
+                    if ":" in lines[i]:
+                        #print "   "+lines[i]
+                        line = lines[i].split(':')
+                        line = lines[i].split(':')
+                        sregister = line[0] # setup reg name
+                        svalue = line[1] # setup reg value
+                        #print('received key:value',sregister,svalue) # debug
+                        if sregister != 'in' and sregister != 'id': # may be setup or command (cmd:)
+                            msg='got setup/cmd reg:val '+sregister+':'+svalue  # need to reply in order to avoid retransmits of the command(s)
+                            print(msg)
+                            data_dict.update({ sregister : svalue }) # in and idf are not included in dict
+                            #udp.syslog(msg) # cannot use udp here
+                            #sendstring += sregister+":"+svalue+"\n"  # add to the answer - better to answer with real values immediately after change
+
+                        else:
+                            if sregister == "in": # one such a key in message
+                                inumm=eval(data[data.find("in:")+3:].splitlines()[0].split(',')[0]) # loodaks integerit
+                                if inumm >= 0 and inumm<65536:  # valid inum, response to message sent if 1...65535. datagram including "in:0" is a server initiated "fast communication" message
+                                    #print "found valid inum",inum,"in the incoming message " # temporary
+                                    msg='got ack '+str(inumm)+' in message: '+data.replace('\n',' ')
                                     print(msg)
                                     #syslog(msg)
-                                    time.sleep(1)
-                                self.conn.commit() # buff2server transaction end
-                    
-                    if len(sendstring) > 0:
-                        self.udpsend(sendstring) # send the response right away to avoid multiple retransmits
-                        # this answers to the server but does not update the setup or service table yet!
 
-            return data_dict # possible key:value pairs here for setup change or commands. returns {} for just ack with no cmd
+                                    Cmd="BEGIN IMMEDIATE TRANSACTION" # buff2server, to delete acknowledged rows from the buffer
+                                    self.conn.execute(Cmd) # buff2server ack transactioni algus, loeme ja kustutame saadetud read
+                                    Cmd="DELETE from "+self.table+" WHERE inum='"+str(inumm)+"'"  # deleting all rows where inum matches server ack
+                                    try:
+                                        self.conn.execute(Cmd) # deleted
+                                    except:
+                                        msg='problem with '+Cmd+'\n'+str(sys.exc_info()[1])
+                                        print(msg)
+                                        #syslog(msg)
+                                        time.sleep(1)
+                                    self.conn.commit() # buff2server transaction end
+
+                        if len(sendstring) > 0:
+                            self.udpsend(sendstring) # send the response right away to avoid multiple retransmits
+                            # this answers to the server but does not update the setup or service table yet!
+
+                return data_dict # possible key:value pairs here for setup change or commands. returns {} for just ack with no cmd
         else:
             return None
-            
+
 
     def syslog(self, msg,logaddr=()): # sending out syslog message to self.logaddr.
         msg=msg+"\n" # add newline to the end
         #print('syslog send to',self.logaddr) # debug
-        dnsize=0 
+        dnsize=0
         if self.logaddr == None and logaddr != ():
             self.logaddr = logaddr
-        
+
         try: #
             self.UDPlogSock.sendto(msg.encode('utf-8'),self.logaddr)
             if not '255.255.' in self.logaddr[0] and not '10.0.' in self.logaddr[0] and not '192.168.' in self.logaddr[0]: # sending syslog out of local network
@@ -525,18 +507,18 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
         self.ts_cal=time.time()
         self.conn = sqlite3.connect(':memory:') # for calendar table
         self.makecalendar()
-        
-    
+
+
     def setID(self, invar):
         ''' Set the host id '''
         self.host_id = invar
 
-    
+
     def getID(self):
         '''returns server ip for this instance '''
         return self.host_id
 
-    
+
     def get_traffic(self): # TCP traffic counter
         return self.traffic # tuple in, out
 
@@ -558,7 +540,7 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
         return int(round(self.ts_cal))
 
 
-    
+
     def push(self, filename): # send (gzipped) file to supporthost
         ''' push file filename to supporthost directory using uploader and base64string (for basic auth) '''
         if os.path.isfile(filename):
@@ -605,11 +587,11 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
 
 
 
-    def pull(self, filename, filesize, start=0): 
-        ''' Retrieves file from support server via http get, uncompressing 
-            too if filename contains .gz or tgz and succesfully retrieved. 
+    def pull(self, filename, filesize, start=0):
+        ''' Retrieves file from support server via http get, uncompressing
+            too if filename contains .gz or tgz and succesfully retrieved.
             Parameter start=0 normally, higher with resume.
-        ''' 
+        '''
         oksofar=1 # success flag
         filename2='' # for uncompressed from the downloaded file
         filepart=filename+'.part' # temporary, to be renamed to filename when complete
@@ -794,7 +776,7 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
             #udp.syslog(msg)
             traceback.print_exc() # debug
             return 1 # kui ei saa normaalseid syndmusi, siis ka lopetab
-            
+
         #print(repr(events)) # debug
         Cmd = "BEGIN IMMEDIATE TRANSACTION"
         try:
@@ -805,7 +787,7 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
                 #print('event',event) # debug
                 columns=str(list(event.keys())).replace('[','(').replace(']',')')
                 values=str(list(event.values())).replace('[','(').replace(']',')')
-                #columns=str(list(event.keys())).replace('{','(').replace('}',')') 
+                #columns=str(list(event.keys())).replace('{','(').replace('}',')')
                 #values=str(list(event.values())).replace('{','(').replace('}',')')
                 Cmd = "insert into calendar"+columns+" values"+values
                 print(Cmd) # debug
@@ -825,8 +807,8 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
             #UDPchannel.syslog(msg)
             traceback.print_exc() # debug
             return 1 # kui insert ei onnestu, siis ka delete ei toimu
-            
-            
+
+
     def chk_calevents(self, title = ''): # set a new setpoint if found in table calendar (sharing database connection with setup)
         ''' Obsolete, functionality moved to gcal.py '''
         ts=time.time()
@@ -834,7 +816,7 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
         value='' # local string value
         if title == '':
             return None
-        
+
         Cmd = "BEGIN IMMEDIATE TRANSACTION"
         try:
             conn.execute(Cmd)
