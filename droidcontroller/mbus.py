@@ -14,8 +14,6 @@ import time
 import serial
 import traceback
 import sys, logging
-logging.basicConfig(stream=sys.stderr, level=logging.INFO)
-logging.getLogger('acchannels').setLevel(logging.DEBUG) # yks esile
 log = logging.getLogger(__name__)
 
 class Mbus:
@@ -48,7 +46,9 @@ class Mbus:
             res = 0
             for i in range(4):
                 #res += int(ord(self.mbm[invar + i])) << (i * 8) # ok for py2, but not for py3
-                res += self.mbm[invar + i] << (i * 8) # py3
+                res += int(self.mbm[invar + i]) << (i * 8) # py3
+                log.debug('res='+str(res))
+
             if key != '' and str(key.lower()) not in str(encode(self.mbm[invar-2:invar], 'hex_codec')) and str(key.upper()) not in str(encode(self.mbm[invar-2:invar], 'hex_codec')):
                 log.warning('possible non-matching key '+str(key)+' in key+data ' + str(encode(self.mbm[invar-2:invar], 'hex_codec'))+' '+str(encode(self.mbm[invar:invar+4], 'hex_codec')))
                 return None
@@ -56,7 +56,7 @@ class Mbus:
                 return res * coeff
         except:
             traceback.print_exc()
-            log.debug('hex string decoding failed')
+            log.warning('hex string decoding failed')
             return None
 
 
@@ -68,7 +68,7 @@ class Mbus:
         self.mbm = self.ser.read(253) # should be 254 bytes, but the first byte E5 disappears??
         if len(self.mbm) > 0:
             log.debug('got from mbus ' + str(len(self.mbm)) + ' bytes')
-            print(encode(self.mbm, 'hex_codec')) # universal, works for 3,3 too
+            print('got from mbus (first 60 bytes): '+str(encode(self.mbm, 'hex_codec'))[:60]) # universal, works for 3,3 too
             return 0
         else:
             log.debug('no answer from mbus device')
@@ -139,25 +139,32 @@ class Mbus:
             return None
 
         return self.mb_decode(start, key, coeff)
-        
 
-    def get_temperature(self):
-        ''' Return temperature reading extracted from the last read result. Chk the datetime in self.mbm as well! '''
-        key =''
-        coeff = 1.0
-        if self.model == 'kamstrup602':
-            start = 45
-            key = '0459'
-            coeff = 0.01
+
+    def get_temperatures(self):
+        ''' Return temperature readings out, return diff extracted from the last read result. Chk the datetime in self.mbm as well! '''
+        key =['','','']
+        coeff = [1.0, 1.0, 1.0]
+        if self.model == 'kamstrup602': # checked, is 402 similar?
+            start = [45, 51, 57]
+            key = ['0459', '045D', '0461'] # inlet outlet diff
+            coeff = [0.01, 0.01, 0.01]
         elif self.model == 'sensusPE':
-            start = 45
+            start = [45, 51, 57] # FIXME
+            key = ['0459', '045D', '0461']
+            coeff = [0.01, 0.01, 0.01]
         else:
             log.warning('unknown model '+self.model)
-            return None
+            return None, None, None
 
-        return self.mb_decode(start, key, coeff) # converted to degC
+        out = []
+        for i in range(3):
+            out.append(self.mb_decode(start[i], key[i], coeff[i])) # converted to degC
+
+        return out
 
 
+##########################################################
 if __name__ == '__main__':
     m=Mbus()
     m.read()
