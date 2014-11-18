@@ -76,17 +76,18 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 if mb[mbi]:
                     result = mb[mbi].read(mba, regadd, count=count, type=regtype)
                     msg += ' OK, raw '+str(result)
+                    log.debug(msg)
                 else:
                     msg += ' -- FAIL, no mb[] for '+str(mbi)
-                print(msg)
+                    log.warning(msg)
             except:
                 msg += ' -- FAILED!'
-                print(msg)
+                log.warning(msg)
                 traceback.print_exc()
                 return 2
         else:
             msg += '-- FAIL, invalid parameters of mba '+str(mba)+' or count '+str(count)
-            print(msg)
+            log.warning(msg)
             return 2
 
         if result != None:
@@ -113,7 +114,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                             value=int((result[i]&2**bit)>>bit) # new bit value
                             #print('decoded new value for mbi, mba, regadd, bit',mbi,mba,regadd+i,bit,'is',value,'was',ovalue) # debug
                         except:
-                            print('read_di_grp problem: result, i, bit',result,i,bit)
+                            log.warning('read_di_grp problem: result, i, bit',result,i,bit)
                             traceback.print_exc()
 
                         # check if outputs must be written
@@ -144,7 +145,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             #print('recreating modbus channel due to error to', mbhost[mbi])
             mb[mbi] = CommModbus(host=mbhost[mbi])
             msg='recreated mb['+str(mbi)+'], this di grp data read FAILED for mbi,mba,regadd,count '+str(mbi)+', '+str(mba)+', '+str(regadd)+', '+str(count)
-            print(msg)
+            log.warning(msg)
             time.sleep(0.5) # hopefully helps to avoid sequential error / recreations
             return 1
 
@@ -227,7 +228,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             conn.commit()  # dichannel-bits transaction end
             if res == 0:
                 #print('.',) # debug, to mark di polling interval
-                sys.stdout.write('d')
+                log.debug('d')
                 #sys.stdout.flush()
                 return 0
             else:
@@ -236,7 +237,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         except: # Exception,err:  # python3 ei taha seda viimast
             msg='there was a problem with dichannels data reading or processing! '+str(sys.exc_info()[1])
             udp.syslog(msg)
-            print(msg)
+            log.warning(msg)
             traceback.print_exc()
             time.sleep(1)
             return 1
@@ -290,12 +291,12 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                     ts_last=int(row[2]) # last reporting time
                     if chg == 1: # message due to bichannel state change
                         msg='DI service to be reported due to change: '+val_reg
-                        print(msg)
+                        log.debug(msg)
                     udp.send(self.make_dichannel_svc(val_reg)) # sends this service tuple away via udp.send()
 
             else:
                 msg='DI service '+svc+' to be rereported'
-                print(msg)
+                log.debug(msg)
                 udp.send(self.make_dichannel_svc(svc)) # sends this service as a correction
 
             conn.commit() # dichannels transaction end
@@ -305,7 +306,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             traceback.print_exc()
             #syslog('err: '+repr(err))
             msg='there was a problem with make_dichannels()! '+str(sys.exc_info()[1])
-            print(msg)
+            log.warning(msg)
             #syslog(msg)
             return 1
 
@@ -456,7 +457,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                     mbi_dict.update({mbi : mba_dict})
                 except:
                     msg='failure in creating tmp_array '+repr(tmp_array)+' '+str(sys.exc_info()[1])
-                    print(msg)
+                    log.warning(msg)
                     #udp.syslog(msg)
                     traceback.print_exc()
 
@@ -488,17 +489,15 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                         respcode=mb[mbi].write(mba, regadd, value=word) # do not give type, npe may need something else then h
                         if respcode == 0:
                             msg='output written - mbi mba regadd value '+str(mbi)+' '+str(mba)+' '+str(regadd)+' '+format("%04x" % word)
+                            log.debug(msg)
                         else:
                             msg='FAILED writing register '+str(mba)+'.'+str(regadd)+' '+str(sys.exc_info()[1])
-
-                        #udp.syslog(msg)
-                        print(msg)
+                            log.warning(msg)
 
 
         except:
             msg='problem with dichannel grp select in write_do_channels! '+str(sys.exc_info()[1])
-            print(msg)
-            #syslog(msg)
+            log.warning(msg)
             traceback.print_exc() # debug
             sys.stdout.flush()
             time.sleep(1)
@@ -520,7 +519,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         mval=''
         res=0
         member=0
-        print('dchannels: parsing key:value data ',data_dict) # debug
+        log.debug('dchannels: parsing for possible key:value data ',data_dict) # debug
         for key in data_dict: # process per key:value
             if key[-1] == 'W': # must end with W to be multivalue service containing setup values
                 valmembers=data_dict[key].split(' ') # convert value to member list

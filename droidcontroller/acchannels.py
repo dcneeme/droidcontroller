@@ -48,8 +48,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
     def sqlread(self, table):
-        s.sqlread(table) # read dichannels
-
+        s.sqlread(table) #
 
     def Initialize(self): # before using this create s=SQLgeneral()
         ''' initialize delta t variables, create tables and modbus connection '''
@@ -86,7 +85,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         if data_dict == {} or data_dict == '' or data_dict == None:
             log.warning('ac: nothing to parse in',data_dict)
             return 0
-        log.debug('acchannels: parsing key:value data ',data_dict) # debug
+        log.debug('parsing for possible match key:value data ',data_dict) # debug
         for key in data_dict: # process per key:value
             if key[-1] == 'W': # must end with W to be multivalue service containing setup values
                 valmembers=data_dict[key].split(' ') # convert value to member list
@@ -626,7 +625,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             return 1  # update failure
 
 
-    def set_aosvc(self, svc, member, value): # to set a readable output channel by the service name and member using dichannels table
+    def set_aosvc(self, svc, member, value): # to set a readable output channel by the service name and member using aicochannels table
         ''' Set service member value bby service name and member number'''
         #(mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,comment,type integer) # ai
         Cmd="BEGIN IMMEDIATE TRANSACTION"
@@ -673,8 +672,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 sta_reg=val_reg[:-1]+"S" # nimi ilma viimase symbolita ja S - statuse teenuse nimi, analoogsuuruste ja temp kohta
 
                 sendtuple=self.make_svc(val_reg,sta_reg)
-                if sendtuple != None: # == 0: # successful svc insertion into buff2server
-                    udp.send(sendtuple) #may send to buffer double if make_svc found change. no dblk sending if ts is the same.
+                if sendtuple != None: #
+                    udp.send(sendtuple) # can send to buffer double if make_svc found change. no dbl sending if ts is the same.
                     log.debug ('buffered for reporting: '+str(sendtuple))
                 else:
                     log.warning('FAILED to report svc '+val_reg+' '+sta_reg)
@@ -709,7 +708,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         log.debug(Cmd)
 
         cur.execute(Cmd) # another cursor to read the same table
-        ts_now=time.time() # time now in sec
+        ts_now = time.time() # time now in sec
+        rowproblemcount = 0 # count of invalid members in svc
 
         for srow in cur: # go through service members
             log.debug(repr(srow))
@@ -732,130 +732,143 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             avg=0 # keskmistamistegur, mojub alates 2
             block=0 # power off_tout for counters
             result=None
-            rowproblem = 0
             #desc=''
             #comment=''
+            rowproblem = 0 # initially ok
             # 0       1     2     3     4   5  6  7  8  9    10     11  12    13  14   15     16  17    18
             #mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,comment  # aichannels
             try:
-                mba=int(srow[0]) if srow[0] != '' else 0   # must be int! will be -1 if empty (setpoints)
-                regadd=int(srow[1]) if srow[1] != '' else 0  # must be int! will be -1 if empty
-                val_reg=srow[2] # see on string
-                member=int(srow[3]) if srow[3] != '' else 0
-                cfg=int(srow[4]) if srow[4] != '' else 0 # konfibait nii ind kui grp korraga, esita hex kujul hiljem
-                x1=int(srow[5]) if srow[5] != '' else 0
-                x2=int(srow[6]) if srow[6] != '' else 0
-                y1=int(srow[7]) if srow[7] != '' else 0
-                y2=int(srow[8]) if srow[8] != '' else 0
-                outlo=int(srow[9]) if srow[9] != '' else 0
-                outhi=int(srow[10]) if srow[10] != '' else 0
-                avg=int(srow[11]) if srow[11] != '' else 0  #  averaging strength, values 0 and 1 do not average!
-                block=int(srow[12]) if srow[12] != '' else 0 # off-tout for power related on/off
-                raw=int(srow[13]) if srow[13] != '' else 0 # Nonen teeb jama
-                ovalue=int(srow[14]) if (srow[14] != None and srow[14] != '' ) else 0 # teenuseliikme endine vaartus - MIKS vahel None???
-                ostatus=int(srow[15]) if srow[15] != '' else 0 # teenusekomponendi status - ei kasuta / votame kasutusele
-                ots=eval(srow[16]) if srow[16] != '' else 0
+                mba = int(srow[0]) if srow[0] != '' else 0   # must be int! will be -1 if empty (setpoints)
+                regadd = int(srow[1]) if srow[1] != '' else 0  # must be int! will be -1 if empty
+                val_reg = srow[2] # see on string
+                member = int(srow[3]) if srow[3] != '' else 0
+                cfg = int(srow[4]) if srow[4] != '' else 0 # konfibait nii ind kui grp korraga, esita hex kujul hiljem
+                x1 = int(srow[5]) if srow[5] != '' else 0
+                x2 = int(srow[6]) if srow[6] != '' else 0
+                y1 = int(srow[7]) if srow[7] != '' else 0
+                y2 = int(srow[8]) if srow[8] != '' else 0
+                outlo = int(srow[9]) if srow[9] != '' else 0
+                outhi = int(srow[10]) if srow[10] != '' else 0
+                avg = int(srow[11]) if srow[11] != '' else 0  #  averaging strength, values 0 and 1 do not average!
+                block = int(srow[12]) if srow[12] != '' else 0 # off-tout for power related on/off
+                raw = int(srow[13]) if srow[13] != '' else 0 # Nonen teeb jama
+                ovalue = int(srow[14]) if (srow[14] != None and srow[14] != '' ) else 0 # teenuseliikme endine vaartus - MIKS vahel None???
+                ostatus = int(srow[15]) if srow[15] != '' else 0 # teenusekomponendi status - ei kasuta / votame kasutusele
+                ots = eval(srow[16]) if srow[16] != '' else 0
                 #desc=srow[17]
-                #comment=srow[18]
-                mbi=srow[20] # int
-                wcount=int(srow[21]) if srow[21] != '' else 1  # word count
-                chg=0 # member status change flag
+                regtype = srow[18] # should be h or i for modbus registers
+                mbi = srow[20] # int
+                wcount = int(srow[21]) if srow[21] != '' else 1  # word count
+                chg = 0 # member status change flag
                 log.debug('val_reg '+val_reg+' member '+str(member)+', cfg='+str(cfg)+', raw='+str(raw)+', ovalue='+str(ovalue)+', outlo='+str(outlo)+', outhi='+str(outhi)) # debug
             except:
-                log.warning('problem with data from '+self.in_sql+' for svc '+val_reg+', srow: '+repr(srow))
+                log.debug('invalid data from '+self.in_sql+' for svc '+val_reg+', srow: '+repr(srow))
                 rowproblem = 1
                 traceback.print_exc()
 
             ################ sat
 
-            if rowproblem == 0 and raw != None: # valid data for either energy or power value
-                if ots < ts_now - 10*self.readperiod: # data stalled
-                    print('make_svc() cancelled due to stalled member data for',val_reg,member,'ots,ts_now',ots,ts_now)
-                    return None
+            if raw != None and (regtype == 'h' or regtype == 'i'): # seems like valid data, not setup
+                if rowproblem == 1:
+                    log.warning('svc processing skipped due to invalid data from '+self.in_sql+' for svc '+val_reg+', srow: '+repr(srow))
+                elif ots < ts_now - 10*self.readperiod: # but too old, stalled
+                    log.warning('svc processing skipped due to stalled member data for',val_reg,member,'ots,ts_now',ots,ts_now)
+                else: # data fresh enough, going to process
 
-                #POWER?
-                if (cfg&64): # power, no sign, increment to be calculated! divide increment to time from the last reading to get the power
-                    cpi += 1 # counter2power index
-                    try:
-                        if cpi != -1 and self.cp[cpi]:
-                            pass # this instance already exists
-                    except:
-                        self.cp.append(Counter2Power(val_reg,member,off_tout = block)) # another Count2Power instance. 100s  = 36W threshold if 1000 imp per kWh
-                        
-                    res = self.cp[cpi].calc(ots, raw, ts_now = self.ts) # power calculation based on raw counter increase
-                    log.debug('got result from cp['+str(cpi)+']: '+str(res)+', params ots '+str(ots)+', raw '+str(raw)+', ts_now '+str(self.ts))  # debug
-                    if (cfg&128) > 0: #
-                        raw = res[1] # on off = 0 1, asendab eelmise raw
-                        if res[2] != 0: # on/off change
-                            chg = 1 # immediate notification needed due to state change
+                    #POWER?
+                    if (cfg&64): # power, no sign, increment to be calculated! divide increment to time from the last reading to get the power
+                        cpi += 1 # counter2power index
+                        try:
+                            if cpi != -1 and self.cp[cpi]:
+                                pass # this instance already exists
+                        except:
+                            self.cp.append(Counter2Power(val_reg,member,off_tout = block)) # another Count2Power instance. 100s  = 36W threshold if 1000 imp per kWh
+
+                        res = self.cp[cpi].calc(ots, raw, ts_now = self.ts) # power calculation based on raw counter increase
+                        log.debug('got result from cp['+str(cpi)+']: '+str(res)+', params ots '+str(ots)+', raw '+str(raw)+', ts_now '+str(self.ts))  # debug
+                        if (cfg&128) > 0: #
+                            raw = res[1] # on off = 0 1, asendab eelmise raw
+                            if res[2] != 0: # on/off change
+                                chg = 1 # immediate notification needed due to state change
+                        else:
+                            raw = res[0]
+
+                    # SCALING
+                    if (cfg&1024) == 0 and raw != None: # take sign into account, not counter ### SIGNED if not counter ##
+                        if raw >= (2**(wcount*16-1)): # negative!
+                            raw = raw-(2**(wcount*16))
+                            #print('read_all: converted to negative value',raw,'wcount',wcount) # debug
+
+                    if raw != None and x1 != x2 and y1 != y2: # seems like normal input data
+                        value=(raw-x1)*(y2-y1)/(x2-x1)
+                        value=int(round(y1+value)) # integer values to be reported only
                     else:
-                        raw = res[0]
+                        #log.warning('val_reg '+val_reg+' member '+str(member)+', raw '+str(raw)+' ai2scale conversion NOT DONE!')
+                        value=None
+                        rowproblem = 1 # this service will not be used in notification
 
-                # SCALING
-                if (cfg&1024) == 0 and raw != None: # take sign into account, not counter ### SIGNED if not counter ##
-                    if raw >= (2**(wcount*16-1)): # negative!
-                        raw = raw-(2**(wcount*16))
-                        #print('read_all: converted to negative value',raw,'wcount',wcount) # debug
+                    #if outhi == None or outlo == None:
+                    #    print('no limit chk for',val_reg,'due to outlo, outhi',outlo,outhi) # debug
 
-                if raw != None and x1 != x2 and y1 != y2: # seems like normal input data
-                    value=(raw-x1)*(y2-y1)/(x2-x1)
-                    value=int(round(y1+value)) # integer values to be reported only
-                else:
-                    print("read_counters val_reg",val_reg,"member",member,"raw",raw,"ai2scale PARAMETERS INVALID:",x1,x2,'->',y1,y2,'conversion not used!') # debug
-                    value=None
+                    if value != None and avg != None and ovalue != None:
+                        if avg > 1 and abs(value - ovalue) < value / 2:  # averaging the readings. big jumps (more than 50% change) are not averaged.
+                            value=int(((avg - 1) * ovalue+value)/avg) # averaging with the previous value, works like RC low pass filter
+                            log.debug('averaging on, value became '+str(value)) # debug
 
-                if outhi == None or outlo == None:
-                    print('no limit chk for',val_reg,'due to outlo, outhi',outlo,outhi) # debug
-
-                if value != None and avg != None and ovalue != None:
-                    if avg > 1 and abs(value - ovalue) < value / 2:  # averaging the readings. big jumps (more than 50% change) are not averaged.
-                        value=int(((avg - 1) * ovalue+value)/avg) # averaging with the previous value, works like RC low pass filter
-                        #print('counter avg on, value became ',value) # debug
-
-                    if (cfg&256) and abs(value - ovalue) > value / 5.0: # change more than 20% detected, use num w comma!
-                        print('value change of more than 20% detected in '+val_reg+'.'+str(member)+', need to notify') # debug
-                        chg = 1
+                        if (cfg&256) and abs(value - ovalue) > value / 5.0: # change more than 20% detected, use num w comma!
+                            log.debug('value change of more than 20% detected in '+val_reg+'.'+str(member)+', need to notify')
+                            chg = 1
 
 
-                    # counter2power and scaling done, status check begins ##########
-                    mstatus=self.value2status(value,cfg,outlo,outhi,ostatus) # default hyst=5%
+                        # counter2power and scaling done, status check begins ##########
+                        mstatus=self.value2status(value,cfg,outlo,outhi,ostatus) # default hyst=5%
 
 
-                    if mstatus != ostatus: # member status change detected
-                        chg = 1 # immediate notification within this method
-                        print('member status chg (after possible inversion) to',mstatus) # debug
+                        if mstatus != ostatus: # member status change detected
+                            chg = 1 # immediate notification within this method
+                            print('member status chg (after possible inversion) to',mstatus) # debug
 
-                if value != None:
-                    Cmd="update "+self.in_sql+" set status='"+str(status)+"', value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
-                    conn.execute(Cmd) # who commits? the calling method!!!
-                else:
-                    log.warning(self.in_sql+' NOT updated due to value = None!')
-                #############
+                    if value != None:
+                        Cmd="update "+self.in_sql+" set status='"+str(status)+"', value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
+                        conn.execute(Cmd) # who commits? the calling method!!!
+                    else:
+                        log.warning(self.in_sql+' NOT updated due to value = None!')
+                        rowproblem = 1
+
+                ############# h or i processing done #######
 
 
 
             else: # setup values with no raw
                 value = ovalue # use the value in table without conversion or influence on status
-                if mba > 0 and member > 0:
-                    log.warning('ERROR: raw None for svc '+val_reg+'.'+str(member)) # debug
-                    return None
+                if mba > 0:
+                    log.warning('NO mba SHOULD be set for setup value '+val_reg+'.'+str(member)) # debug
+
 
             if lisa != '': # not the first member
                 lisa += ' ' # separator between member values
+
             try:
                 lisa += str(int(round(value))) # adding member values into one string
             except:
-                log.warning('invalid value to use as service '+val_reg+'.'+str(member)+' member: '+str(value))
+                log.debug('invalid value to use as service '+val_reg+'.'+str(member)+' member: '+str(value))
+                rowproblem = 1
 
             if mstatus > status:
                     status=mstatus
 
-        # service members done
-        sendtuple = [sta_reg,status,val_reg,lisa] # sending service to buffer
-        if not (cfg&512) and chg == 1: # immediate notification
-            udp.send(sendtuple) # to uniscada instance
+            rowproblemcount += rowproblem
 
-        return sendtuple # for regular send or status check
+        # service members done, check if all of them valid to use in svc tuple
+        if rowproblemcount == 0: # all members valid
+            sendtuple = [sta_reg,status,val_reg,lisa] # sending service to buffer
+            #if not (cfg&512) and chg == 1: # immediate notification / FIXME - too late here
+            #    udp.send(sendtuple) # to uniscada instance for immediate notification (without buffering?)
+            #    log.debug('sendtuple for '+val_reg+' sent to buffer due to value change')
+            return sendtuple # for regular send or status check
+        else:
+            log.debug(val_reg+' had '+str(rowproblemcount)+' problematic members, sendtuple NOT created!')
+            return None
 
 
     def value2status(self,value,cfg,outlo,outhi,ostatus=0,hyst=2):

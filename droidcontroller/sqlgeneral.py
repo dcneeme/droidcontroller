@@ -1,5 +1,7 @@
 #to be imported into modbus_sql. needs mb and conn
-'''  Creates multiple modbus access channels for various access channels defined in devices.sql '''
+'''  Creates multiple modbus access channels for various access channels defined in devices.sql.
+    Also creates communication channel to uniscada server, connstate and gpioled instances.
+ '''
 
 import time, datetime
 import sqlite3
@@ -9,6 +11,9 @@ import sys
 from pymodbus import *
 from droidcontroller.comm_modbus import CommModbus  # contains CommModbus, .read(), .write()
 from droidcontroller.uniscada import *
+from droidcontroller.connstate import *
+from droidcontroller.gpio_led import * # for olinuxino, what about npe? make it universal?
+
 import logging
 log = logging.getLogger(__name__)
 
@@ -29,7 +34,21 @@ except:
     conn = sqlite3.connect(':memory:')
     print('created sqlite connection')
 
+try:
+    if cu:
+        print('conn state instance already existing')
+except:
+    cu = ConnState()
+    print('created connn state instance')
 
+try:
+    if led:
+        print('led instance already existing')
+except:
+    led = GPIOLED()
+    print('created led instance')
+
+    
 try:
     if mb:
         print('modbus connection(s) already existing')
@@ -460,13 +479,13 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
         if value is None:
             log.warning('no '+table+' update due to value='+str(value)+' instead of expected num value')
             return 2
-        
+
         try:
             value=str(int(round(float(value),0)))
         except:
             log.warning('no update due to value'+str(value)+' instead of expected num value')
             return 2
-        
+
         Cmd="BEGIN IMMEDIATE TRANSACTION" # conn, fot setbit_dochannels in fact
         conn.execute(Cmd)
         Cmd="update "+table+" set value='"+str(value)+"' where val_reg='"+svc+"' and member='"+str(member)+"'"
@@ -601,11 +620,11 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
 
         Cmd="select mbi,mba,regadd,val_reg,member,regtype from "+table+" where mba+0>0 group by mbi,mba,regadd"
         #print(Cmd) # di korral bit eristust ei toimu, reeglina reg 0 ja 1!
-        
+
         cur.execute(Cmd)
         for row in cur:
             if row[0] in dev_dict: # mbi in keys
-                if int(row[1]) in dev_dict[row[0]]: # mba 
+                if int(row[1]) in dev_dict[row[0]]: # mba
                     print('channel mbi,mba,regadd,register,member,regtype '+str(row[0])+','+str(row[1])+','+str(row[2])+','+str(row[3])+','+row[4]+','+row[5]+' correctly defined in '+table)
                 else:
                     bad=1
