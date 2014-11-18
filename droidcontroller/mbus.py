@@ -15,27 +15,68 @@ import serial
 import traceback
 import sys, logging
 log = logging.getLogger(__name__)
+import serial.tools.list_ports
+print(list(serial.tools.list_ports.comports()))
+# [('/dev/ttyUSB1', 'FTDI TTL232R FTH8AIQ9', 'USB VID:PID=0403:6001 SNR=FTH8AIQ9')]
 
 class Mbus:
-    ''' Read various utility meters using Mbus, speed 2400, 8E1   '''
+    ''' Read various utility meters using Mbus, speed 2400, 8E1
+        First read(), then get_ . Keeps count of read errors (since last success or init).
+        Needs USB/serial converter and Mbus interface card.
+        USB port can be described as port, but this software is able to find the USB
+        port (like /dev/ttyUSB0 or COM18) also by autokey (like FTDI).
+    '''
 
-    def __init__(self, port='/dev/ttyUSB0', tout=3, speed=2400, model='kamstrup602'):  # tout 1 too small! win port like 'COM27'
+    def __init__(self, port='auto', autokey='FTDI', tout=3, speed=2400, model='kamstrup602'):  # tout 1 too small! win port like 'COM27'
+        ports=list(serial.tools.list_ports.comports())
+        found = 0
+        if port == 'auto':
+            for i in range(len(ports)):
+                if autokey in ports[i][1]:
+                    found = 1
+                    self.port = ports[i][0]
+        else: # no
+            self.port = port
+
         self.tout = tout
         self.speed = speed
-        self.port = port
         self.model = model
-        self.ser = serial.Serial(self.port, self.speed, timeout=tout, parity=serial.PARITY_EVEN) # opening the port
+        self.ser = serial.Serial(self.port, self.speed, timeout=tout, parity=serial.PARITY_EVEN) # also opening the port
+        self.errors = 0 # every success zeroes
         self.mbm = '' # last message
+        try:
+            self.read()
+            log.info('Mbus connection successful on port '+self.port)
+        except:
+            log.error('Mbus connection FAILED on port '+self.port)
 
+    def close(self):
+        self.__del__()
+
+    def __del__(self):
+        class_name = self.__class__.__name__
+        print(class_name, 'destroyed')
+
+    def reopen(self): # try to restore serial channel
+        ''' Attempt to restore failing USB port by closing and reopening '''
+        log.warning('trying to restore Mbus connectivity by closing and reopening serial port '+self.port)
+        self.ser.close()
+        time.sleep(1)
+        self.ser.open()
+        self.read() # dummy, contains zeroes, some buffer??
 
     def set_model(self, invar):
         if invar in ['kamstrup602', 'sensusPE']:
             self.model = invar
 
-
     def get_model(self):
         return self.model
 
+    def get_port(self):
+        return self.port
+
+    def get_errors(self):
+        return self.errors
 
     def mb_decode(self, invar, key='', coeff = 1.0): # invar is the byte index in the read result from tty!
         ''' Returns decoded value from Mbus binary string self.mbm, 4 bytes starting from invar.
@@ -51,30 +92,58 @@ class Mbus:
 
             if key != '' and str(key.lower()) not in str(encode(self.mbm[invar-2:invar], 'hex_codec')) and str(key.upper()) not in str(encode(self.mbm[invar-2:invar], 'hex_codec')):
                 log.warning('possible non-matching key '+str(key)+' in key+data ' + str(encode(self.mbm[invar-2:invar], 'hex_codec'))+' '+str(encode(self.mbm[invar:invar+4], 'hex_codec')))
+                self.errors += 1
                 return None
             else:
+                self.errors = 0
                 return res * coeff
         except:
             traceback.print_exc()
             log.warning('hex string decoding failed')
+            self.errors += 1
             return None
 
 
     def read(self):
-        ''' Read and keep the answer from the Mbus device '''
-        #self.ser.write('\x10\x7B\xFE\x79\x16') # OK for py2.7 BU T NOT 3.x!
-        self.ser.write(b'\x10\x7B\xFE\x79\x16') # works for both
-
-        self.mbm = self.ser.read(253) # should be 254 bytes, but the first byte E5 disappears??
-        if len(self.mbm) > 0:
-            log.debug('got from mbus ' + str(len(self.mbm)) + ' bytes')
-            print('got from mbus (first 60 bytes): '+str(encode(self.mbm, 'hex_codec'))[:60]) # universal, works for 3,3 too
+        ''' Read and save the answer from the Mbus device into self.mbm. Uses rd_chk() to retry once on failure. '''
+        res = self.rd_chk()
+        if res == 0:
+            self.errors = 0
             return 0
         else:
-            log.debug('no answer from mbus device')
-            return 1
+            self.errors +=1
+            if self.errors > 1:
+                return 1
+            elif self.errors == 1: #retrying once
+                self.reopen()
+                res = self.rd_chk()
+                if res == 0:
+                    self.errors = 0
+                    return 0
+                else:
+                    self.errors +=1
+                    return 1 
+            
 
-
+    def rd_chk(self):
+        ''' Sends the query, reads the response and checks the content '''
+        try:
+            self.ser.flushInput() # no garbage or old responses wanted
+            self.ser.write(b'\x10\x7B\xFE\x79\x16') # works for both py2 and 3
+            self.mbm = self.ser.read(253) # should be 254 bytes, but the first byte E5 disappears??
+            if len(self.mbm) > 0:
+                if len(self.mbm) == 253 and str(encode(self.mbm, 'hex_codec'))[2:10] == '68f7f768' and str(encode(self.mbm, 'hex_codec'))[-3:-1] == '16':
+                    log.debug('got a valid message from mbus, length ' + str(len(self.mbm)) + ' bytes')
+                    print('got a valid message of '+str(len(self.mbm))+' bytes from mbus (first 20 follow): '+str(encode(self.mbm, 'hex_codec'))[:20]) 
+                    return 0
+                else:
+                    log.warning('INVALID number of bytes ' + str(len(self.mbm)) + ' or unexpected content received from mbus device!')
+            else:
+                log.warning('no answer from mbus device')
+        except:
+            log.error('USB port probably disconnected!!')
+        return 1
+        
     def debug(self, invar = ''):
         ''' Prints out the last response in 4 byte chunks as hex strings,
             shifting the starting byte one by one.
@@ -162,6 +231,25 @@ class Mbus:
             out.append(self.mb_decode(start[i], key[i], coeff[i])) # converted to degC
 
         return out
+
+
+    def get_datetime(self):
+        ''' Returns some 23 bit number of minutes(?) in unknown format '''
+        key= ''
+        coeff = 1
+        if self.model == 'kamstrup602':
+            start = 124
+            key = '046d' # use lower or upper case, no difference
+            coeff = 1
+        elif self.model == 'sensusPE':
+            start = 124
+            key = '046d' # UNTESTED
+            coeff = 1
+        else:
+            log.warning('unknown model '+self.model)
+            return None
+
+        return self.mb_decode(start, key, coeff)
 
 
 ##########################################################
