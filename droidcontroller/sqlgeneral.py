@@ -34,21 +34,7 @@ except:
     conn = sqlite3.connect(':memory:')
     print('created sqlite connection')
 
-try:
-    if cu:
-        print('conn state instance already existing')
-except:
-    cu = ConnState()
-    print('created connn state instance')
 
-try:
-    if led:
-        print('led instance already existing')
-except:
-    led = GPIOLED()
-    print('created led instance')
-
-    
 try:
     if mb:
         print('modbus connection(s) already existing')

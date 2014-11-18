@@ -142,7 +142,9 @@ class Mbus:
                 log.warning('no answer from mbus device')
         except:
             log.error('USB port probably disconnected!!')
+            self.errors += 1 # sure increase needed
         return 1
+        
         
     def debug(self, invar = ''):
         ''' Prints out the last response in 4 byte chunks as hex strings,
