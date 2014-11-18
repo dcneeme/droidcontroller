@@ -7,6 +7,8 @@ import sys
 from droidcontroller.sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
 s=SQLgeneral()
 
+import logging
+log = logging.getLogger(__name__)
 
 
 class Commands(SQLgeneral): # p
@@ -23,11 +25,8 @@ class Commands(SQLgeneral): # p
             self.vpn_start='rcopenvpn-start' # olinuxino
             self.vpn_stop='rcopenvpn-stop'
         else:
-            print('udp_commands: vpn start/stop commands undefined for OSTYPE',OSTYPE)
+            log.warning('udp_commands: vpn start/stop commands undefined for OSTYPE',OSTYPE)
             time.sleep(1)
-        #self.uptime=[int(self.subexec('cut -f1 -d. /proc/uptime',1)), 0]
-        #print('system uptime',self.uptime[0])
-        #s.print_table('setup') # do we have it? access to setup table is needed
 
 
     def set_vpnconf(self, invar):
@@ -369,12 +368,15 @@ class RegularComm(SQLgeneral): # r
         self.ts=self.app_start
         self.uptime=[0,0,0]
         try:
-            self.uptime[0]=int(self.subexec('cut -f1 -d. /proc/uptime',1)) # should be avoided on npe, use only once
-            self.uptime[2]=self.uptime[0] # counting on from app init
+            self.sync_uptime() # sys apptime to uptime[0]
+            #uptime[0]=int(self.subexec('cut -f1 -d. /proc/uptime',1)) # should be avoided on npe, use only once
+            self.uptime[1] = 0
+            self.uptime[2] = self.uptime[0] # counting on using sys uptime instead of ts (time.time())
         except: # not unix&linux
             pass
         self.set_pyalivecmd() # to watch the process list for this as process a mark of being alive
         self.set_udpalivecmd() # to watch udp conn being alive
+
 
     def subexec(self, exec_cmd, submode = 1): # submode 0 - returns exit code only, 1 - waits for output, 2 - forks to background. use []
         ''' shell command execution. if submode 0-, return exit staus.. if 1, exit std output produced.
@@ -394,10 +396,11 @@ class RegularComm(SQLgeneral): # r
 
 
     def sync_uptime(self):
-        #self.uptime[0]=0 #
-        self.uptime[1]=int(self.ts - self.app_start) # app uptime
-        self.uptime[0]=self.uptime[2]+self.uptime[1] # sys uptime
-        print('uptimes sys,app,app_start_ts',self.uptime) # debug
+        with open('/proc/uptime', 'r') as f:
+            self.uptime[0] = int(float(f.readline().split()[0]))
+        #self.uptime[1] = int(self.ts - self.app_start) # app uptime - app_start can be wrong! use sys uptime instead
+        self.uptime[1] = self.uptime[0] - self.uptime[2] # use sys uptime to get app uptime
+        log.debug('uptimes sys, app, app_start_uptime '+str(self.uptime))
 
 
     def set_host_ip(self, invar):
@@ -460,7 +463,7 @@ class RegularComm(SQLgeneral): # r
                     sendstring += svc+':'+str(self.host_ip)+'\n'
 
             res=udp.udpsend(sendstring) # loop over, SEND AWAY
-            self.ts_regular=self.ts
+            self.ts_regular = self.ts
 
             # put python alive mark into the process list
             try:
