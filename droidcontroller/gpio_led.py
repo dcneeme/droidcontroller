@@ -1,4 +1,4 @@
-# finish, add cpu control, __init__
+# make gpio channel meanings selectable
 import os, traceback
 try:
     import iMX233_GPIO as GPIO
