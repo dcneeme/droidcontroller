@@ -5,16 +5,15 @@
 # m.read()
 # m.get_temperature()
 
-# ser.write() needs to be changed for py3
-# self.ser.write('\x10\x7B\xFE\x79\x16') # TypeError: an integer is required
-
 
 from codecs import encode # for encode to work in py3
 import time
 import serial
 import traceback
 import sys, logging
+logging.basicConfig(stream=sys.stderr, level=logging.DEBUG) # temporary
 log = logging.getLogger(__name__)
+
 import serial.tools.list_ports
 print(list(serial.tools.list_ports.comports()))
 # [('/dev/ttyUSB1', 'FTDI TTL232R FTH8AIQ9', 'USB VID:PID=0403:6001 SNR=FTH8AIQ9')]
@@ -25,9 +24,11 @@ class Mbus:
         Needs USB/serial converter and Mbus interface card.
         USB port can be described as port, but this software is able to find the USB
         port (like /dev/ttyUSB0 or COM18) also by autokey (like FTDI).
+
+        with sensus, try sending
     '''
 
-    def __init__(self, port='auto', autokey='FTDI', tout=3, speed=2400, model='kamstrup602'):  # tout 1 too small! win port like 'COM27'
+    def __init__(self, port='auto', autokey='FTDI', tout=3, speed=2400, model='sensusPE'):  # tout 1 too small! win port like 'COM27'
         ports=list(serial.tools.list_ports.comports())
         found = 0
         if port == 'auto':
@@ -63,6 +64,9 @@ class Mbus:
         self.ser.close()
         time.sleep(1)
         self.ser.open()
+        if self.model == 'sensusPE':
+            self.ser.write(b'\x68\x03\x03\x68\x73\xFE\x50\xC1\x16') # answer mode set
+            time.sleep(0.5)
         self.read() # dummy, contains zeroes, some buffer??
 
     def set_model(self, invar):
@@ -78,14 +82,14 @@ class Mbus:
     def get_errors(self):
         return self.errors
 
-    def mb_decode(self, invar, key='', coeff = 1.0): # invar is the byte index in the read result from tty!
+    def mb_decode(self, invar, key='', coeff = 1.0, len = 4): # invar is the byte index in the read result from tty!
         ''' Returns decoded value from Mbus binary string self.mbm, 4 bytes starting from invar.
             If key (2 bytes as hex string before data start) is given,
             then it iwill used for data verification. Coeff is used for unit normalization.
         '''
         try:
             res = 0
-            for i in range(4):
+            for i in range(len):
                 #res += int(ord(self.mbm[invar + i])) << (i * 8) # ok for py2, but not for py3
                 res += int(self.mbm[invar + i]) << (i * 8) # py3
                 log.debug('res='+str(res))
@@ -122,30 +126,37 @@ class Mbus:
                     return 0
                 else:
                     self.errors +=1
-                    return 1 
-            
+                    return 1
 
-    def rd_chk(self):
+
+    def rd_chk(self, query=b'\x10\x7B\xFE\x79\x16'): # proovi ka muid
         ''' Sends the query, reads the response and checks the content '''
         try:
             self.ser.flushInput() # no garbage or old responses wanted
-            self.ser.write(b'\x10\x7B\xFE\x79\x16') # works for both py2 and 3
-            self.mbm = self.ser.read(253) # should be 254 bytes, but the first byte E5 disappears??
+            if self.model == 'sensusPE':
+                self.ser.write(b'\x68\x03\x03\x68\x73\xFE\x50\xC1\x16') # answer mode set
+                time.sleep(0.5) # muidu ei tule jargmist vastust
+            self.ser.flushInput() # no garbage or old responses wanted
+            self.ser.write(query) # kamstrup and sensus
+            #self.ser.write(b'\x10\x7B\xFE\x79\x16') # sensus - similar!
+
+            self.mbm = self.ser.read(253) # kamstrup: should be 254 bytes, but the first byte E5 disappears??
             if len(self.mbm) > 0:
-                if len(self.mbm) == 253 and str(encode(self.mbm, 'hex_codec'))[2:10] == '68f7f768' and str(encode(self.mbm, 'hex_codec'))[-3:-1] == '16':
+                #if len(self.mbm) == 253 and str(encode(self.mbm, 'hex_codec'))[2:10] == '68f7f768' and str(encode(self.mbm, 'hex_codec'))[-3:-1] == '16':
+                if str(encode(self.mbm, 'hex_codec'))[-3:-1] == '16':
                     log.debug('got a valid message from mbus, length ' + str(len(self.mbm)) + ' bytes')
-                    print('got a valid message of '+str(len(self.mbm))+' bytes from mbus (first 20 follow): '+str(encode(self.mbm, 'hex_codec'))[:20]) 
+                    print('got a valid message of '+str(len(self.mbm))+' bytes from mbus (first 20 follow): '+str(encode(self.mbm, 'hex_codec'))[:20])
                     return 0
                 else:
-                    log.warning('INVALID number of bytes ' + str(len(self.mbm)) + ' or unexpected content received from mbus device!')
+                    log.warning('INVALID message with length ' + str(len(self.mbm)) + ' received from mbus device!')
             else:
                 log.warning('no answer from mbus device')
         except:
             log.error('USB port probably disconnected!!')
             self.errors += 1 # sure increase needed
         return 1
-        
-        
+
+
     def debug(self, invar = ''):
         ''' Prints out the last response in 4 byte chunks as hex strings,
             shifting the starting byte one by one.
@@ -169,13 +180,13 @@ class Mbus:
             start = 27 # check with mtools and compare with debug output
             key = '0406' # 2 hex bytes before data, to be sure
         elif self.model == 'sensusPE':
-            start = 27
-            key = ''
+            start = 21
+            key = '0c07'
         else:
             log.warning('unknown model '+self.model)
             return None
 
-        return self.mb_decode(start, key, coeff)
+        return self.mb_decode(start, key, coeff) # len always 4 = default
 
 
     def get_volume(self):
@@ -187,7 +198,9 @@ class Mbus:
             key = '0414'
             coeff = 10.0 # l
         elif self.model == 'sensusPE':
-            start = 33
+            start = 27
+            key = '0c14'
+            coeff = 10.0
         else:
             log.warning('unknown model '+self.model)
             return None
@@ -204,7 +217,27 @@ class Mbus:
             key = '042d' # use lower or upper case, no difference
             coeff = 100.0 # W
         elif self.model == 'sensusPE':
-            start = 63
+            start = 39
+            key='0c2c'
+            coeff = 10.0 #
+        else:
+            log.warning('unknown model '+self.model)
+            return None
+
+        return self.mb_decode(start, key, coeff)
+
+    def get_flow(self):
+        ''' Return power from the last read result. Chk the datetime in self.mbm as well! '''
+        key= ''
+        coeff = 1
+        if self.model == 'kamstrup602':
+            start = 63 # CHK!
+            key = '042d' # use lower or upper case, no difference
+            coeff = 100.0 # W
+        elif self.model == 'sensusPE':
+            start = 33
+            key='0c3c'
+            coeff = 10.0 #  L/h
         else:
             log.warning('unknown model '+self.model)
             return None
@@ -216,21 +249,23 @@ class Mbus:
         ''' Return temperature readings out, return diff extracted from the last read result. Chk the datetime in self.mbm as well! '''
         key =['','','']
         coeff = [1.0, 1.0, 1.0]
+        len = [4, 4, 4] # bytes
         if self.model == 'kamstrup602': # checked, is 402 similar?
             start = [45, 51, 57]
             key = ['0459', '045D', '0461'] # inlet outlet diff
-            coeff = [0.01, 0.01, 0.01]
+            coeff = [0.01, 0.01, 0.01] # 10 mK unit
         elif self.model == 'sensusPE':
-            start = [45, 51, 57] # FIXME
-            key = ['0459', '045D', '0461']
-            coeff = [0.01, 0.01, 0.01]
+            start = [45, 49, 53] # FIXME
+            key = ['0a5a', '0a5e', '0b60']
+            coeff = [0.1, 0.1, 0.001]
+            len = [2, 2, 3]
         else:
             log.warning('unknown model '+self.model)
             return None, None, None
 
         out = []
         for i in range(3):
-            out.append(self.mb_decode(start[i], key[i], coeff[i])) # converted to degC
+            out.append(self.mb_decode(start[i], key[i], coeff[i], len[i])) # converted to degC
 
         return out
 
