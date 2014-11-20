@@ -3,12 +3,17 @@ import logging, time
 log = logging.getLogger(__name__)
 
 class StateKeeper: #
-    ''' Keep the state and the timestamp of the last state change. 
+    ''' Keep the state and the timestamp of the last state change.
         The state falls down if no up() actions are coming before timeout.
-        Toggle input toggle() forces immediate state change. 
+        Toggle input toggle() forces immediate state change.
+        Timeout 0 turns state down on next get_state(), tout None means never time out.
+        TODO: add upfilter, time to get another up, must be smaller than off_tout
         '''
 
-    def __init__(self, off_tout = 300): # falls to down (connstate = 0) after no setting up for off_tout
+    def __init__(self, off_tout = 300, in_tout = 30): # falls to down (connstate = 0) after no setting up for off_tout
+        ''' First up() while in state 0 does not change state unless in_tout == 0.
+            If the second up() arrives before in_tout, state will go up.
+        '''
         self.off_tout = off_tout
         self.neverup = 1 #goes down with first up
         self.ts_up = 0
@@ -53,26 +58,28 @@ class StateKeeper: #
             self.state = 1
             self.ts_up = time.time()
             self.ts_uplast = time.time()
-            
+
             if self.neverup == 1:
                 log.info('state changed to first-time up by the toggle signal')
                 self.neverup = -1
             else:
                 log.info('state changed to up by toggle signal')
-        
+
     def get_state(self):
         ''' Returns state and the age of this state since last state change '''
         if self.state == 0:  # conn state down
             age = round(time.time() - self.ts_dn,0) # s
             time2down = 0
         else: # up
-            if time.time() - self.ts_uplast > self.off_tout:
-                self.dn()
-                age = 0
-                time2down = 0
-            else:
+            if self.off_tout != None:
                 age = round(time.time() - self.ts_up,0) # s
                 time2down = round(self.off_tout + self.ts_uplast -time.time(), 0)
+                if time.time() - self.ts_uplast > self.off_tout:
+                    self.dn()
+                    age = 0
+                    time2down = 0
+                    log.info('state changed to down due to timeout')
+
 
         if self.neverup == -1 and self.state == 1: # generate pulse to restore variables from the server
             firstup = 1
