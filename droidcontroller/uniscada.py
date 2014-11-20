@@ -1,6 +1,6 @@
 # send and receive monitoring and control messages to from UniSCADA monitoring system
 # udp kuulamiseks thread?
-# neeme 
+# neeme
 
 import time, datetime
 import sqlite3
@@ -13,12 +13,12 @@ import tarfile
 import requests
 import logging
 log = logging.getLogger(__name__)
-
+#karlas kasutab sk asemel nime cu!
 #OSTYPE = os.environ['OSTYPE']
 
 
 
-class UDPchannel(): 
+class UDPchannel():
     ''' Sends away the messages, combining different key:value pairs and adding host id and time. Listens for incoming commands and setup data.
     Several UDPchannel instances can be used in parallel, to talk with different servers.
 
@@ -28,11 +28,11 @@ class UDPchannel():
 
     def __init__(self, id = '000000000000', ip = '127.0.0.1', port = 44445, receive_timeout = 0.1, retrysend_delay = 5, loghost = '0.0.0.0', logport=514): # delays in seconds
         from droidcontroller.connstate import ConnState
-        self.cu= ConnState() # conn state with up/down times
-        
+        self.sk = StateKeeper() # conn state with up/down times # was cu!
+
         from droidcontroller.gpio_led import GPIOLED
         self.led = GPIOLED() # led alarm and conn
-        
+
         self.host_id = id
         self.ip = ip
         self.port = port
@@ -331,7 +331,7 @@ class UDPchannel():
         self.traffic[1]=self.traffic[1]+len(sendstring) # adding to the outgoing UDP byte counter
 
         self.led.commLED(0) # off, blinking shows sending and time to ack
-                
+
         try:
             sendlen=self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr) # tagastab saadetud baitide arvu
             self.traffic[1]=self.traffic[1]+sendlen # traffic counter udp out
@@ -346,7 +346,7 @@ class UDPchannel():
             #syslog(msg)
             print(msg)
             traceback.print_exc()
-            
+
             self.led.alarmLED(1) # send failure
             return None
 
@@ -415,7 +415,7 @@ class UDPchannel():
                 #if OSTYPE == 'archlinux': # "if led:" gives error on npe
                 self.led.commLED(1) # data from server, comm OK
                 #print('got from server, commled on') # debug, comm ok
-                self.cu.up()
+                self.sk.up()
 
                 lines=data.splitlines() # split message into key:value lines
                 for i in range(len(lines)): # looking into every member of incoming message
