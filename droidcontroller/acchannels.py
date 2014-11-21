@@ -772,7 +772,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 if rowproblem == 1:
                     log.warning('svc processing skipped due to invalid data from '+self.in_sql+' for svc '+val_reg+', srow: '+repr(srow))
                 elif ots < ts_now - 10*self.readperiod: # but too old, stalled
-                    log.warning('svc processing skipped due to stalled member data for',val_reg,member,'ots,ts_now',ots,ts_now)
+                    log.warning('svc processing skipped due to stalled member data for '+val_reg+str(member))
                 else: # data fresh enough, going to process
 
                     #POWER?
