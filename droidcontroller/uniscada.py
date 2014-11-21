@@ -27,8 +27,9 @@ class UDPchannel():
     '''
 
     def __init__(self, id = '000000000000', ip = '127.0.0.1', port = 44445, receive_timeout = 0.1, retrysend_delay = 5, loghost = '0.0.0.0', logport=514): # delays in seconds
-        from droidcontroller.connstate import ConnState
-        self.sk = StateKeeper() # conn state with up/down times # was cu!
+        #from droidcontroller.connstate import ConnState
+        from droidcontroller.statekeeper import StateKeeper
+        self.sk = StateKeeper(off_tout=300, on_tout=0) # conn state with up/down times
 
         from droidcontroller.gpio_led import GPIOLED
         self.led = GPIOLED() # led alarm and conn
