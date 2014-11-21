@@ -25,7 +25,10 @@ class Mbus:
         USB port can be described as port, but this software is able to find the USB
         port (like /dev/ttyUSB0 or COM18) also by autokey (like FTDI).
 
-        with sensus, try sending
+        With both sensus and kamstrup, data bytes for readings contain numbers 0..9. 
+        With sensus, this is called BCD 4, 6 or 8 encoding.
+        Key block is then starting with 0A, 0B or 0C respectively.
+        Decoding is different, see decode().
     '''
 
     def __init__(self, port='auto', autokey='FTDI', tout=3, speed=2400, model='sensusPE'):  # tout 1 too small! win port like 'COM27'
@@ -82,20 +85,52 @@ class Mbus:
     def get_errors(self):
         return self.errors
 
-    def mb_decode(self, invar, key='', coeff = 1.0, len = 4): # invar is the byte index in the read result from tty!
-        ''' Returns decoded value from Mbus binary string self.mbm, 4 bytes starting from invar.
+    def mb_decode(self, invar, key='', coeff = 1.0, len = 4, hex = 1): # len and hex may be overruled by key
+        ''' Returns decoded value from Mbus binary string self.mbm, len bytes starting from invar.
             If key (2 bytes as hex string before data start) is given,
-            then it iwill used for data verification. Coeff is used for unit normalization.
+            then it is used for finding len and decoding type selection. 
+            Coeff is used for unit normalization, to produce output in usual units.
         '''
+        # default encoding (hex == 1) is hex 4 bytes, LSB first
+        # if hex == 0, BCD is used with numbers 0..9 only used
+        if key != '' and len(key == 4):
+            if key[0] == 0:
+                if key[1] == 4:
+                    len = 4
+                    hex = 1
+                elif key[1] == A:
+                    len = 2
+                    hex = 0
+                elif key[1] == B:
+                    len = 3
+                    hex = 0
+                elif key[1] == C:
+                    len = 4
+                    hex = 0
+                else:
+                    log.warning('unsupported encoding for data, key '+str(key[0:2]))
+            
         try:
             res = 0
             for i in range(len):
-                #res += int(ord(self.mbm[invar + i])) << (i * 8) # ok for py2, but not for py3
-                res += int(self.mbm[invar + i]) << (i * 8) # py3
-                log.debug('res='+str(res))
-
-            if key != '' and str(key.lower()) not in str(encode(self.mbm[invar-2:invar], 'hex_codec')) and str(key.upper()) not in str(encode(self.mbm[invar-2:invar], 'hex_codec')):
-                log.warning('possible non-matching key '+str(key)+' in key+data ' + str(encode(self.mbm[invar-2:invar], 'hex_codec'))+' '+str(encode(self.mbm[invar:invar+4], 'hex_codec')))
+                if hex == 1:
+                    #res += int(ord(self.mbm[invar + i])) << (i * 8) # ok for py2, but not for py3
+                    res += int(self.mbm[invar + i], 16) << (i * 8) # py3. numbers still 0..9, base 10!
+                    log.debug('decoding HEX value step '+str(i)+', res='+str(res))
+                elif hex == 0: # MSB == F then it signals negative number! A...E are invalid!
+                    res += int(self.mbm[invar + i], 16) * (i * 100) # py3
+                    log.debug('decoding BCD value step '+str(i)+', res='+str(res))
+                    if len == len -1: # possible sign data
+                        if (int(self.mbm[len - 1], 16) & 0xF0) == 0xF0: # the result is negative
+                            res= -res
+                    else:
+                        log.warning('invalid halfbyte value >9 in data byte '+str(encode(self.mbm[invar + i])))
+                        self.errors += 1
+                        
+            if key != '' and str(key.lower()) not in str(encode(self.mbm[invar-2:invar], 'hex_codec')) \
+                and str(key.upper()) not in str(encode(self.mbm[invar-2:invar], 'hex_codec')): # check
+                log.warning('non-matching key '+str(key)+' in key+data ' + str(encode(self.mbm[invar-2:invar], 'hex_codec'))+ \
+                    ' '+str(encode(self.mbm[invar:invar+4], 'hex_codec')))
                 self.errors += 1
                 return None
             else:
