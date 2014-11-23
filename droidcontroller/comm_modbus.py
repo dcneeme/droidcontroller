@@ -14,7 +14,8 @@ class CommModbus(Comm):
         >>> mb[0].read(1,100,4)
         [0, 0, 0, 0]
 
-
+        Use improved by cougar ModbusClient package with expected response length calculation!
+        Otherwise 0.5 s tout is used for every transaction!!
     '''
 
     def __init__(self, type = 'h', **kwargs):
@@ -61,7 +62,7 @@ class CommModbus(Comm):
                 self.UDPSock.settimeout(0.1)
                 self.ip='127.0.0.1' # FIXME: SHOULD BE BASED ON PORT NUMBER LIKE WITH XPORT
                 self.port=44441
-                self.saddr = (self.ip,self.port) 
+                self.saddr = (self.ip,self.port)
                 self.datadict={} # to give instant response from previous reading
                 #self.data=[]
                 #print('created npe channel to',self.saddr)
@@ -69,8 +70,9 @@ class CommModbus(Comm):
             ###############
             elif '/dev/tty' in kwargs.get('host'): # direct serial connection defined via host
                 from pymodbus.client.sync import ModbusSerialClient as ModbusClient
-                self.client = ModbusClient(method='rtu', stopbits=1, bytesize=8, parity='E', baudrate=19200, timeout=0.2, port=kwargs.get('host'))
-                # timeout 0.2 oli enne, tekkis vastuste nihe vahel
+                self.client = ModbusClient(method='rtu', stopbits=1, bytesize=8, parity='E', baudrate=19200, timeout=0.5, port=kwargs.get('host'))
+                #use improved by cougar ModbusClient package with expected response length calculation!
+                #otherwise 0.5 s tout is used for every transaction!!
                 print('CommModbus() init2: created CommModbus instance for ModbusRTU over RS485 using port',kwargs)
             else: #tcp, possibly rtu over tcp
                 from pymodbus.client.sync import ModbusTcpClient as ModbusClient
@@ -91,7 +93,7 @@ class CommModbus(Comm):
         else:
             port=kwargs.get('port')
             from pymodbus.client.sync import ModbusSerialClient as ModbusClient
-            self.client = ModbusClient(method='rtu', stopbits=1, bytesize=8, parity='E', baudrate=19200, timeout=0.2, port=port)
+            self.client = ModbusClient(method='rtu', stopbits=1, bytesize=8, parity='E', baudrate=19200, timeout=0.5, port=port)
             print('CommModbus() init5: created CommModbus instance for ModbusRTU over RS485 using port:',port)
         #Comm.__init__(self, **kwargs) # for scheduler, not used
 
@@ -99,27 +101,27 @@ class CommModbus(Comm):
     def get_errorcount(self):
         ''' returns number of errors, becomes 0 after each successful modbus transaction '''
         return self.errorcount
-    
-    
+
+
     def set_errorcount(self,invar):
         ''' Sets number of errors '''
         self.errorcount = invar
         return 0
-    
-    
+
+
     def get_type(self):
         ''' returns type, to mark special comm channels to be used if not empty. n - npe_io '''
         return self.type
-    
+
     def get_host(self):
         ''' returns type, to mark special comm channels to be used if not empty. n - npe_io '''
         return self.host
-        
+
     def get_port(self):
         ''' returns type, to mark special comm channels to be used if not empty. n - npe_io '''
         return self.port
-    
-    
+
+
     def _poller(self, id, **kwargs):
         ''' Read Modbus register and write to storage
 
@@ -170,7 +172,7 @@ class CommModbus(Comm):
         #dummy=0
         if self.type == 'n' or self.type == 'u':  # type switch for npe_io
             type=self.type  # this instance does not use modbus at all! for npe_io!
-             
+
         # actual reading
         if type == 'h':
             #res = self.client.read_holding_registers(address=reg, count=count, unit=mba)
@@ -195,7 +197,7 @@ class CommModbus(Comm):
                 return res.registers
             except:
                 print('modbus read (i) failed from',mba,reg,count,' error: '+str(sys.exc_info()[1]))
-                #traceback.print_exc() 
+                #traceback.print_exc()
                 #self.on_error(id, **kwargs)
                 self.errorcount += 1
                 return None
@@ -227,12 +229,12 @@ class CommModbus(Comm):
                 #traceback.print_exc() # self.on_error(id, **kwargs)
                 self.errorcount += 1
                 return None
-                
+
         elif type == 'u': # npe_io over udp ##################### NPE socat READ ##################
             #print('npe_io read over udp: reg,count',reg,count) # debug
             # for types b or p use udpcomm() directly
             try:
-                res = self.udpcomm(reg, count, 'rs') # use 'rs' to get current (not previous) reading, delayed! use rs for now 
+                res = self.udpcomm(reg, count, 'rs') # use 'rs' to get current (not previous) reading, delayed! use rs for now
                 # FIXME - using type is able NOT to update 200,4...
                 #print('udpcomm() returned:', res,'for reg',reg) # debug
                 if res != None and len(res)>0:
@@ -268,7 +270,7 @@ class CommModbus(Comm):
         '''
         if self.type == 'n' or self.type == 'u':  # type switch for npe_io
             type=self.type  # this instance does not use modbus at all! for npe_io!
-        
+
         try:
             values = kwargs['values']
             count = len(values)
@@ -354,7 +356,7 @@ class CommModbus(Comm):
             # Popen(exec_cmd, shell=False) # safer, limited to use shell built-ins, no p[ath can be given. exec_cmd can be a tuple (inc params)
             # Popen(['sleep','15'], shell=False) # example of using parameters
             return 0 # no idea how it really ends
-        
+
 
 # #############  npe_read.sh and npe_write.sh not used, subprocess() usage is dangerous, socat is better #####
     #def npe_read(self,register,count = 1): # mba ignored
@@ -384,7 +386,7 @@ class CommModbus(Comm):
        # except:
         #    print('subexec() failed in npe_write()')
          #   return 1
-            
+
 
     def udpcomm(self, reg, countvalue, type = 'r'): # type r, ra or w = read or write command. ra returns existing data (async). for npe
         ''' Communicates with (sends and receives data to&from) socat on techbase NPE, where subprocess() usage should be avoided '''
@@ -393,30 +395,30 @@ class CommModbus(Comm):
         if (type != 'r' and type != 'rs' and type != 'w' and type != 'p' and type != 'b' and type != 'bs'):
             print('udpcomm(): invalid type '+str(type))
             return None
-            
+
         sendstring=str(reg)+' '+str(countvalue)+' '+type[0] # 3 parameters for both npe_write.sh or npe_read.sh
         self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr)
         #print('udpcomm sent udp msg '+sendstring+' to '+str(self.saddr)) # debug
-        
+
         if type[0] == 'r' or type[0] == 'b': # some data return is needed
             if type == 'b' and reg == 10 and countvalue != 2:
                 print('udpcomm fixing countvalue for reg 10 type b from',countvalue,'to 2')
-                countvalue=2                
-            
+                countvalue=2
+
             #if (not reg in self.datadict.keys() or type[-1] == 's' or (reg in self.datadict.keys() and len(self.datadict[reg]) != countvalue)):
             if type[-1] != 's' and (reg in self.datadict.keys() and len(self.datadict[reg].split(' ')) == countvalue): # give immediate response
                 # query with changed parameters must wait for correct result!
                 retread=self.udpread() # read buffer but do not use for output, just update datadict
                 if retread != None:
                     self.update_datadict(retread)
-                    
-            else: # wait until actual true response is received 
+
+            else: # wait until actual true response is received
                 ureg=''
                 ulen=0
                 while (i<20 and ((ureg != reg) or (ulen != countvalue))): # no more than 2 s here, as socat has 2 s timeout
                     #print('wait before read') # debug - read in loop until data for right reg arrives
                     time.sleep(0.05) # wait until fresh data arrives for answer. without delay the previous read data is returned
-                    retread=self.udpread() # [data], reg. after delay the fresh one should arrive for the 
+                    retread=self.udpread() # [data], reg. after delay the fresh one should arrive for the
                     if retread != None:
                         #print('udpcomm got from udpread:',retread) # debug
                         try:
@@ -431,7 +433,7 @@ class CommModbus(Comm):
                         self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr) # repeat the query
                     i+=1
 
-                    
+
             if reg in self.datadict and len(self.datadict[reg].split(' ')) == countvalue: # return data from here
                 #print('udpcomm: correct value for '+str(reg)+' exists: '+str(self.datadict[reg])) # debug
                 #data=str(rdata.decode("utf-8")).strip('\n').split(' ') # python3 related need due to mac in hex
@@ -445,10 +447,10 @@ class CommModbus(Comm):
             else:
                 print('not what we need in datadict for reg',reg,self.datadict)
                 return None # not ready yet
-            
-        else: # write a single register or fork something over npe_io.sh. types w or p 
+
+        else: # write a single register or fork something over npe_io.sh. types w or p
             return None
-    
+
 
     def update_datadict(self, retread):
         ''' Update data dictionary with data from socat for registers to be polled, to speed things up '''
@@ -461,7 +463,7 @@ class CommModbus(Comm):
             except:
                 print('update_datadict error')
                 traceback.print_exc()
-                
+
     def udpread(self): # not to be called from outside of this method, used only by udpsend() above
         ''' Read npe_io over socat or other udp channel. Register will be returned as the first value, may NOT be the one asked last! '''
         data=['','']
@@ -484,4 +486,4 @@ class CommModbus(Comm):
                 print(msg)
                 #syslog(msg)
                 return None
-        
+
