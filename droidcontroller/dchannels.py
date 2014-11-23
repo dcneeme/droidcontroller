@@ -60,7 +60,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         #self.conn = sqlite3.connect(':memory:')
         self.sqlread(self.in_sql) # read dichannels
         self.sqlread(self.out_sql) # read dochannels if exist
-
+        self.ask_values() # from server
 
 
     def read_di_grp(self,mba,regadd,count,mbi=0, regtype='h'): # using self,in_sql as the table to store in.
@@ -484,7 +484,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                             #print('do di bit,[do,di]',bit,bit_dict[bit]) # debug
                             word2=s.bit_replace(word,bit,bit_dict[bit][0]) # changed the necessary bit. can't reuse / change word directly!
                             word=word2
-                        
+
                         respcode=mb[mbi].write(mba, regadd, value=word) # do not give type, npe may need something else then h
                         if respcode == 0:
                             msg='output written - mbi mba regadd value '+str(mbi)+' '+str(mba)+' '+str(regadd)+' '+format("%04x" % word)
@@ -561,8 +561,8 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
                         else: # skip
                             log.debug('member value write for key '+key+' SKIPPED due to sqlvalue '+str(sqlvalue)+', value '+str(sqlvalue)+', regtype '+regtype)
-                
-        
+
+
                 #if setup_changed == 1: # no need to dump di, too much dumping. ask di states after reboot, if regtype == 's!'
                 #    print('going to dump table',self.in_sql)
                 #    try:
@@ -584,6 +584,22 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
     def set_dovalue(self,svc,member,value): # sets binary variables within services for remote control, based on service name and member number
         ''' Setting member value using sqlgeneral set_membervalue. adding sql table below for that '''
         return s.set_membervalue(svc,member,value,self.out_sql)
+
+
+    def ask_values(self): # from server, use on init and conn up, send ? to server if value type = 's!'
+        ''' Queries last known service (multi)value from the server '''
+        Cmd="select val_reg,max(cfg) from "+self.in_sql+" where regtype='s!' group by val_reg"
+        #print "Cmd=",Cmd
+        cur=conn.cursor()
+        cur.execute(Cmd) # getting services to be read and reported
+        for row in cur: # possibly multivalue service members
+            val_reg=row[0]
+            log.info('trying to restore value from server for '+val_reg)
+            udp.udpsend(val_reg+':?\n') # ask last value from uniscada server if counter
+        conn.commit()
+        return 0
+
+
 
     def doall(self): # do this regularly, blocks for the time of socket timeout!
         ''' Does everything on time if executed regularly '''
