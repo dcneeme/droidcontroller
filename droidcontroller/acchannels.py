@@ -89,7 +89,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         for key in data_dict: # process per key:value
             if key[-1] == 'W': # must end with W to be multivalue service containing setup values
                 valmembers=data_dict[key].split(' ') # convert value to member list
-                log.debug('number of members for',key,len(valmembers),valmembers) # debug
+                log.debug('number of members for '+str(key)+' is '+str(len(valmembers)))
                 for valmember in range(len(valmembers)): # 0...N-1
                     Cmd="select mba,regadd,val_reg,member,value,regtype,wcount,mbi,x2,y2 from "+self.in_sql+" where val_reg='"+key+"' and member='"+str(valmember+1)+"'"
                     #print(Cmd) # debug
@@ -116,12 +116,12 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                             if regtype == 's!': # setup row, external modif allowed (!)
                                 if (row[0] == '' and row[1] == ''): # mba, regadd
                                     if self.set_aivalue(str(key),member,value) == 0: # set setup value in sql table
-                                        msg='setup changed for key '+key+', member '+str(member)+' to value '+str(value)
+                                        msg='setup changed for key '+str(key)+', member '+str(member)+' to value '+str(value)
                                         setup_changed=1
                                         log.debug(msg)
                                         #udp.syslog(msg)
                                     else:
-                                        msg='svc member setting problem for key '+key+', member '+str(member)+' to value '+str(value)
+                                        msg='svc member setting problem for key '+str(key)+', member '+str(member)+' to value '+str(value)
                                         log.warning(msg)
                                         #udp.syslog(msg)
                                         res+=1
