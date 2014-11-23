@@ -48,7 +48,7 @@ class StateKeeper: #
         '''
         self.ts_uplast = time.time()
         if self.state == 0:
-            if self.upwait == 1 and time.time() - self.ts_uplast < self.on_tout: # sure on
+            if self.on_tout == 0:
                 log.debug('switching ON')
                 self.state = 1
                 self.ts_up = time.time()
@@ -56,9 +56,8 @@ class StateKeeper: #
                     log.info('state 1st ON')
                     self.neverup = -1
 
-            elif self.upwait == 0:
-                self.upwait = 1
-                if self.on_tout == 0:
+            else:
+                if self.upwait == 1 and time.time() - self.ts_uplast < self.on_tout: # sure on
                     log.debug('switching ON')
                     self.state = 1
                     self.ts_up = time.time()
@@ -66,7 +65,8 @@ class StateKeeper: #
                         log.info('state 1st ON')
                         self.neverup = -1
 
-
+                else:
+                    self.upwait = 1
 
 
     def dn(self):
