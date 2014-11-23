@@ -122,7 +122,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                             if value != ovalue: # change detected, update dichannels value, chg-flag  - saaks ka maski alusel!!!
                                 chg=3 # 2-bit change flag, bit 0 to send and bit 1 to process, to be reset separately
                                 msg='DIchannel mbi.mba.reg '+str(mbi)+'.'+str(mba)+'.'+str(regadd)+' bit '+str(bit)+' change! was '+str(ovalue)+', became '+str(value) # temporary
-                                print(msg) # debug
+                                log.debug(msg) # debug
                                 #udp.syslog(msg)
                                 # dichannels table update with new bit values and change flags. no status change here. no update if not changed!
                                 Cmd="UPDATE "+self.in_sql+" set value='"+str(value)+"', chg='"+str(chg)+"', ts_chg='"+str(self.ts)+"' \
@@ -146,6 +146,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             mb[mbi] = CommModbus(host=mbhost[mbi])
             msg='recreated mb['+str(mbi)+'], this di grp data read FAILED for mbi,mba,regadd,count '+str(mbi)+', '+str(mba)+', '+str(regadd)+', '+str(count)
             log.warning(msg)
+            # should not be necessary with improved by cougar pymodbus is in use!!
             time.sleep(0.5) # hopefully helps to avoid sequential error / recreations
             return 1
 
@@ -476,16 +477,14 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                                 word=mb[mbi].read(mba, regadd, count = 1, type = 'h')[0]
                                 #print('value of the output',mba,regadd,'before change',format("%04x" % word)) # debug
                         except:
-                            print('device mbi,mba',mbi,mba,'not defined in devices.sql')
+                            log.warning('device mbi '+str(mbi)+', mba'+str(mba)+' not defined in devices table!')
                             return 2
 
                         for bit in bit_dict.keys():
                             #print('do di bit,[do,di]',bit,bit_dict[bit]) # debug
                             word2=s.bit_replace(word,bit,bit_dict[bit][0]) # changed the necessary bit. can't reuse / change word directly!
                             word=word2
-                            #print('modified by bit '+str(bit)+' value '+str(bit_dict[bit][0])+' word '+format("%04x" % word)) # debug
-                        #print('going to write a register mba,regadd,with modified word - ',mba,regadd,format("%04x" % word)) # temporary
-
+                        
                         respcode=mb[mbi].write(mba, regadd, value=word) # do not give type, npe may need something else then h
                         if respcode == 0:
                             msg='output written - mbi mba regadd value '+str(mbi)+' '+str(mba)+' '+str(regadd)+' '+format("%04x" % word)
@@ -521,16 +520,15 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         member=0
         log.debug('dchannels: parsing for possible key:value data ',data_dict) # debug
         for key in data_dict: # process per key:value
-            if key[-1] == 'W': # must end with W to be multivalue service containing setup values
+            if key[-1] == 'W': # must end with W to be multivalue service containing setup values FIXME! 's!' needed instead!
                 valmembers=data_dict[key].split(' ') # convert value to member list
                 print('number of members for',key,len(valmembers),valmembers) # debug
                 for valmember in range(len(valmembers)): # 0...N-1
                     Cmd="select mba,regadd,val_reg,member,value,regtype from "+self.in_sql+" where val_reg='"+key+"' and member='"+str(valmember+1)+"'"
-                    print(Cmd) # debug
                     cur.execute(Cmd)
                     conn.commit()
                     for row in cur: # single member
-                        print('srow:',row) # debug
+                        #print('srow:',row) # debug
                         sqlvalue=int(row[4]) if row[4] != '' else 0 # eval(row[4]) if row[4] != '' else 0 #
                         try:
                             value=eval(valmembers[valmember])
@@ -544,31 +542,27 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                             # replace actual counters only if bigger than existing or zero, no limits for setup type 's!'
                             member=valmember+1
 
-                            print('going to replace '+key+' member '+str(member)+' existing value '+str(sqlvalue)+' with '+str(value)) # debug
-                            # faster to use physical data instead of svc. also clear counter2power buffer if cp[] exsists!
-
-                            if regtype == 's!': # setup row, external modif allowed (!)
-                                if (row[0] == '' and row[1] == ''): # mba, regadd
-                                    if self.set_divalue(str(key),member,value) == 0: # set setup value in sql table
-                                        msg='di setup changed for key '+key+', member '+str(member)+' to value '+str(value)
-                                        setup_changed=1
-                                        print(msg)
-                                        udp.syslog(msg)
-                                    else:
-                                        msg='svc member setting problem for key '+key+', member '+str(member)+' to value '+str(value)
-                                        print(msg)
-                                        udp.syslog(msg)
-                                        res+=1
+                            if (row[0] == '' and row[1] == ''): # mba, regadd
+                                if self.set_divalue(str(key),member,value) == 0: # set setup value in sql table
+                                    msg='di setup changed for key '+key+', member '+str(member)+' to value '+str(value)
+                                    setup_changed=1
+                                    log.info(msg)
+                                    udp.syslog(msg)
                                 else:
-                                    msg='dchannels.parse_upd: setup value cannot have mba,regadd defined!'
-                                    print(msg)
+                                    msg='svc member setting problem for key '+key+', member '+str(member)+' to value '+str(value)
+                                    log.warning(msg)
                                     udp.syslog(msg)
                                     res+=1
+                            else:
+                                msg='dchannels.parse_upd: setup value cannot have mba,regadd defined!'
+                                log.warning(msg)
+                                udp.syslog(msg)
+                                res+=1
 
                         else: # skip
-                            print('dchannels.parse_udp: member value write for key '+key+' SKIPPED due to sqlvalue,value,regtype',sqlvalue,value,regtype)
-                            self.make_dichannels(key) # to correct illegal data just received and replied for this service NOT HERE!!!
-
+                            log.debug('member value write for key '+key+' SKIPPED due to sqlvalue '+str(sqlvalue)+', value '+str(sqlvalue)+', regtype '+regtype)
+                
+        
                 #if setup_changed == 1: # no need to dump di, too much dumping. ask di states after reboot, if regtype == 's!'
                 #    print('going to dump table',self.in_sql)
                 #    try:
@@ -579,6 +573,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             #if res == 0:
                 #self.read_all() # reread the changed channels to avoid repeated restore - no need
 
+        self.make_dichannels(key) # notification needed changed or not, to confirm the state after chg trial
         return res # kui setup_changed ==1, siis todo = varlist! aga kui samal ajal veel miski ootel?
 
 
