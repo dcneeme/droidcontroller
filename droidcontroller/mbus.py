@@ -25,7 +25,7 @@ class Mbus:
         USB port can be described as port, but this software is able to find the USB
         port (like /dev/ttyUSB0 or COM18) also by autokey (like FTDI).
 
-        With both sensus and kamstrup, data bytes for readings contain numbers 0..9. 
+        With both sensus and kamstrup, data bytes for readings contain numbers 0..9.
         With sensus, this is called BCD 4, 6 or 8 encoding.
         Key block is then starting with 0A, 0B or 0C respectively.
         Decoding is different, see decode().
@@ -85,48 +85,51 @@ class Mbus:
     def get_errors(self):
         return self.errors
 
-    def mb_decode(self, invar, key='', coeff = 1.0, len = 4, hex = 1): # len and hex may be overruled by key
-        ''' Returns decoded value from Mbus binary string self.mbm, len bytes starting from invar.
+    def mb_decode(self, invar, key='', coeff = 1.0, length = 4, hex = 1): # len and hex may be overruled by key
+        ''' Returns decoded value from Mbus binary string self.mbm, length bytes starting from invar.
             If key (2 bytes as hex string before data start) is given,
-            then it is used for finding len and decoding type selection. 
+            then it is used for finding len and decoding type selection.
             Coeff is used for unit normalization, to produce output in usual units.
         '''
         # default encoding (hex == 1) is hex 4 bytes, LSB first
         # if hex == 0, BCD is used with numbers 0..9 only used
-        if key != '' and len(key == 4):
-            if key[0] == 0:
-                if key[1] == 4:
-                    len = 4
+        if key != '' and len(key) == 4:
+            if key[0] == '0':
+                if key[1] == '4':
+                    length = 4
                     hex = 1
-                elif key[1] == A:
-                    len = 2
+                elif key[1] == 'A' or key[1] == 'a':
+                    length = 2
                     hex = 0
-                elif key[1] == B:
-                    len = 3
+                elif key[1] == 'B' or key[1] == 'b':
+                    length = 3
                     hex = 0
-                elif key[1] == C:
-                    len = 4
+                elif key[1] == 'C' or key[1] == 'c':
+                    length = 4
                     hex = 0
                 else:
                     log.warning('unsupported encoding for data, key '+str(key[0:2]))
-            
+
         try:
             res = 0
-            for i in range(len):
+            for i in range(length):
                 if hex == 1:
                     #res += int(ord(self.mbm[invar + i])) << (i * 8) # ok for py2, but not for py3
-                    res += int(self.mbm[invar + i], 16) << (i * 8) # py3. numbers still 0..9, base 10!
+                    res += int(str(self.mbm[invar + i]), 16) << (i * 8) # py3. numbers still 0..9, base 10!
                     log.debug('decoding HEX value step '+str(i)+', res='+str(res))
                 elif hex == 0: # MSB == F then it signals negative number! A...E are invalid!
-                    res += int(self.mbm[invar + i], 16) * (i * 100) # py3
-                    log.debug('decoding BCD value step '+str(i)+', res='+str(res))
-                    if len == len -1: # possible sign data
-                        if (int(self.mbm[len - 1], 16) & 0xF0) == 0xF0: # the result is negative
-                            res= -res
+                    # UNTESTED WITH NEGATIVE NUMBERS!!!
+                    if i == 0:
+                        res += int(str(self.mbm[invar + i]), 10)
                     else:
-                        log.warning('invalid halfbyte value >9 in data byte '+str(encode(self.mbm[invar + i])))
-                        self.errors += 1
+                        res += int(str(self.mbm[invar + i]), 10) * (i * 100)
                         
+                    log.debug('decoding BCD value step '+str(i)+', res='+str(res))
+                    #if i == length - 1: # last (MSB), possible sign data
+                    #    if (int(str(self.mbm[len - 1]), 10) & 0xF0) == 0xF0: # the result is negative
+                    #        res= -res
+
+
             if key != '' and str(key.lower()) not in str(encode(self.mbm[invar-2:invar], 'hex_codec')) \
                 and str(key.upper()) not in str(encode(self.mbm[invar-2:invar], 'hex_codec')): # check
                 log.warning('non-matching key '+str(key)+' in key+data ' + str(encode(self.mbm[invar-2:invar], 'hex_codec'))+ \
@@ -284,7 +287,7 @@ class Mbus:
         ''' Return temperature readings out, return diff extracted from the last read result. Chk the datetime in self.mbm as well! '''
         key =['','','']
         coeff = [1.0, 1.0, 1.0]
-        len = [4, 4, 4] # bytes
+        length = [4, 4, 4] # bytes
         if self.model == 'kamstrup602': # checked, is 402 similar?
             start = [45, 51, 57]
             key = ['0459', '045D', '0461'] # inlet outlet diff
@@ -293,14 +296,14 @@ class Mbus:
             start = [45, 49, 53] # FIXME
             key = ['0a5a', '0a5e', '0b60']
             coeff = [0.1, 0.1, 0.001]
-            len = [2, 2, 3]
+            length = [2, 2, 3]
         else:
             log.warning('unknown model '+self.model)
             return None, None, None
 
         out = []
         for i in range(3):
-            out.append(self.mb_decode(start[i], key[i], coeff[i], len[i])) # converted to degC
+            out.append(round(self.mb_decode(start[i], key[i], coeff[i], length[i]),3)) # converted to degC
 
         return out
 
