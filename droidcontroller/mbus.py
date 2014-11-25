@@ -119,11 +119,7 @@ class Mbus:
                     log.debug('decoding HEX value step '+str(i)+', res='+str(res))
                 elif hex == 0: # MSB == F then it signals negative number! A...E are invalid!
                     # UNTESTED WITH NEGATIVE NUMBERS!!!
-                    if i == 0:
-                        res += int(str(self.mbm[invar + i]), 10)
-                    else:
-                        res += int(str(self.mbm[invar + i]), 10) * (i * 100)
-                        
+                    res += int(str(self.mbm[invar + i]), 10) * (10 ** (2*i))
                     log.debug('decoding BCD value step '+str(i)+', res='+str(res))
                     #if i == length - 1: # last (MSB), possible sign data
                     #    if (int(str(self.mbm[len - 1]), 10) & 0xF0) == 0xF0: # the result is negative
