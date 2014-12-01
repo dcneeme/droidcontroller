@@ -31,9 +31,12 @@ class UDPchannel():
         from droidcontroller.statekeeper import StateKeeper
         self.sk = StateKeeper(off_tout=300, on_tout=0) # conn state with up/down times
 
-        from droidcontroller.gpio_led import GPIOLED
-        self.led = GPIOLED() # led alarm and conn
-
+        try:
+            from droidcontroller.gpio_led import GPIOLED
+            self.led = GPIOLED() # led alarm and conn
+        except:
+            log.warning('GPIOLED not imported')
+            
         self.host_id = id
         self.ip = ip
         self.port = port
@@ -118,6 +121,7 @@ class UDPchannel():
 
 
     def set_traffic(self, bytes_in = None, bytes_out = None): # set UDP traffic counters (it is possible to update only one of them as well)
+        ''' Restores UDP traffic counter'''
         if bytes_in != None:
             if not bytes_in < 0:
                 self.traffic[0] = bytes_in
@@ -525,17 +529,21 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
 
 
     def set_traffic(self, bytes_in = None, bytes_out = None): # set TCP traffic counters (it is possible to update only one of them as well)
+        ''' Restores TCP traffic counter [in, out] '''
         if bytes_in != None:
             if not bytes_in < 0:
                 self.traffic[0] = bytes_in
+                log.info('set bytes_in to '+str(bytes_in))
             else:
-                print('invalid bytes_in',bytes_in)
+                log.warning('invalid bytes_in '+str(bytes_in))
 
         if bytes_out != None:
             if not bytes_out < 0:
                 self.traffic[1] = bytes_out
+                log.info('set bytes_out to '+str(bytes_in))
             else:
                 print('invalid bytes_out',bytes_out)
+                log.warning('invalid bytes_out '+str(bytes_in))
 
     def get_ts_cal(self): # last time calendar was accessed
         return int(round(self.ts_cal))

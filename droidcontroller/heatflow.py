@@ -135,6 +135,7 @@ class HeatExchange:
         Execute this at DI polling speed, will skip unnecessary
         recalculatsions during pumping session if interval is not passed
         since last execution.
+        To get value in Wh divide value in J by 3600.
         '''
         # average specific heat based on onflow nand return temperatures
         tsnow = time.time()

@@ -82,14 +82,16 @@ class Commands(SQLgeneral): # p
 
             else: # some program variables to be restored?
                 if key == 'TCW': # traffic volumes to be restored
-                    if len(value.split(' ')) == 4: # member count for traffic: udpin, udpout, tcpin, tcpout in bytes
-                        for member in range(2): # udp tcp
-                            udp.set_traffic(member)=int(float(value.split(' ')[member]))
-                            tcp.set_traffic(member)=int(float(value.split(' ')[member+2]))
-                        msg='restored traffic volumes to udp '+str(udp.get_traffic)+' tcp '+str(udp.get_traffic)
-                    else:
-                        msg='invalid number of members in value from server: '+key+':'+value
-
+                    try:
+                        members = value.split(' ')
+                        if len(members) == 4: # member count for traffic: udpin, udpout, tcpin, tcpout in bytes
+                            udp.set_traffic(bytes_in=int(float(members[0])), bytes_out=int(float(members[1])))
+                            tcp.set_traffic(bytes_in=int(float(members[2])), bytes_out=int(float(members[3])))
+                            log.debug('restored traffic volumes to udp '+str(udp.get_traffic)+' tcp '+str(udp.get_traffic))
+                        else:
+                            log.warning('invalid number of members in value from server: '+key+':'+value)
+                    except:
+                        log.warning('failure in traffic restoration from '+key+':'+value)
 
                 elif key == 'cmd': # commands
                     msg='remote command '+key+':'+value+' detected'
