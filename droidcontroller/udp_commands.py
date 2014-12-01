@@ -84,8 +84,8 @@ class Commands(SQLgeneral): # p
                 if key == 'TCW': # traffic volumes to be restored
                     if len(value.split(' ')) == 4: # member count for traffic: udpin, udpout, tcpin, tcpout in bytes
                         for member in range(2): # udp tcp
-                            udp.set_traffic[member]=int(float(value.split(' ')[member]))
-                            tcp.set_traffic[member]=int(float(value.split(' ')[member+2]))
+                            udp.set_traffic(member)=int(float(value.split(' ')[member]))
+                            tcp.set_traffic(member)=int(float(value.split(' ')[member+2]))
                         msg='restored traffic volumes to udp '+str(udp.get_traffic)+' tcp '+str(udp.get_traffic)
                     else:
                         msg='invalid number of members in value from server: '+key+':'+value
