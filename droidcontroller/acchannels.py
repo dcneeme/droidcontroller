@@ -1,3 +1,4 @@
+# 2.12.2014 fix negative temp readings. avoid -127 and 85 gdegrees C for a timeout 
 # to be imported to access modbus registers as counters
 # combines previous achannels.py and cchannels.py into one universal acchannel.py. add cfg bit for counter?
 # 28 may 2014.... handle negative values
@@ -334,7 +335,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     elif wcount == -2:
                         tcpdata = (result[step*i+1]<<16)+result[step*i]  # swapped word order, as in barionet
                         #print('swapped words counter',str(i),'result',tcpdata) # debug
-                    elif wcount == 1:
+                    elif wcount == 1: # normal ai and 1wire. the latter can be negative! 
                         if len(result) - 1 >= i:
                             tcpdata = result[i]
                         else:
@@ -775,7 +776,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     log.warning('svc processing skipped due to stalled member data for '+val_reg+str(member))
                 else: # data fresh enough, going to process
 
-                    #POWER?
+                    ## POWER? FILTER? ####
                     if (cfg&64): # power, no sign, increment to be calculated! divide increment to time from the last reading to get the power
                         cpi += 1 # counter2power index
                         try:
@@ -793,7 +794,12 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         else:
                             raw = res[0]
 
-                    # SCALING
+                    elif (cfg&2048): # 1wire filter
+                        if raw == 1360 or raw == 4096:
+                            log.warning('got invalid raw value '+str(raw)+' from temp sensor (cfg=2048) on address '+str(mba)+'.'+str(regadd)+', replacing with None')
+                            raw = None
+                    
+                    ## SCALING #############
                     if (cfg&1024) == 0 and raw != None: # take sign into account, not counter ### SIGNED if not counter ##
                         if raw >= (2**(wcount*16-1)): # negative!
                             raw = raw-(2**(wcount*16))
@@ -807,9 +813,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         value=None
                         rowproblem = 1 # this service will not be used in notification
 
-                    #if outhi == None or outlo == None:
-                    #    print('no limit chk for',val_reg,'due to outlo, outhi',outlo,outhi) # debug
-
+                    
                     if value != None and avg != None and ovalue != None:
                         if avg > 1 and abs(value - ovalue) < value / 2:  # averaging the readings. big jumps (more than 50% change) are not averaged.
                             value=int(((avg - 1) * ovalue+value)/avg) # averaging with the previous value, works like RC low pass filter
