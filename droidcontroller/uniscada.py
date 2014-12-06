@@ -36,7 +36,7 @@ class UDPchannel():
             self.led = GPIOLED() # led alarm and conn
         except:
             log.warning('GPIOLED not imported')
-            
+
         self.host_id = id
         self.ip = ip
         self.port = port
@@ -335,7 +335,10 @@ class UDPchannel():
 
         self.traffic[1]=self.traffic[1]+len(sendstring) # adding to the outgoing UDP byte counter
 
-        self.led.commLED(0) # off, blinking shows sending and time to ack
+        try:
+            self.led.commLED(0) # off, blinking shows sending and time to ack
+        except:
+            pass
 
         try:
             sendlen=self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr) # tagastab saadetud baitide arvu
@@ -352,7 +355,11 @@ class UDPchannel():
             print(msg)
             traceback.print_exc()
 
-            self.led.alarmLED(1) # send failure
+            try:
+                self.led.alarmLED(1) # send failure
+            except:
+                pass
+
             return None
 
 
@@ -417,9 +424,10 @@ class UDPchannel():
                 else:
                     self.ts_udpgot=self.ts # timestamp of last udp received
 
-                #if OSTYPE == 'archlinux': # "if led:" gives error on npe
-                self.led.commLED(1) # data from server, comm OK
-                #print('got from server, commled on') # debug, comm ok
+                try:
+                    self.led.commLED(1) # data from server, comm OK
+                except:
+                    pass
                 self.sk.up()
 
                 lines=data.splitlines() # split message into key:value lines
