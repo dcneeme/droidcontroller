@@ -339,9 +339,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         if len(result) - 1 >= i:
                             tcpdata = result[i]
                         else:
-                            log.warning('read_grp invalid, i=',i,'while result',result)
+                            log.warning('read_grp invalid, i='+str(i)+' while result='+str(result))
                     else: # something else, lengths other than 1 2 -2 not yet supported!
-                        log.warning('unsupported counter word size',wcount)
+                        log.warning('unsupported counter word size '+str(wcount))
                         return 1
 
                     #Cmd="select raw from "+self.in_sql+" where mbi="+str(mbi)+" and mba='"+str(mba)+"' and regadd='"+str(regadd+i*step)+"' group by mbi,mba,regadd"
@@ -700,6 +700,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         mstatus = 0
         cur = conn.cursor()
         lisa = ''
+        value = None
         cpi = -1 # count2pwr index
 
         #print('acchannels.make_svc: reading aico values for val_reg,sta_reg',val_reg,sta_reg) # debug
