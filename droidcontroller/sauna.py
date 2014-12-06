@@ -51,10 +51,15 @@ log = logging.getLogger(__name__)
 log.setLevel(logging.INFO)
 
 class Sauna:
-    ''' Class to control electric sauna and it's heater. '''
+    ''' Class to control electric sauna and it's heater. Keeps the temperature using setpoint 
+        temperature compared to actual with hysteresis, switches off on timeout or by command.  
+        To switch off with stalled actual temperature (possible temperature sensor failure)
+        use 0 as temperature to output() instead of repeating the last known.
+    '''
+
     def __init__(self, temp=85, time=60*120, hyst=2):
         self.set_temp(temp) # degC, to keep during enabled state
-        self.set_time(time) # in seconds
+        self.set_time(time) # timeout in seconds, to switch off
         self.state = 0
         self.sens_errorcount = 0 # temperature sensor missing if 256 degC
         self.set_state(0) # test for off
@@ -154,7 +159,7 @@ class Sauna:
                 if self.sens_errorcount  > 5:
                     self.alarm_desc = 'temperature sensor disconnected or faulty!'
                     self.alarm = 1
-            elif actTemp < 10:
+            elif actTemp < 10: # degC
                 self.alarm_desc = 'temperature sensor must be faulty, temperature too low:'+str(actTemp)
                 self.alarm = 1
 
@@ -162,8 +167,8 @@ class Sauna:
                 self.alarm = 1
                 self.alarm_desc = 'Sauna temperature '+str(actTemp)+' degC too high!'
 
-            elif actTemp < self.setTemp/2.0 and self.uptime > self.maxTime/3 and self.state == 1: # not in alarm previosly
-                self.alarm = 1 # alarm too cold, heater failure
+            elif actTemp < self.setTemp/2.0 and self.uptime > self.maxTime/2 and self.state == 1: # too slow heating
+                self.alarm = 1 # heater failure?
 
             if self.alarm > 0:
                 alarmTS = now
