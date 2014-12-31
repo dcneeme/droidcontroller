@@ -463,13 +463,13 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
             Must tolerate but ignore None as value
         '''
         if value is None:
-            log.warning('no '+table+' update due to value='+str(value)+' instead of expected num value')
+            log.warning('no '+table+' update due to value='+str(value)+' instead of expected num value for svc '+svc+' member '+str(member))
             return 2
 
         try:
             value=str(int(round(float(value),0)))
         except:
-            log.warning('no update due to value'+str(value)+' instead of expected num value')
+            log.warning('no '+table+' update due to value'+str(value)+' instead of expected num value for '+svc+'.'+str(member))
             return 2
 
         Cmd="BEGIN IMMEDIATE TRANSACTION" # conn, fot setbit_dochannels in fact

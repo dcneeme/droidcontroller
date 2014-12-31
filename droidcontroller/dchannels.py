@@ -135,10 +135,11 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                             conn.execute(Cmd) # write
                         except:
                             traceback.print_exc()
-
+                time.sleep(0.05)
                 return 0
             except:
                 traceback.print_exc()
+                time.sleep(0.2)
                 return 1
         else:
             #failure, recreate mb[mbi]

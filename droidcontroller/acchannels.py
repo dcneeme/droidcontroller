@@ -295,6 +295,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             #        print(msg)
             #        self.set_counter(value=ovalue, mba=mba, regadd=regadd, mbi=mbi, wcount=wcount, x2=x2, y2=y2) # does not contain commit()!
             #this above should be fixed. value is already saved, put it there!
+            
+            Delay in the end attempts to increase reliability of reading on mba change. INVESTIGATE, is it possibly a slave (ioboard) related problem?
             FIMXME:  do not attempt to access counters that are not defined in devices.sql! this should be an easy way to add/remove devices.
         '''
         self.ts = round(time.time(),2) # refresh timestamp for raw, common for grp members
@@ -358,13 +360,14 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         Cmd="UPDATE "+self.in_sql+" set raw='"+str(tcpdata)+"', ts='"+str(self.ts)+ \
                             "' where mba='"+str(mba)+"' and regadd='"+str(regadd+i*step)+"' and mbi="+str(mbi) # koigile korraga selle mbi, mba, regadd jaoks
                         conn.execute(Cmd)
-                #time.sleep(0.05) # ainult seriali puhul? ##########  FIXME
+                time.sleep(0.05) # ainult seriali puhul? ##########  FIXME
                 return 0
             except:
                 traceback.print_exc()
+                time.sleep(0.2)
                 return 1
         else:
-            #print('recreating modbus channel due to error to', mbhost[mbi])
+            print('recreating modbus channel due to error to', mbhost[mbi])
             mb[mbi] = CommModbus(host=mbhost[mbi])
             msg='recreated mb['+str(mbi)+'], this aicochannels grp read FAILED for mbi,mba,regadd,count '+str(mbi)+', '+str(mba)+', '+str(regadd)+', '+str(count)
             log.warning(msg)
@@ -652,7 +655,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
     def report_all(self, svc = ''): # send the aico service messages to the monitoring server (only if fresh enough, not older than 2xappdelay). all or just one svc.
-        ''' Make all (defined self.in_sql) services reportable (with status chk) based on counters members and send it away to UDPchannel '''
+        ''' Make all (defined self.in_sql) services reportable (with status chk) and send it away to UDPchannel '''
         mba=0
         val_reg=''
         desc=''
@@ -797,7 +800,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
                     elif (cfg&2048): # 1wire filter
                         if raw == 1360 or raw == 4096:
-                            log.warning('got invalid raw value '+str(raw)+' from temp sensor (cfg=2048) on address '+str(mba)+'.'+str(regadd)+', replacing with None')
+                            log.warning('invalid raw value '+str(raw)+' for temp sensor (cfg=2048) in svc '+val_reg+'.'+str(member)+', replacing with None')
                             raw = None
                     
                     ## SCALING #############
@@ -856,7 +859,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             try:
                 lisa += str(int(round(value))) # adding member values into one string
             except:
-                log.debug('invalid value to use as service '+val_reg+'.'+str(member)+' member: '+str(value))
+                log.debug('invalid value to use for service '+val_reg+'.'+str(member)) # do not refer value here, may be missing from another mba!
                 rowproblem = 1
 
             if mstatus > status:
