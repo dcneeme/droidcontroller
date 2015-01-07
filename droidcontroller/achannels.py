@@ -8,7 +8,10 @@
 from droidcontroller.sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
 s=SQLgeneral() # sql connection
 
-class Achannels(SQLgeneral): # handles aichannels and aochannels tables
+import logging
+log = logging.getLogger(__name__)
+
+class Achannels(SQLgeneral): # handles aichannels and aochannels tables, using mb[] created by parent
     ''' Access to io by modbus analogue register addresses (and also via services?). 
         Modbus client must be opened before.
         Able to sync input and output channels and accept changes to service members by their sta_reg code

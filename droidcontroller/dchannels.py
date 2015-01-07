@@ -19,7 +19,9 @@
 
 from droidcontroller.sqlgeneral import * # SQLgeneral
 s=SQLgeneral()
+
 import time
+
 import logging
 log = logging.getLogger(__name__)
 
