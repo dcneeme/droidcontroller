@@ -110,6 +110,7 @@ class PID:
             'outI' : self.Ki * self.Ci, \
             'outD' : self.Kd * self.Cd, \
             'setpoint' : self.setPoint, \
+            'onlimit' : self.onLimit, \
             'error' : self.error})
         if filter is None:
             return self.vars
