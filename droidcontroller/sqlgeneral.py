@@ -1,6 +1,6 @@
 #to be imported into modbus_sql. needs mb and conn
 '''  Creates multiple modbus access channels for various access channels defined in devices.sql.
-    Also creates communication channel to uniscada server, connstate and gpioled instances.
+    Also creates communication channel to uniscada server, statekeeper and gpioled instances.
  '''
 
 import time, datetime
@@ -11,7 +11,7 @@ import sys
 from pymodbus import *
 from droidcontroller.comm_modbus import CommModbus  # contains CommModbus, .read(), .write()
 from droidcontroller.uniscada import *
-from droidcontroller.connstate import *
+#from droidcontroller.statekeeper import * # siin ei kasutata? aga childs?
 from droidcontroller.gpio_led import * # for olinuxino, what about npe? make it universal?
 
 import logging
