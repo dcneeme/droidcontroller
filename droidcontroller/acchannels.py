@@ -1,4 +1,4 @@
-# 2.12.2014 fix negative temp readings. avoid -127 and 85 gdegrees C for a timeout 
+# 2.12.2014 fix negative temp readings. avoid -127 and 85 gdegrees C for a timeout
 # to be imported to access modbus registers as counters
 # combines previous achannels.py and cchannels.py into one universal acchannel.py. add cfg bit for counter?
 # 28 may 2014.... handle negative values
@@ -22,11 +22,11 @@ log = logging.getLogger(__name__)
 class ACchannels(SQLgeneral): # handles aichannels and counters, modbus registers and sqlite tables
     ''' Access to io by modbus analogue register addresses (and also via services?). Modbus client must be opened before.
         Able to sync input and output channels and accept changes to service members by their sta_reg code.
-        Channel configuration is defined in sql tables. Required table format:
-
+        Channel configuration is defined in sql tables. 
+        Read and send only happen if enough time is passed from previous, chk readperiod, sendperiod!
     '''
 
-    def __init__(self, in_sql = 'aicochannels.sql', out_sql = 'aochannels.sql', readperiod = 1, sendperiod = 30):
+    def __init__(self, in_sql = 'aicochannels.sql', out_sql = 'aochannels.sql', readperiod = 3, sendperiod = 30):
         self.setReadPeriod(readperiod)
         self.setSendPeriod(sendperiod)
         self.in_sql = in_sql.split('.')[0]
@@ -97,7 +97,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     cur.execute(Cmd)
                     conn.commit()
                     for row in cur: # single member
-                        log.debug('srow:',row) # debug
+                        log.debug('srow:'+str(row)) # debug
                         sqlvalue=int(row[4]) if row[4] != '' else 0 # eval(row[4]) if row[4] != '' else 0 #
                         try:
                             value=eval(valmembers[valmember])
@@ -157,17 +157,17 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                     #udp.syslog(msg)
                                     res += 1
                         else: # skip
-                            log.debug('parse_udp: member value write for key '+key+' SKIPPED due to sqlvalue,value,regtype',sqlvalue,value,regtype)
+                            log.debug('parse_udp: write for key '+key+' SKIPPED due to sqlvalue '+str(sqlvalue)+', value '+str(value)+', regtype '+regtype)
 
             if setup_changed == 1:
-                log.debug('going to dump table',self.in_sql)
+                log.debug('going to dump table '+self.in_sql)
                 try:
                     s.dump_table(self.in_sql)
                     sendstring=self.make_svc(key,key[:-1]+'S')
-                    log.debug('going to report back sendstring',sendstring)
-                    #udp.send(sendstring)
+                    log.debug('going to report back sendstring '+sendstring)
+                    #udp.send(sendstring) # ????
                 except:
-                    log.warning('FAILED to dump table',self.in_sql)
+                    log.warning('FAILED to dump table '+self.in_sql)
                     traceback.print_exc() # debug
         #if res == 0:
             #self.read_all() # reread the changed channels to avoid repeated restore - no need
@@ -204,10 +204,10 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 val_reg=kwargs.get('val_reg')
                 member=kwargs.get('member')
                 if val_reg == '' or member == 0:
-                    log.debug('set_counter: invalid parameters val_reg,member',val_reg,member)
+                    log.debug('set_counter: invalid parameters val_reg '+str(val_reg)+', member '+str(member))
                     return 1
             except:
-                log.debug('invalid parameters for set_counter()',kwargs)
+                log.debug('invalid parameters for set_counter() '+str(kwargs))
                 return 2
 
             Cmd="select mbi,mba,regadd,wcount,x2,y2 from "+self.in_sql+" where val_reg='"+val_reg+"' and member='"+str(member)+"'"
@@ -248,34 +248,34 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 res=mb[mbi].write(mba, regadd, value=(value&0xFFFF)) # single register write
 
             else:
-                log.warning('set_counter: unsupported word count! mba,regadd,wcount',mba,regadd,wcount)
+                log.warning('set_counter: unsupported word count! mba '+str(mba)+', regadd '+str(regadd)+', wcount '+str(wcount))
                 res=1
 
             if res == 0:
-                log.debug('set_counter: write success to mba,regadd',mba,regadd)
+                log.debug('set_counter: write success to mba.regadd '+str(mba)+'.'+str(regadd))
 
-                #check if there are counter2power instances (cp[]) related to that register, intialize them
-                Cmd="select mbi,mba,regadd,val_reg,member from "+self.in_sql+" where (cfg+0 & 192) order by val_reg,member" # counter2power bits 64+128
-                cur.execute(Cmd) # what about commit()? FIXME
-                conn.commit()
-                j=-1
-                for row in cur: # start from 0 with indexing
-                    j+=1
-                    #print('cp init prep select row (j,mbi,mba,regadd):',j,row) # debug
-                    try:
-                        if self.cp and mbi == int(row[0]) and mba == int(row[1]) and regadd == int(row[2]): # cp[j] must be initialized
-                            log.debug('initializing counter2power instance cp['+str(j)+'] due to counter setting')
-                            self.cp[j].init() # cp[] may not exist on start, but init is then not needed either...
-                    except:
-                        log.warning('FAILED initializing counter2power instance cp['+str(j)+'], tried due to counter setting')
-                        traceback.print_exc() # debug
+                #check if there are counter2power instances (cp[]) related to that register, intialize them NONO!!
+                #Cmd="select mbi,mba,regadd,val_reg,member from "+self.in_sql+" where (cfg+0 & 192) order by val_reg,member" # counter2power bits 64+128
+                #cur.execute(Cmd) # what about commit()? FIXME
+                #conn.commit()
+                #j=-1
+                #for row in cur: # start from 0 with indexing
+                #    j+=1
+                #    #print('cp init prep select row (j,mbi,mba,regadd):',j,row) # debug
+                #    try:
+                #        if self.cp and mbi == int(row[0]) and mba == int(row[1]) and regadd == int(row[2]): # cp[j] must be initialized
+                #            log.debug('initializing counter2power instance cp['+str(j)+'] due to counter setting')
+                #            self.cp[j].init() # cp[] may not exist on start, but init is then not needed either...
+                #    except:
+                #        log.warning('FAILED initializing counter2power instance cp['+str(j)+'], tried due to counter setting')
+                #        traceback.print_exc() # debug
                 # end power init
             else:
-                log.warning('set_counter: write FAILED to mba,regadd',mba,regadd)
+                log.warning('set_counter: write FAILED to mba '+str(mba)+', regadd '+str(regadd))
             return res
 
         except:  # set failed
-            msg='failed set_counter mbi.mba.regadd'+str(mbi)+'.'+str(mba)+'.'+str(regadd)
+            msg='failed set_counter mbi.mba.regadd '+str(mbi)+'.'+str(mba)+'.'+str(regadd)
             #udp.syslog(msg)
             log.warning(msg)
             traceback.print_exc()
@@ -295,7 +295,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             #        print(msg)
             #        self.set_counter(value=ovalue, mba=mba, regadd=regadd, mbi=mbi, wcount=wcount, x2=x2, y2=y2) # does not contain commit()!
             #this above should be fixed. value is already saved, put it there!
-            
+
             Delay in the end attempts to increase reliability of reading on mba change. INVESTIGATE, is it possibly a slave (ioboard) related problem?
             FIMXME:  do not attempt to access counters that are not defined in devices.sql! this should be an easy way to add/remove devices.
         '''
@@ -337,7 +337,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     elif wcount == -2:
                         tcpdata = (result[step*i+1]<<16)+result[step*i]  # swapped word order, as in barionet
                         #print('swapped words counter',str(i),'result',tcpdata) # debug
-                    elif wcount == 1: # normal ai and 1wire. the latter can be negative! 
+                    elif wcount == 1: # normal ai and 1wire. the latter can be negative!
                         if len(result) - 1 >= i:
                             tcpdata = result[i]
                         else:
@@ -367,7 +367,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 time.sleep(0.2)
                 return 1
         else:
-            print('recreating modbus channel due to error to', mbhost[mbi])
+            log.warning('recreating modbus channel due to error on '+str(mbhost[mbi]))
             mb[mbi] = CommModbus(host=mbhost[mbi])
             msg='recreated mb['+str(mbi)+'], this aicochannels grp read FAILED for mbi,mba,regadd,count '+str(mbi)+', '+str(mba)+', '+str(regadd)+', '+str(count)
             log.warning(msg)
@@ -376,7 +376,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
 
-    def read_all(self): # read all defined modbus ai and counters to sql in groups by regtype, usually 32 bit / 2 registers.
+    def read_all(self): # read all defined modbus ai and counter channels to sql in groups by regtype, usually 32 bit / 2 registers.
         ''' Must read the counter registers by sequential regadd blocks if possible (if regadd increment == wcount.
             Also converts the raw data (incl member rows wo mba) into services and sends away to UDPchannel.
             '''
@@ -405,6 +405,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         sent=0
         regtype=''
         bregtype=''
+        self.cpi = -1 # start with cp instance numbering, by service members not services!
 
         try:
             Cmd="BEGIN IMMEDIATE TRANSACTION" # combines several read/writes into one transaction
@@ -432,15 +433,13 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     bmba=mba
                     bmbi=mbi
                     bregtype= regtype
-                    #print('counter group mba '+str(bmba)+' start ',bfirst) # debug
+                    #print(' group mba '+str(bmba)+' start ',bfirst) # debug
                 else: # not the first
                     if mbi == bmbi and regtype == bregtype and mba == bmba and regadd == blast+abs(wcount): # sequential group still growing
                         blast = regadd
                         bcount=bcount+int(abs(wcount)) # increment by word size
-                        #print('counter group end shifted to',blast) # debug
+                        #print('group end shifted to',blast) # debug
                     else: # a new group started, make a query for previous
-                        #print('counter group end detected at regadd',blast,'bcount',bcount, 'mbi',mbi,'bmbi',bmbi) # debugb
-                        #print('going to read non-last counter group, registers from',bmba,bfirst,'to',blast,'regcount',bcount,'regtype',bregtype) # debug
                         self.read_grp(bmba,bfirst,bcount,bwcount,bmbi,bregtype) # reads and updates table with previous data #####################  READ MB  ######
                         bfirst = regadd # new grp starts immediately
                         blast = regadd
@@ -450,11 +449,11 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         bmba=mba
                         bmbi=mbi
                         bregtype=regtype
-                        #print('counter group mba '+str(bmba)+' start ',bfirst) # debug
+                        #print('group mba '+str(bmba)+' start ',bfirst) # debug
 
             if bfirst != 0: # last group yet unread
-                #print('counter group end detected at regadd',blast) # debug
-                #print('going to read last counter group, registers from',bmba,bfirst,'to',blast,'regcount',bcount,'regtype',bregtype) # debug
+                #print(' group end detected at regadd',blast) # debug
+                #print('going to read last  group, registers from',bmba,bfirst,'to',blast,'regcount',bcount,'regtype',bregtype) # debug
                 self.read_grp(bmba,bfirst,bcount,bwcount,bmbi,bregtype) # reads and updates table with previous data #####################  READ MB  ######
 
             # raw sync (from modbus to sql) done.
@@ -468,7 +467,6 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             #print "Cmd=",Cmd
             #cur.execute(Cmd) # getting services to be read and reported
 
-            #cpi=-1 # counter2power instance index, increase only if with cfg weight 64 true
             for row in cur: # SERVICES LOOP
                 #val_reg=''
                 #sta_reg=''
@@ -484,7 +482,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             sys.stdout.write('A')
             return 0
 
-        except: # end reading counters
+        except: 
             msg='problem with acchannels.read_all(): '+str(sys.exc_info()[1])
             log.warning(msg)
             #udp.syslog(msg)
@@ -704,14 +702,15 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         cur = conn.cursor()
         lisa = ''
         value = None
-        cpi = -1 # count2pwr index
+        # cpi = -1 # count2pwr index / using self.cpi, initrially -1 by rea_all() 
 
         #print('acchannels.make_svc: reading aico values for val_reg,sta_reg',val_reg,sta_reg) # debug
 
         Cmd="select mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,regtype,grp,mbi,wcount from "+self.in_sql \
             +" where val_reg='"+val_reg+"' order by member asc" # avoid trouble with column order
         log.debug(Cmd)
-
+        print(Cmd)
+        
         cur.execute(Cmd) # another cursor to read the same table
         ts_now = time.time() # time now in sec
         rowproblemcount = 0 # count of invalid members in svc
@@ -765,89 +764,102 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 mbi = srow[20] # int
                 wcount = int(srow[21]) if srow[21] != '' else 1  # word count
                 chg = 0 # member status change flag
-                log.debug('val_reg '+val_reg+' member '+str(member)+', cfg='+str(cfg)+', raw='+str(raw)+', ovalue='+str(ovalue)+', outlo='+str(outlo)+', outhi='+str(outhi)) # debug
+                log.debug('val_reg '+val_reg+' member '+str(member)+', cfg='+str(cfg)+', raw='+str(raw)+', ovalue='+str(ovalue)+', outlo='+str(outlo)+', outhi='+str(outhi))
+                print('val_reg '+val_reg+' member '+str(member)+', cfg='+str(cfg)+', raw='+str(raw)+', ovalue='+str(ovalue)+', outlo='+str(outlo)+', outhi='+str(outhi)) # debug
+                
             except:
                 log.debug('invalid data from '+self.in_sql+' for svc '+val_reg+', srow: '+repr(srow))
                 rowproblem = 1
                 traceback.print_exc()
+                time.sleep(5)
 
-            ################ sat
+            #power instances to be done
+            if (cfg&64): # power instance index increment HERE! within service list
+                self.cpi += 1
+                log.debug('****** cpi '+str(self.cpi))
+                try:
+                    if self.cpi != -1 and self.cp[self.cpi]:
+                        pass # this instance already exists
+                except:
+                    # make_svc() must append self.cp if not exists
+                    self.cp.append(Counter2Power(val_reg, member, off_tout = block)) # another Count2Power instance. 100s  = 36W threshold if 1000 imp/kWh
+                    log.info('created counter2power instance '+str(self.cpi)+' for mbi '+str(mbi)+',mba.regadd '+str(mba)+'.'+str(regadd)+' m '+str(member)+': '+str(self.cp[self.cpi]))
 
-            if raw != None and (regtype == 'h' or regtype == 'i'): # seems like valid data, not setup
-                if rowproblem == 1:
-                    log.warning('svc processing skipped due to invalid data from '+self.in_sql+' for svc '+val_reg+', srow: '+repr(srow))
-                elif ots < ts_now - 10*self.readperiod: # but too old, stalled
-                    log.warning('svc processing skipped due to stalled member data for '+val_reg+str(member))
-                else: # data fresh enough, going to process
 
-                    ## POWER? FILTER? ####
-                    if (cfg&64): # power, no sign, increment to be calculated! divide increment to time from the last reading to get the power
-                        cpi += 1 # counter2power index
-                        try:
-                            if cpi != -1 and self.cp[cpi]:
-                                pass # this instance already exists
-                        except:
-                            self.cp.append(Counter2Power(val_reg,member,off_tout = block)) # another Count2Power instance. 100s  = 36W threshold if 1000 imp per kWh
+            # cfg related tests and calc
+            if (regtype == 'h' or regtype == 'i'): # channel data
+                if raw != None:
+                    if rowproblem == 1:
+                        log.warning('svc processing skipped due to invalid data from '+self.in_sql+' for svc '+val_reg+', srow: '+repr(srow))
+                    elif ots < ts_now - 10*self.readperiod: # but too old, stalled
+                        log.warning('svc processing skipped due to stalled data for '+val_reg+'.'+str(member))
+                    else: # data fresh enough, going to process
 
-                        res = self.cp[cpi].calc(ots, raw, ts_now = self.ts) # power calculation based on raw counter increase
-                        log.debug('got result from cp['+str(cpi)+']: '+str(res)+', params ots '+str(ots)+', raw '+str(raw)+', ts_now '+str(self.ts))  # debug
-                        if (cfg&128) > 0: #
-                            raw = res[1] # on off = 0 1, asendab eelmise raw
-                            if res[2] != 0: # on/off change
-                                chg = 1 # immediate notification needed due to state change
+                        ## POWER? FILTER? ####
+                        if (cfg&64): # power, no sign, increment to be calculated! divide increment to time from the last reading to get the power
+                            #cpi += 1 # counter2power index, increment BEFORE value validation
+
+                            log.debug('going to calc power for mba.regadd '+str(mba)+'.'+str(regadd)+' using cp['+str(self.cpi)+']')
+                            #res = self.cp[self.cpi].calc(ots, raw, ts_now = self.ts) # power calculation based on raw counter increase
+                            res = self.cp[self.cpi].calc(raw) # based on current ts only!
+                            
+                            log.info('got result from cp['+str(self.cpi)+']: '+str(res)+', params ots '+str(ots)+', raw '+str(raw)+', ts_now '+str(self.ts))  # debug
+                            if (cfg&128): # on off state from power
+                                raw = res[1] # state on/off
+                                if res[2] != 0: # on/off change
+                                    chg = 1 # immediate notification needed due to state change
+                                    log.info('state change in cp['+str(self.cpi)+']')
+                            else:
+                                raw = res[0] # power
+
+                        elif (cfg&2048): # 1wire filter
+                            if raw == 1360 or raw == 4096:
+                                log.warning('invalid raw value '+str(raw)+' for temp sensor (cfg=2048) in svc '+val_reg+'.'+str(member)+', replacing with None')
+                                raw = None
+
+                        ## SCALING #############
+                        if raw != None:
+                            if (cfg&1024) == 0: # take sign into account, not counter ### SIGNED if not counter ##
+                                if raw >= (2**(wcount*16-1)): # negative!
+                                    raw = raw-(2**(wcount*16))
+                                    #print('read_all: converted to negative value',raw,'wcount',wcount) # debug
+                                
+         
+                            if x1 != x2 and y1 != y2: # seems like normal input data, also not state from power
+                                value=(raw-x1)*(y2-y1)/(x2-x1)
+                                value=int(round(y1+value)) # integer values to be reported only
+                            else:
+                                #log.debug('val_reg '+val_reg+' member '+str(member)+', raw '+str(raw)+' ai2scale conversion NOT DONE! using value = raw ='+str(raw))
+                                #log.warning('val_reg '+val_reg+' member '+str(member)+', raw '+str(raw)+' ai2scale conversion NOT DONE!')
+                                value=None
+                                rowproblem = 1 # this service will not be used in notification
+                                ## binary services defined in aicochjannels must have x1 x2 y1 y2! 0 1 0 1    
+
+                        if value != None and avg != None and ovalue != None:
+                            if avg > 1 and abs(value - ovalue) < value / 2:  # averaging the readings. big jumps (more than 50% change) are not averaged.
+                                value=int(((avg - 1) * ovalue+value)/avg) # averaging with the previous value, works like RC low pass filter
+                                log.debug('averaging on, value became '+str(value)) # debug
+
+                            if (cfg&256) and abs(value - ovalue) > value / 5.0: # change more than 20% detected, use num w comma!
+                                log.debug('value change of more than 20% detected in '+val_reg+'.'+str(member)+', need to notify')
+                                chg = 1
+
+
+                            # counter2power and scaling done, status check begins ##########
+                            mstatus=self.value2status(value,cfg,outlo,outhi,ostatus) # default hyst=5%
+
+
+                            if mstatus != ostatus: # member status change detected
+                                chg = 1 # immediate notification within this method
+                                print('member status chg (after possible inversion) to',mstatus) # debug
+
                         else:
-                            raw = res[0]
+                            log.warning(self.in_sql+' NOT updated due to '+val_reg+' member '+str(member)+' value None! chk regadd '+str(regadd))
+                            rowproblem = 1
 
-                    elif (cfg&2048): # 1wire filter
-                        if raw == 1360 or raw == 4096:
-                            log.warning('invalid raw value '+str(raw)+' for temp sensor (cfg=2048) in svc '+val_reg+'.'+str(member)+', replacing with None')
-                            raw = None
-                    
-                    ## SCALING #############
-                    if (cfg&1024) == 0 and raw != None: # take sign into account, not counter ### SIGNED if not counter ##
-                        if raw >= (2**(wcount*16-1)): # negative!
-                            raw = raw-(2**(wcount*16))
-                            #print('read_all: converted to negative value',raw,'wcount',wcount) # debug
+                    ############# h or i processing done #######
 
-                    if raw != None and x1 != x2 and y1 != y2: # seems like normal input data
-                        value=(raw-x1)*(y2-y1)/(x2-x1)
-                        value=int(round(y1+value)) # integer values to be reported only
-                    else:
-                        #log.warning('val_reg '+val_reg+' member '+str(member)+', raw '+str(raw)+' ai2scale conversion NOT DONE!')
-                        value=None
-                        rowproblem = 1 # this service will not be used in notification
-
-                    
-                    if value != None and avg != None and ovalue != None:
-                        if avg > 1 and abs(value - ovalue) < value / 2:  # averaging the readings. big jumps (more than 50% change) are not averaged.
-                            value=int(((avg - 1) * ovalue+value)/avg) # averaging with the previous value, works like RC low pass filter
-                            log.debug('averaging on, value became '+str(value)) # debug
-
-                        if (cfg&256) and abs(value - ovalue) > value / 5.0: # change more than 20% detected, use num w comma!
-                            log.debug('value change of more than 20% detected in '+val_reg+'.'+str(member)+', need to notify')
-                            chg = 1
-
-
-                        # counter2power and scaling done, status check begins ##########
-                        mstatus=self.value2status(value,cfg,outlo,outhi,ostatus) # default hyst=5%
-
-
-                        if mstatus != ostatus: # member status change detected
-                            chg = 1 # immediate notification within this method
-                            print('member status chg (after possible inversion) to',mstatus) # debug
-
-                    if value != None:
-                        Cmd="update "+self.in_sql+" set status='"+str(status)+"', value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
-                        conn.execute(Cmd) # who commits? the calling method!!!
-                    else:
-                        log.warning(self.in_sql+' NOT updated due to value = None!')
-                        rowproblem = 1
-
-                ############# h or i processing done #######
-
-
-
-            else: # setup values with no raw
+            elif 's' in regtype: # setup value
                 value = ovalue # use the value in table without conversion or influence on status
                 if mba > 0:
                     log.warning('NO mba SHOULD be set for setup value '+val_reg+'.'+str(member)) # debug
@@ -866,6 +878,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     status=mstatus
 
             rowproblemcount += rowproblem
+
+        #if self.cpi > -1: # counters  in use
+        #    log.debug(' /// counter instances count '+str(len(self.cp)))
 
         # service members done, check if all of them valid to use in svc tuple
         if rowproblemcount == 0: # all members valid
