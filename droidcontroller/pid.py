@@ -27,10 +27,10 @@ import logging
 log = logging.getLogger(__name__)
 
 class PID:
-    """ Simple PID control.
-        This class implements a simplistic PID control algorithm.
-    """
-    def __init__(self, setpoint = 0, P = 1.0, I = 0.01, D = 0.0, min = None, max = None, outmode = 'nolist'): # initialize gains
+    ''' Simple PID control.
+        This class implements a simplistic PID control algorithm '''
+        
+    def __init__(self, setpoint = 0, P = 1.0, I = 0.01, D = 0.0, min = None, max = None, outmode = 'nolist', name='undefined'):
         self.outmode = outmode # remove later, temporary help to keep list output for some installations
         self.error = 0
         self.vars = {} # to be returned with almost all internal variables
@@ -41,6 +41,7 @@ class PID:
         self.setKd(D)
         self.setMin(min)
         self.setMax(max)
+        self.setName(name)
         self.Initialize()
 
     def setSetpoint(self, invar):
@@ -165,6 +166,10 @@ class PID:
         return self.outMax
 
 
+    def setName(self, invar):
+        ''' Sets the descriptive name for the instance '''
+        self.Name = invar
+
     def Initialize(self):
         """ initialize delta t variables   """
         self.currtime = time.time()
@@ -263,14 +268,15 @@ class PID:
             return out # this will be the only way 
 
 class ThreeStep:
-    """ Three-step motor control.
+    ''' Three-step motor control.
         Outputs pulse length to run the motor in one or another direction. 
         Another pulse may not start before runperiod is over. 
         State is usable for level control, output returns pulse length. 
         onlimit is active (not zero) if abs(runtime) reaches motortime.
         No output to sstart a new pulse if error is below minerror (usable for dead zone setting).
-    """
-    def __init__(self, setpoint = 0, motortime = 100, maxpulse = 10, maxerror = 100, minpulse =1 , minerror = 1, runperiod = 20, outmode = 'nolist'):
+    '''
+    def __init__(self, setpoint = 0, motortime = 100, maxpulse = 10, maxerror = 100, \
+            minpulse =1 , minerror = 1, runperiod = 20, outmode = 'nolist', name='undefined'):
         self.outmode = outmode # remove later, temporary help to keep list output for some installations
         self.error = 0
         self.vars = {} # to be returned with almost all internal variables
@@ -282,6 +288,7 @@ class ThreeStep:
         self.setMinpulseLength(minpulse)
         self.setMinpulseError(minerror)
         self.setRunPeriod(runperiod)
+        self.setName(name)
         self.Initialize()
 
 
@@ -296,7 +303,8 @@ class ThreeStep:
             'MaxpulseError' : self.MaxpulseError, \
             'MinpulseLength' : self.MinpulseLength, \
             'RunPeriod' : self.RunPeriod, \
-            'error' : self.error})
+            'error' : self.error, \
+            'name': self.Name })
         if filter is None:
             return self.vars
         else:
@@ -348,6 +356,9 @@ class ThreeStep:
         """ Sets the time for no new pulse to be started """
         self.RunPeriod = abs(invar)
 
+    def setName(self, invar):
+        ''' Sets the descriptive name for the instance '''
+        self.Name = invar
 
     def Initialize(self):
         """ initialize time dependant variables
@@ -400,12 +411,12 @@ class ThreeStep:
             log.warning('invalid value for set_onlimit: '+str(invar))
         
 
-    def output(self, invar): # actual as parameter otr 3T control
-        """ Performs pulse generation if needed and if no previous pulse is currently active.
+    def output(self, invar): # actual as parameter or 3T control
+        ''' Performs pulse generation if needed and if no previous pulse is currently active.
         Returns output value for pulse length in s. Other variables available via getvars() as dict.
         All output values can be either positive or negative depending on the direction towards higher or lower limit.
         If self.error gets smaller than minpulse during the nonzero output, zero the output state.
-        """
+        '''
         try:
             self.error=self.Setpoint - invar            # self.error value
         except:
