@@ -112,7 +112,8 @@ class PID:
             'outD' : self.Kd * self.Cd, \
             'setpoint' : self.setPoint, \
             'onlimit' : self.onLimit, \
-            'error' : self.error})
+            'error' : self.error, \
+            'name': self.Name })
         if filter is None:
             return self.vars
         else:
