@@ -127,11 +127,11 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                                 log.debug(msg) # debug
                                 #udp.syslog(msg)
                                 # dichannels table update with new bit values and change flags. no status change here. no update if not changed!
-                                Cmd="UPDATE "+self.in_sql+" set value='"+str(value)+"', chg='"+str(chg)+"', ts_chg='"+str(self.ts)+"' \
+                                Cmd="UPDATE "+self.in_sql+" set value='"+str(value)+"', chg='"+str(chg)+"', ts='"+str(self.ts)+"' \
                                     where mba='"+str(mba)+"' and regadd='"+str(regadd+i)+"' and mbi="+str(mbi)+" and bit='"+str(bit)+"'" # uus bit value ja chg lipp, 2 BITTI!
-                            else: # ts_chg used as ts_read now! change detection does not need that  timestamp!
+                            else: # ts as ts_read now! change detection does not need that  timestamp!
                                 chg=0
-                                Cmd="UPDATE "+self.in_sql+" set ts_chg='"+str(self.ts)+"', chg='"+str(chg)+"' \
+                                Cmd="UPDATE "+self.in_sql+" set ts='"+str(self.ts)+"', chg='"+str(chg)+"' \
                                     where mba='"+str(mba)+"' and mbi="+str(mbi)+" and regadd='"+str(regadd+i)+"' and bit='"+str(bit)+"'" # old value unchanged, use ts_CHG AS TS!
                             #print('dichannels udpdate:',Cmd) # debug
                             conn.execute(Cmd) # write
@@ -253,7 +253,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
     def make_dichannels(self, svc = ''): # chk all if svc empty
         ''' Send di svc with changed member or (lapsed sendperiod AND
-            updated less than 5 s ago (still fresh). ts_chg used as update ts).
+            updated less than 5 s ago (still fresh). ts used as update ts.
             If svc != '' then that svc is resent without ts check
         '''
         # mask == 1: send changed, mask == 3: send all
@@ -272,7 +272,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             Cmd="BEGIN IMMEDIATE TRANSACTION" # transaction, dichannels
             conn.execute(Cmd) # dichannels
 
-            # dichannels(mba,regadd,bit,val_reg,member,cfg,block,value,status,ts_chg,chg,desc,comment,ts_msg,type integer)
+            # dichannels(mba,regadd,bit,val_reg,member,cfg,block,value,status,ts,chg,desc,comment,ts_msg,type integer)
             if svc == '':
                 Cmd="select val_reg, max((chg+0) & 1), min(ts_msg+0) from \
                     dichannels where ((chg+0 & 1) and ((cfg+0) & 16)) or \
@@ -342,7 +342,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             ots=0 # previous update timestamp
             avg=0 # averaging strength, has effect starting from 2
             # 0      1   2     3      4      5     6     7     8    9     10   11   12      13     14
-            #(mba,regadd,bit,val_reg,member,cfg,block,value,status,ts_chg,chg,desc,comment,ts_msg,type integer) # dichannels
+            #(mba,regadd,bit,val_reg,member,cfg,block,value,status,ts,chg,desc,comment,ts_msg,type integer) # dichannels
             if srow[0] != '':
                 mba=int(srow[0])
             if srow[1] != '':
@@ -603,7 +603,26 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         return 0
 
 
-
+    def get_divalue(self,svc,member): # returns value based on di service name and member number
+        #Cmd3="BEGIN IMMEDIATE TRANSACTION" # conn3, et ei saaks muutuda lugemise ajal
+        #conn3.execute(Cmd3)
+        Cmd="select value from dichannels where val_reg='"+svc+"' and member='"+str(member)+"'"
+        cur=conn.cursor()
+        cur.execute(Cmd)
+        value=None
+        found=0    
+        for row in cur: # should be one row only
+            log.debug('get_divalue row: '+str(repr(row))) # debug
+            found=1
+            value=int(float(row[0])) if row[0] != '' and row[0] != None else 0
+        if found == 0:
+            msg='get_divalue failure, no member '+str(member)+' for '+svc+' found!'
+            log.warning(msg)
+            
+        conn.commit()
+        return value
+    
+    
     def doall(self): # do this regularly, blocks for the time of socket timeout!
         ''' Does everything on time if executed regularly '''
         res=0 # returncode

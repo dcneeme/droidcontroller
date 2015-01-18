@@ -460,8 +460,9 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
     def set_membervalue(self, svc, member, value, table): # setting value in table based on svc and member
         ''' Sets variables like setpoints or limits to be reported within services, based on service name and member number.
             Table can be either dichannels, aichannels or counters and must be known! FIXME: could be detected automatically!
-            Must tolerate but ignore None as value
+            Must tolerate but ignore None as value. Using time.time for ts to void stalled data despite changing.
         '''
+        ts = int(time.time())
         if value is None:
             log.warning('no '+table+' update due to value='+str(value)+' instead of expected num value for svc '+svc+' member '+str(member))
             return 2
@@ -472,9 +473,9 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
             log.warning('no '+table+' update due to value'+str(value)+' instead of expected num value for '+svc+'.'+str(member))
             return 2
 
-        Cmd="BEGIN IMMEDIATE TRANSACTION" # conn, fot setbit_dochannels in fact
+        Cmd="BEGIN IMMEDIATE TRANSACTION" 
         conn.execute(Cmd)
-        Cmd="update "+table+" set value='"+str(value)+"' where val_reg='"+svc+"' and member='"+str(member)+"'"
+        Cmd="update "+table+" set value='"+str(value)+"', ts='"+str(ts)+"' where val_reg='"+svc+"' and member='"+str(member)+"'"
         #print('set_membervalue',Cmd) # debug
         try:
             conn.execute(Cmd)
@@ -484,7 +485,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
         except:
             msg='set_membervalue failure: '+str(sys.exc_info()[1])
             print(msg)
-            log.warning(table+' update failure')
+            log.warning(table+' update failure, chk dichannels ts instead of ts_chg!')
             #udp.syslog(msg)
             return 1  # update failure
 
@@ -492,13 +493,14 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
     def setbit_do(self, bit, value, mba, regadd, mbi=0):  # to set a readable output channel by the physical
         # parameter order should be changed!!! to mbi, mba, regadd, bit. chk tartu, starman!
         '''Sets the output channel by the physical addresses (mbi,mba,regadd,bit) '''
+        ts = int(time.time())
         #if mba == '' or regadd == '':
         if mba == 0 or regadd == None or mbi == None or bit == None:
             print('invalid parameters for setbit_do(), mba regadd',mba,regadd,'bit value mbi',bit,value,mbi)
             time.sleep(2)
             return 2
 
-        Cmd="update dochannels set value = '"+str(value)+"' where mba='"+str(mba)+"' and mbi="+str(mbi)+" and regadd='"+str(regadd)+"' and bit='"+str(bit)+"'"
+        Cmd="update dochannels set value = '"+str(value)+"', ts='"+str(ts)+"' where mba='"+str(mba)+"' and mbi="+str(mbi)+" and regadd='"+str(regadd)+"' and bit='"+str(bit)+"'"
         #print(Cmd) # debug
         try:
             conn.execute(Cmd)

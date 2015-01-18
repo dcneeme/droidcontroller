@@ -252,24 +252,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 res=1
 
             if res == 0:
-                log.debug('set_counter: write success to mba.regadd '+str(mba)+'.'+str(regadd))
-
-                #check if there are counter2power instances (cp[]) related to that register, intialize them NONO!!
-                #Cmd="select mbi,mba,regadd,val_reg,member from "+self.in_sql+" where (cfg+0 & 192) order by val_reg,member" # counter2power bits 64+128
-                #cur.execute(Cmd) # what about commit()? FIXME
-                #conn.commit()
-                #j=-1
-                #for row in cur: # start from 0 with indexing
-                #    j+=1
-                #    #print('cp init prep select row (j,mbi,mba,regadd):',j,row) # debug
-                #    try:
-                #        if self.cp and mbi == int(row[0]) and mba == int(row[1]) and regadd == int(row[2]): # cp[j] must be initialized
-                #            log.debug('initializing counter2power instance cp['+str(j)+'] due to counter setting')
-                #            self.cp[j].init() # cp[] may not exist on start, but init is then not needed either...
-                #    except:
-                #        log.warning('FAILED initializing counter2power instance cp['+str(j)+'], tried due to counter setting')
-                #        traceback.print_exc() # debug
-                # end power init
+                log.debug('write success to mba.regadd '+str(mba)+'.'+str(regadd))
             else:
                 log.warning('set_counter: write FAILED to mba '+str(mba)+', regadd '+str(regadd))
             return res
@@ -314,7 +297,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 else:
                     msg += ' -- no mb[]!'
 
-                log.debug(msg)
+                log.debug(msg) ## log.info(msg) ###### See on hea kompaktne raw kontroll
 
             except:
                 msg += ' -- FAILED!'
@@ -360,7 +343,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         Cmd="UPDATE "+self.in_sql+" set raw='"+str(tcpdata)+"', ts='"+str(self.ts)+ \
                             "' where mba='"+str(mba)+"' and regadd='"+str(regadd+i*step)+"' and mbi="+str(mbi) # koigile korraga selle mbi, mba, regadd jaoks
                         conn.execute(Cmd)
-                time.sleep(0.05) # ainult seriali puhul? ##########  FIXME
+                        log.debug('updated '+self.in_sql+' with raw='+str(tcpdata)+' from mba '+str(mba)+' regadd '+str(regadd+i*step))  ######
+                        
+                time.sleep(0.03) # ainult seriali puhul? ##########  FIXME
                 return 0
             except:
                 traceback.print_exc()
@@ -572,8 +557,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
 
-    def get_aivalue(self,svc,member): # returns raw,value,lo,hi,status values based on service name and member number
-        # but status is for a service, not for member!!!??
+    def get_aivalue(self,svc,member): # r
+        ''' Returns raw,value,lo,hi,substatus values based on service name and member number '''
+        # status gets reported as summary status foir service, not svc member!
         #(mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,comment,type integer)
         cur=conn.cursor()
         Cmd="BEGIN IMMEDIATE TRANSACTION" # conn3, et ei saaks muutuda lugemise ajal
@@ -597,16 +583,15 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             status=int(eval(row[3])) if row[3] != '' and row[3] != None else 0
         if found == 0:
             msg='get_aivalue failure, no member '+str(member)+' for '+svc+' found!'
-            print(msg)
-            #syslog(msg)
-
+            log.warning(msg)
+            
         conn.commit()
-        #print('get_aivalue ',svc,member,'value,outlo,outhi,status',value,outlo,outhi,status) # debug
+        log.debug('svc '+svc+' member '+str(member)+' value '+str(value)) # debug
         return value,outlo,outhi,status
 
 
     def set_aivalue(self,svc,member,value): # sets variables like setpoints or limits to be reported within services, based on service name and member number
-        ''' Setting member value using sqlgeneral set_aivalue. adding sql table below for that '''
+        ''' Setting member value using sqlgeneral set_membervalue. adding sql table below for that '''
         return s.set_membervalue(svc,member,value,self.in_sql)
 
 
@@ -615,7 +600,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         #(mba,regadd,bootvalue,value,ts,rule,desc,comment)
         Cmd="BEGIN IMMEDIATE TRANSACTION" # conn
         conn.execute(Cmd)
-        Cmd="update "+self.out_sql+" set value='"+str(value)+"' where regadd='"+str(reg)+"' and mba='"+str(mba)+"'"
+        Cmd="update "+self.out_sql+" set value='"+str(value)+"' where regadd='"+str(reg)+"' and mba='"+str(mba)+"'" # set_aovalue()
         try:
             conn.execute(Cmd)
             conn.commit()
@@ -709,7 +694,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         Cmd="select mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,regtype,grp,mbi,wcount from "+self.in_sql \
             +" where val_reg='"+val_reg+"' order by member asc" # avoid trouble with column order
         log.debug(Cmd)
-        print(Cmd)
+        #print(Cmd)
         
         cur.execute(Cmd) # another cursor to read the same table
         ts_now = time.time() # time now in sec
@@ -765,7 +750,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 wcount = int(srow[21]) if srow[21] != '' else 1  # word count
                 chg = 0 # member status change flag
                 log.debug('val_reg '+val_reg+' member '+str(member)+', cfg='+str(cfg)+', raw='+str(raw)+', ovalue='+str(ovalue)+', outlo='+str(outlo)+', outhi='+str(outhi))
-                print('val_reg '+val_reg+' member '+str(member)+', cfg='+str(cfg)+', raw='+str(raw)+', ovalue='+str(ovalue)+', outlo='+str(outlo)+', outhi='+str(outhi)) # debug
+                #print('val_reg '+val_reg+' member '+str(member)+', cfg='+str(cfg)+', raw='+str(raw)+', ovalue='+str(ovalue)+', outlo='+str(outlo)+', outhi='+str(outhi)) # debug
                 
             except:
                 log.debug('invalid data from '+self.in_sql+' for svc '+val_reg+', srow: '+repr(srow))
@@ -812,17 +797,17 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                             else:
                                 raw = res[0] # power
 
-                        elif (cfg&2048): # 1wire filter
+                        elif (cfg&2048): # 1wire filter. should have cfg bit 4096 as well!
                             if raw == 1360 or raw == 4096:
                                 log.warning('invalid raw value '+str(raw)+' for temp sensor (cfg=2048) in svc '+val_reg+'.'+str(member)+', replacing with None')
                                 raw = None
 
                         ## SCALING #############
                         if raw != None:
-                            if (cfg&1024) == 0: # take sign into account, not counter ### SIGNED if not counter ##
+                            if (cfg&4096): # take sign into account
                                 if raw >= (2**(wcount*16-1)): # negative!
                                     raw = raw-(2**(wcount*16))
-                                    #print('read_all: converted to negative value',raw,'wcount',wcount) # debug
+                                    log.debug('converted to negative: '+str(raw)) # debug
                                 
          
                             if x1 != x2 and y1 != y2: # seems like normal input data, also not state from power
@@ -852,6 +837,12 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                             if mstatus != ostatus: # member status change detected
                                 chg = 1 # immediate notification within this method
                                 print('member status chg (after possible inversion) to',mstatus) # debug
+
+                        
+                        
+                        if value != None:
+                            Cmd="update "+self.in_sql+" set status='"+str(status)+"', value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
+                            conn.execute(Cmd) # who commits? the calling method, read_all()!!!
 
                         else:
                             log.warning(self.in_sql+' NOT updated due to '+val_reg+' member '+str(member)+' value None! chk regadd '+str(regadd))

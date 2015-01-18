@@ -2,7 +2,10 @@ import os, traceback, sqlite3, time
 from droidcontroller.sqlgeneral import * # SQLgeneral
 s=SQLgeneral()
 
-''' Class and methods to read events from monitoring server handing access to google calendar.
+import logging
+log = logging.getLogger(__name__)
+
+''' Class and methods to read events from monitoring server handling access to google calendar.
     Usage:
     from droidcontroller.gcal.py import *
     cal=Gcal('00101200006')
@@ -31,13 +34,15 @@ class Gcal:
             response = requests.get(req, headers = headers)
         except:
             msg='gcal query '+req+' failed!'
-            #log.warning(msg)
+            log.warning(msg)
             traceback.print_exc()
             print(msg)
             return 1 # kui ei saa gcal yhendust, siis lopetab ja vana ei havita!
 
         try:
+            print('response.content', response.content)
             events = eval(response.content) # string to list
+            
         except:
             msg='getting calendar events failed for host_id '+self.host_id
             print(msg)
@@ -85,7 +90,7 @@ class Gcal:
             self.cur.execute(Cmd)
             for row in self.cur:
                 value=row[0] # overwrite with the last value before now
-                #print(Cmd,', value',value) # debug. voib olla mitu rida, viimane value jaab iga title jaoks kehtima
+                print(Cmd,', value',value) # debug. voib olla mitu rida, viimane value jaab iga title jaoks kehtima
             conn.commit()
             return str(value) # last one for given title becomes effective. can be empty string too, then use default value for setpoint related to title
         except:
