@@ -78,7 +78,7 @@ class Gcal:
 
     def check(self, title): # set a new setpoint if found in table calendar (sharing database connection with setup)
         ''' Returns the current value for the event with title from the local event buffer '''
-        ts = time.time()
+        tsnow = int(time.time())
         value='' # local string value
         if title == '':
             return None
@@ -86,11 +86,12 @@ class Gcal:
         Cmd = "BEGIN IMMEDIATE TRANSACTION"
         try:
             conn.execute(Cmd)
-            Cmd="select value from calendar where title='"+title+"' and timestamp+0<"+str(ts)+" order by timestamp asc" # find the last passed event value
+            Cmd="select value,timestamp from calendar where title='"+title+"' and timestamp+0<"+str(tsnow)+" order by timestamp asc" # find the last passed event value
             self.cur.execute(Cmd)
             for row in self.cur:
-                value=row[0] # overwrite with the last value before now
-                print(Cmd,', value',value) # debug. voib olla mitu rida, viimane value jaab iga title jaoks kehtima
+                value = row[0] # overwrite with the last value before now
+                ts = row[1]
+                log.info('cal tsnow '+str(tsnow)+', ts '+str(ts)+', value '+str(value)) # debug.  viimane value jaab iga title jaoks kehtima
             conn.commit()
             return str(value) # last one for given title becomes effective. can be empty string too, then use default value for setpoint related to title
         except:

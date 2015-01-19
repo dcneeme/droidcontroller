@@ -480,7 +480,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
 
-    def sync_ao(self): # synchronizes AI registers with data in aochannels table
+    def sync_ao(self): 
+        ''' Synchronizes AI registers with data in aochannels table '''
         #print('write_aochannels start') # debug
         # and use write_register() write modbus registers  to get the desired result (all ao channels must be also defined in aichannels table!)
         respcode=0
@@ -512,46 +513,33 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             cur.execute(Cmd)
 
             for row in cur: # got mba, regadd and value for registers that need to be updated / written
+                #log.info('row: '+str(repr(row))) # toob appd.log sisse
                 regadd=0
                 mba=0
 
                 mba=int(eval(row[0])) if row[0] != '' else 0 # must be a number
                 regadd=int(eval(row[1])) if row[1] != '' else 0 # must be a number
                 value=int(eval(row[2])) if row[2] != '' else 0  # komaga nr voib olla, teha int!
-
-                if mba == 0:
-                    msg='sync_ao: going to write value '+str(value)+' to register mba.regadd '+str(mba)+'.'+str(regadd)
-                    print(msg) # debug
-                    #udp.syslog(msg)
-                else:
-                    msg='sync_ao: invalid mba '+str(mba)+' for register '+str(regadd)
-                    log.warning(msg) # debug
-
-                #client.write_register(address=regadd, value=value, unit=mba)
-                ''' write(self, mba, reg, type = 'h', **kwargs):
-                :param 'mba': Modbus device address
-                :param 'reg': Modbus register address
-                :param 'type': Modbus register type, h = holding, c = coil
-                :param kwargs['count']: Modbus registers count for multiple register write
-                :param kwargs['value']: Modbus register value to write
-                :param kwargs['values']: Modbus registers values array to write
-                '''
+                mbi=row[3] if row[3] != None else 0  # mbi on num!
+                
                 try:
-                    if mb[mbi]:
-                        respcode=respcode+mb[mbi].write(mba=mba, reg=regadd,value=value)
-
+                    if mb[mbi] and mba > 0:
+                        respcode=respcode+mb[mbi].write(mba=mba, reg=regadd, value=value)
+                        if respcode == 0:
+                            log.debug('successfully written value '+str(value)+' to mbi '+str(mbi)+', mba '+str(mba)+' regadd '+str(regadd))
+                        else:
+                            log.warning('FAILED write to modbus device mbi '+str(mbi)+', mba '+str(mba))
+                            return 1
                 except:
-                    print('device mbi,mba',mbi,mba,'not defined in devices.sql')
+                    log.warning('FAILED write to modbus device mbi '+str(mbi)+', mba '+str(mba)+' not defined in devices.sql?')
                     return 2
 
             conn.commit()  #  transaction end - why?
             return 0
         except:
-            msg='problem with acchannel.sync_ao!'
-            print(msg)
-            #udp.syslog(msg)
+            msg='problem with acchannel.sync_ao()!'
+            log.warning(msg)
             traceback.print_exc()
-            sys.stdout.flush()
             return 1
         # sync_ao() end. FRESHENED DICHANNELS TABLE VALUES AND CGH BITS (0 TO SEND, 1 TO PROCESS)
 
@@ -596,7 +584,10 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
     def set_aovalue(self, value, mba, reg): # sets variables to control, based on physical addresses
-        ''' Write value to follow by read_all() and sync_ao() using mba and regadd'''
+        ''' Write value to follow into aochannels table. 
+            The according modbus holding register will be written by sync_ao() until the according 
+            aicochannels register contain the same value. 
+        '''
         #(mba,regadd,bootvalue,value,ts,rule,desc,comment)
         Cmd="BEGIN IMMEDIATE TRANSACTION" # conn
         conn.execute(Cmd)
@@ -613,7 +604,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
     def set_aosvc(self, svc, member, value): # to set a readable output channel by the service name and member using aicochannels table
-        ''' Set service member value bby service name and member number'''
+        ''' Set service member value by service name and member number, to be synced into holding register. 
+            The aicochannels table must contain a similar input channel, to compare the result with. 
+        '''
         #(mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,comment,type integer) # ai
         Cmd="BEGIN IMMEDIATE TRANSACTION"
         conn.execute(Cmd)
@@ -981,13 +974,14 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         if self.ts - self.ts_read > self.readperiod:
             self.ts_read = self.ts
             try:
-                res=self.read_all() # read all aico channels
+                res=self.read_all() ## read all registers defined in aicochannels
+                self.sync_ao() ### write ao registers that are also present in aicochannels but the content is different
             except:
                 traceback.print_exc()
         if self.ts - self.ts_send > self.sendperiod:
             self.ts_send = self.ts
             try:
-                res=res+self.report_all() # compile services and send away  / raporteerimine, harvem
+                res=res+self.report_all() ### report all services in aicochannels
             except:
                 traceback.print_exc()
         return res
