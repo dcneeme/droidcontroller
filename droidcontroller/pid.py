@@ -28,7 +28,8 @@ log = logging.getLogger(__name__)
 
 class PID:
     ''' Simple PID control.
-        This class implements a simplistic PID control algorithm '''
+        This class implements a simplistic PID control algorithm 
+    '''
         
     def __init__(self, setpoint = 0, P = 1.0, I = 0.01, D = 0.0, min = None, max = None, outmode = 'nolist', name='undefined'):
         self.outmode = outmode # remove later, temporary help to keep list output for some installations
@@ -47,20 +48,26 @@ class PID:
         self.Initialize()
 
     def setSetpoint(self, invar):
-        """ Set the goal for the actual value """
-        self.setPoint = invar
+        ''' Set the goal for the actual value '''
+        if invar != None:
+            self.setPoint = invar
+        else:
+            log.warning('ignored illegal setpoint value None! keeping '+str(self.setPoint))
 
     def getSetpoint(self):
-        """ Returns the setpoint for the actual value to follow """
+        ''' Returns the setpoint for the actual value to follow '''
         return self.Setpoint
 
 
     def setKp(self, invar):
-        """ Sets proportional gain  """
-        self.Kp = invar
+        ''' Sets proportional gain  '''
+        if invar != None:
+            self.Kp = invar
+        else:
+            log.warning('ignored illegal Kp value None! keeping '+str(self.Kp))
 
     def setKi(self, invar):
-        """ Set integral gain and modify integral accordingly to avoid related jumps """
+        ''' Set integral gain and modify integral accordingly to avoid related jumps '''
         try:
             #print('trying to set new setKi '+str(invar)+' while existing Ki='+str(self.Ki)) # debug
             if self.Ki > 0 and invar > 0 and self.Ki != invar:
@@ -74,8 +81,11 @@ class PID:
 
 
     def setKd(self, invar):
-        """ Set derivative gain   """
-        self.Kd = invar
+        ''' Set derivative gain  '''
+        if invar != None:
+            self.Kd = invar
+        else:
+            log.warning('ignored illegal Kd value None! keeping '+str(self.Kd))
 
 
     def getKp(self):
@@ -126,17 +136,17 @@ class PID:
 
 
     def resetIntegral(self):
-        """ reset integral part   """
+        ''' reset integral part  '''
         self.Ci = 0
 
 
     def setPrevErr(self, invar):
-        """ Set previous self.error value    """
+        ''' Set previous self.error value    '''
         self.prev_err = invar
 
 
     def setMin(self, invar):
-        """ Set lower limit for output    """
+        ''' Set lower limit for output    '''
         try:
             #print('pid: trying to set new outMin '+str(invar)+' while outMax='+str(self.outMax)) # debug
             if self.Ki > 0 and invar != None  and self.outMin != invar:
@@ -154,7 +164,7 @@ class PID:
 
 
     def setMax(self, invar):
-        """ Set upper limit for output     """
+        ''' Set upper limit for output    '''
         try:
             #print('pid: trying to set new outMax '+str(invar)+' while outMin='+str(self.outMin)) # debug
             if self.Ki > 0 and invar != None  and self.outMax != invar:
@@ -176,7 +186,7 @@ class PID:
         self.Name = invar
 
     def Initialize(self):
-        """ initialize delta t variables   """
+        ''' initialize delta t variables  '''
         self.currtime = time.time()
         self.prevtm = self.currtime
         self.prev_err = 0
