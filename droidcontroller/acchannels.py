@@ -673,7 +673,10 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
     def make_svc(self, val_reg, sta_reg):  # ONE svc, both val_reg and sta_reg exist for ai and counters
-        ''' Make a single service record WITH STATUS based on existing values and update the scaled value in sql table. '''
+        ''' Make a single service record WITH STATUS based on existing values and update the scaled value in sql table. 
+            Use block as hysteresis in value units for status change, if cfg&8192 == True.
+            Use block as off_tout in s for counters with power-on/off detection if cfg&64 == True.
+        '''
 
         status = 0 # initially for whole service
         mstatus = 0
@@ -713,6 +716,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             ots=0 # eelmine ts value ja status ja raw oma
             avg=0 # keskmistamistegur, mojub alates 2
             block=0 # power off_tout for counters
+            hyst = 0
             result=None
             #desc=''
             #comment=''
@@ -765,7 +769,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
             # cfg related tests and calc
-            if (regtype == 'h' or regtype == 'i'): # channel data
+            if (regtype == 'h' or regtype == 'i'): # for channel data only, not setup values (?)
                 if raw != None:
                     if rowproblem == 1:
                         log.warning('svc processing skipped due to invalid data from '+self.in_sql+' for svc '+val_reg+', srow: '+repr(srow))
@@ -824,12 +828,14 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
                             # counter2power and scaling done, status check begins ##########
-                            mstatus=self.value2status(value,cfg,outlo,outhi,ostatus) # default hyst=5%
+                            if cfg&8192: # use hysteresis from block
+                                hyst = block # int
+                            mstatus=self.value2status(value,cfg,outlo,outhi,ostatus, hyst) # default hyst=0 value units
 
 
                             if mstatus != ostatus: # member status change detected
                                 chg = 1 # immediate notification within this method
-                                print('member status chg (after possible inversion) to',mstatus) # debug
+                                log.debug('member status chg (after possible inversion) to ' +str(mstatus))
 
                         
                         
@@ -878,10 +884,11 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             return None
 
 
-    def value2status(self,value,cfg,outlo,outhi,ostatus=0,hyst=2):
+    def value2status(self,value,cfg,outlo,outhi,ostatus=0,hyst=0):
         ''' Returns svc member status based on value and limits, taking cfg and previous status into account.
             If value to status inversion is in use (to define forbidden instead of allowed zones),
             normalize old status ostatus first and then invert mstatus in the end.
+            Use hysteresis in value units for status change if needed.
         '''
         # svc STATUS CHK. check the value limits and set the status, according to configuration byte cfg bits values
         # use hysteresis to return from non-zero status values
@@ -899,10 +906,11 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         # 128 -  state from power flag
         # 256 - notify on 10% value change (not only limit crossing that becomes activated by first 4 cfg bits)
         # 512 - do not report at all, for internal usage
-        # 1024 - raw counter, no sign
-            # counters are normally located in 2 registers, but also ai values can be 32 bits.
-            # negative wcount means swapped words (barionet, npe imod)
-
+        # 1024 - raw counter
+        # 2147  1wire, filter out 4096 and 1086
+        # 4096 signed value
+        # 8192 use hysteresis from block
+            
         mstatus=0 # initial service member status
         bitvalue=0 # remember the important bitvalue for nonzero internal status
         #print('value,cfg,outlo,outhi',value,cfg,outlo,outhi) # debug
@@ -914,7 +922,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 ostatus=1 # treating statuses 1 and 2 equally
 
         if outhi != None: # hi limit set
-            if value>outhi: # above hi limit
+            if value > outhi + hyst: # above hi limit
                 #print('value above outhi,cfg',cfg) # debug
                 if (cfg&4)>0: # warning
                     mstatus=1
@@ -924,7 +932,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     mstatus=3
                 #print('mstatus due to value above outhi',mstatus) # debug
             else: # POSSIBLE return with hysteresis, even without existing outlo
-                if value<outhi-(hyst/100.0)*outhi and (outlo == None or (outlo != None and value>outlo+(hyst/100.0)*outlo)):
+                if value < outhi - hyst and (outlo == None or (outlo != None and value > outlo + hyst)):
                     mstatus=0 # below hyst limit
                     #print('mstatus due to return below outhi',mstatus) # debug
                 else: # within dead zone or above
@@ -933,22 +941,22 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         #print('no change for old mstatus due to dead zone hi',mstatus) # debug
 
         if outlo != None: # lo limit set
-            if value<outlo: # below lo limit
+            if value < outlo - hyst: # below lo limit
                 #print('value below outlo') # debug
                 if (cfg&1): # warning
-                    mstatus=1
+                    mstatus = 1
                 if (cfg&2): # critical
-                    mstatus=2
+                    mstatus = 2
                 if (cfg&3) == 3: # not to be sent, unknown
-                    mstatus=3
+                    mstatus = 3
                 #print('mstatus due to value below outlo',mstatus) # debug
             else: # POSSIBLE return with hysteresis, even without existing outlo
-                if value>outlo+(hyst/100.0)*outlo and (outhi == None or (outhi != None and value<outhi-(hyst/100.0)*outhi)):
-                    mstatus=0 # below hyst limits
+                if value > outlo + hyst and (outhi == None or (outhi != None and value < outhi - hyst)):
+                    mstatus = 0 # below hyst limits
                     #print('mstatus due to return above outlo',mstatus) # debug
                 else: # within dead zone or below
                     if mstatus == 0 and ostatus > 0:
-                        mstatus=ostatus
+                        mstatus = ostatus
                         #print('no change for old mstatus due to dead zone lo',mstatus) # debug
 
         if (cfg&32): # possible status inversion for each member
