@@ -3,7 +3,7 @@
 # from mbus import *
 # m=Mbus()
 # m.read()
-# m.get_temperature()
+# m.get_temperatures()
 
 
 from codecs import encode # for encode to work in py3
@@ -50,7 +50,7 @@ class Mbus:
         self.mbm = '' # last message
         try:
             self.read()
-            log.info('Mbus connection successful on port '+self.port)
+            log.info('Mbus connection for model '+self.model+' successful on port '+self.port)
         except:
             log.error('Mbus connection FAILED on port '+self.port)
 
@@ -93,7 +93,7 @@ class Mbus:
         '''
         # default encoding (hex == 1) is hex 4 bytes, LSB first
         # if hex == 0, BCD is used with numbers 0..9 only used
-        if key != '' and len(key) == 4:
+        if key != '' and len(key) > 1: # 2 or 4 characters, first 2 define data length, the next is unknown for me, may vary even for the same model
             if key[0] == '0':
                 if key[1] == '4':
                     length = 4
@@ -109,6 +109,7 @@ class Mbus:
                     hex = 0
                 else:
                     log.warning('unsupported encoding for data, key '+str(key[0:2]))
+                #FIXME key teine bait maarab kymnendkoha!
 
         try:
             res = 0
@@ -213,9 +214,13 @@ class Mbus:
         if self.model == 'kamstrup602':
             start = 27 # check with mtools and compare with debug output
             key = '0406' # 2 hex bytes before data, to be sure
+        elif self.model == 'kamstrup402':
+            start = 27 # check with mtools and compare with debug output
+            key = '0407' # 2 hex bytes before data, to be sure
         elif self.model == 'sensusPE':
             start = 21
-            key = '0c07'
+            #key = '0c07'
+            key = '0c'
         else:
             log.warning('unknown model '+self.model)
             return None
@@ -231,6 +236,10 @@ class Mbus:
             start = 33
             key = '0414'
             coeff = 10.0 # l
+        elif self.model == 'kamstrup402':
+            start = 33
+            key = '0415'
+            coeff = 100.0 # l
         elif self.model == 'sensusPE':
             start = 27
             key = '0c14'
@@ -244,15 +253,16 @@ class Mbus:
 
     def get_power(self):
         ''' Return power from the last read result. Chk the datetime in self.mbm as well! '''
-        key= ''
+        key= '' 
         coeff = 1
-        if self.model == 'kamstrup602':
+        if self.model == 'kamstrup602' or self.model == 'kamstrup402': # similar
             start = 63
             key = '042d' # use lower or upper case, no difference
             coeff = 100.0 # W
         elif self.model == 'sensusPE':
             start = 39
-            key='0c2c'
+            #key='0c2c'
+            key='0c'
             coeff = 10.0 #
         else:
             log.warning('unknown model '+self.model)
@@ -264,13 +274,18 @@ class Mbus:
         ''' Return power from the last read result. Chk the datetime in self.mbm as well! '''
         key= ''
         coeff = 1
-        if self.model == 'kamstrup602':
-            start = 63 # CHK!
+        if self.model == 'kamstrup602' or self.model == 'kamstrup402':
+            start = 75 # CHK!
             key = '042d' # use lower or upper case, no difference
-            coeff = 100.0 # W
+            coeff = 1.0 # L/H
+        #elif self.model == 'kamstrup402':
+        #    start = 75 
+        #    key = '043b' # use lower or upper case, no difference
+        #    coeff = 1.0 # L/H
         elif self.model == 'sensusPE':
             start = 33
-            key='0c3c'
+            #key='0c3c'
+            key='0c'
             coeff = 10.0 #  L/h
         else:
             log.warning('unknown model '+self.model)
@@ -284,7 +299,7 @@ class Mbus:
         key =['','','']
         coeff = [1.0, 1.0, 1.0]
         length = [4, 4, 4] # bytes
-        if self.model == 'kamstrup602': # checked, is 402 similar?
+        if self.model == 'kamstrup602' or self.model == 'kamstrup402': # checked, 402 is similar
             start = [45, 51, 57]
             key = ['0459', '045D', '0461'] # inlet outlet diff
             coeff = [0.01, 0.01, 0.01] # 10 mK unit
@@ -308,7 +323,7 @@ class Mbus:
         ''' Returns some 23 bit number of minutes(?) in unknown format '''
         key= ''
         coeff = 1
-        if self.model == 'kamstrup602':
+        if self.model == 'kamstrup602' or self.model == 'kamstrup602':
             start = 124
             key = '046d' # use lower or upper case, no difference
             coeff = 1

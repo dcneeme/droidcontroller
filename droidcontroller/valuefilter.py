@@ -11,13 +11,14 @@ class ValueFilter():
         # vf.output(1)
     '''
 
-    def __init__(self, delay=1, cfmcount=1): # delay in seconds
+    def __init__(self, delay=1, cfmcount=1, defaultvalue=0): # delay in seconds
         self.delay = delay
         self.cfmcount = cfmcount # number of confirmations to the same value
-        self.value = None
-        self.newvalue = None
+        self.value = defaultvalue
+        self.newvalue = defaultvalue
         self.match= 0
         self.ts_chg = 0
+        self.defaultvalue = defaultvalue # to be returned in case of total failure
         log.info('created valuefilter instance with delay '+str(self.delay)+' and cfmcount '+str(self.cfmcount)) 
         # error band could be added for continuous values to accept some noise
         
@@ -38,4 +39,9 @@ class ValueFilter():
         else:
             log.debug('NO change yet, timediff '+str(round(timediff,2))+', confirmed '+str(self.match)+' times')
             
-        return self.value
+        if self.value != None:
+            return self.value
+        else:
+            log.warning('replaced value to return with default value '+str(self.defaultvalue))
+            return self.defaultvalue
+            
