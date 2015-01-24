@@ -41,7 +41,12 @@ class Gcal:
 
         try:
             print('response.content', response.content)
-            events = eval(response.content) # string to list
+            if '[]' in str(response.content):
+                log.warning('invalid content for calendar, keeping the existing calendar table')
+                s.print_table('calendar')
+                return 2
+            else:
+                events = eval(response.content) # string to list
             
         except:
             msg='getting calendar events failed for host_id '+self.host_id
@@ -70,8 +75,7 @@ class Gcal:
             return 0
         except:
             msg='delete + insert to calendar table failed!'
-            print(msg)
-            #log.warning(msg)
+            log.warning(msg)
             traceback.print_exc() # debug
             return 1 # kui insert ei onnestu, siis ka delete ei toimu
 
@@ -91,7 +95,7 @@ class Gcal:
             for row in self.cur:
                 value = row[0] # overwrite with the last value before now
                 ts = row[1]
-                log.info('cal tsnow '+str(tsnow)+', ts '+str(ts)+', value '+str(value)) # debug.  viimane value jaab iga title jaoks kehtima
+                log.debug('cal tsnow '+str(tsnow)+', ts '+str(ts)+', value '+str(value)) # debug.  viimane value jaab iga title jaoks kehtima
             conn.commit()
             return str(value) # last one for given title becomes effective. can be empty string too, then use default value for setpoint related to title
         except:
