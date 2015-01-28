@@ -501,8 +501,8 @@ class ThreeStep:
         else: # no new pulse yet or pulse already active
             length = 0
             #self.state = self.last_state
-            msg='3step: pulse last start '+str(int(self.currtime - self.last_start))+' s ago, runperiod '+str(self.RunPeriod)+', cumulative travel time '+str(round(self.runtime)) 
-            log.debug(msg)
+            msg='3step: waiting for runperiod end to start a new pulse'
+            log.info(msg)
             
 
         #if abs(self.error) < self.MinpulseError and state != 0: # stop the ongoing pulse - not strictly needed, level output hardly in use anyway

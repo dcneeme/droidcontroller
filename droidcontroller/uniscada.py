@@ -13,8 +13,6 @@ import tarfile
 import requests
 import logging
 log = logging.getLogger(__name__)
-#karlas kasutab sk asemel nime cu!
-#OSTYPE = os.environ['OSTYPE']
 
 
 
@@ -400,17 +398,17 @@ class UDPchannel():
             return None
 
         if len(data) > 0: # something arrived
-            #print('got from monitoring server',repr(raddr),repr(data)) # debug
+            #log.info('>>> got from receiver '+str(repr(raddr))+' '+str(repr(data))) 
             self.traffic[0]=self.traffic[0]+len(data) # adding top the incoming UDP byte counter
-            #print('<= '+data.replace('\n', ' ')) # also to syslog (communication with server only)
+            log.info('<<<< got from receiver '+str(data.replace('\n', ' '))) 
 
             if (int(raddr[1]) < 1 or int(raddr[1]) > 65536):
-                msg='illegal_ source port '+str(raddr[1])+' in the message received from '+raddr[0]
+                msg='illegal remote port '+str(raddr[1])+' in the message received from '+raddr[0]
                 print(msg)
                 #syslog(msg)
 
             if raddr[0] != self.ip:
-                msg='illegal sender '+str(raddr[0])+' of message: '+data+' at '+str(int(ts))  # ignore the data received!
+                msg='illegal sender '+str(raddr[0])+' of message: '+data+' at '+str(int(self.ts))  # ignore the data received!
                 print(msg)
                 #syslog(msg)
                 data='' # data destroy
@@ -438,10 +436,10 @@ class UDPchannel():
                         line = lines[i].split(':')
                         sregister = line[0] # setup reg name
                         svalue = line[1] # setup reg value
-                        #print('received key:value',sregister,svalue) # debug
+                        log.info('processing key:value '+sregister+':'+svalue)
                         if sregister != 'in' and sregister != 'id': # may be setup or command (cmd:)
                             msg='got setup/cmd reg:val '+sregister+':'+svalue  # need to reply in order to avoid retransmits of the command(s)
-                            print(msg)
+                            log.debug(msg)
                             data_dict.update({ sregister : svalue }) # in and idf are not included in dict
                             #udp.syslog(msg) # cannot use udp here
                             #sendstring += sregister+":"+svalue+"\n"  # add to the answer - better to answer with real values immediately after change
@@ -452,7 +450,7 @@ class UDPchannel():
                                 if inumm >= 0 and inumm<65536:  # valid inum, response to message sent if 1...65535. datagram including "in:0" is a server initiated "fast communication" message
                                     #print "found valid inum",inum,"in the incoming message " # temporary
                                     msg='got ack '+str(inumm)+' in message: '+data.replace('\n',' ')
-                                    print(msg)
+                                    log.debug(msg)
                                     #syslog(msg)
 
                                     Cmd="BEGIN IMMEDIATE TRANSACTION" # buff2server, to delete acknowledged rows from the buffer

@@ -525,7 +525,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         for key in data_dict: # process per key:value
             if key[-1] == 'W': # must end with W to be multivalue service containing setup values FIXME! 's!' needed instead!
                 valmembers=data_dict[key].split(' ') # convert value to member list
-                print('number of members for',key,len(valmembers),valmembers) # debug
+                log.debug('number of members for '+key+' is '+str(len(valmembers))+', members '+str(valmembers))
                 for valmember in range(len(valmembers)): # 0...N-1
                     Cmd="select mba,regadd,val_reg,member,value,regtype from "+self.in_sql+" where val_reg='"+key+"' and member='"+str(valmember+1)+"'"
                     cur.execute(Cmd)
@@ -550,20 +550,20 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                                     msg='di setup changed for key '+key+', member '+str(member)+' to value '+str(value)
                                     setup_changed=1
                                     log.info(msg)
-                                    udp.syslog(msg)
+                                    #udp.syslog(msg)
                                 else:
                                     msg='svc member setting problem for key '+key+', member '+str(member)+' to value '+str(value)
                                     log.warning(msg)
-                                    udp.syslog(msg)
+                                    #udp.syslog(msg)
                                     res+=1
                             else:
                                 msg='dchannels.parse_upd: setup value cannot have mba,regadd defined!'
                                 log.warning(msg)
-                                udp.syslog(msg)
+                                #udp.syslog(msg)
                                 res+=1
 
                         else: # skip
-                            log.debug('member value write for key '+key+' SKIPPED due to sqlvalue '+str(sqlvalue)+', value '+str(sqlvalue)+', regtype '+regtype)
+                            log.warning('member value write for key '+key+' SKIPPED due to sqlvalue '+str(sqlvalue)+', value '+str(sqlvalue)+', regtype '+regtype)
 
 
                 #if setup_changed == 1: # no need to dump di, too much dumping. ask di states after reboot, if regtype == 's!'

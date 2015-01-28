@@ -124,7 +124,7 @@ class Counter2Power():
         elif count == self.count_last: # no count increase, no change in count_last or ts_last!
             if (timedelta > 1.01*self.off_tout): # no new pulses, possible switch OFF with hysteresis 1%
                 log.debug('consider_off: ts, ts_last, off_tout'+str(int(round(ts)))+', '+str(int(round(self.ts_last)))+', '+str(self.off_tout)) # debug
-                print('prn consider_off: ts, ts_last, off_tout',int(round(ts)), int(round(self.ts_last)), self.off_tout) # debug
+                #print('prn consider_off: ts, ts_last, off_tout',int(round(ts)), int(round(self.ts_last)), self.off_tout) # debug
                 if self.state >0:
                     self.state = 0 # swithed OFF #######################################################################
                     chg = -1
@@ -135,7 +135,8 @@ class Counter2Power():
                 return None, self.state, chg, timedelta, 0, 'no switch OFF yet'
 
         else:
-            log.warning('unexpected state: count='+str(count)+', count_last='+str(self.count_last)+', timedelta='+str(timedelta))
-            print('prn unexpected state: count='+str(count)+', count_last='+str(self.count_last)+', timedelta='+str(timedelta))
-            return None, self.state, chg, timedelta, 0, 'unexpected (negative?) count/time change'  # no power can be calculated, no state change for now
+            log.warning('unexpected state: count='+str(count)+', count_last='+str(self.count_last)+', timedelta='+str(timedelta)+', initializing!')
+            #print('prn unexpected state: count='+str(count)+', count_last='+str(self.count_last)+', timedelta='+str(timedelta)+', initializing!')
+            self.init()
+            return None, self.state, chg, timedelta, 0, 'unexpected (negative?) count/time change, initialized!'  # no power can be calculated, no state change for now
 
