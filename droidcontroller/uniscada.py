@@ -327,9 +327,9 @@ class UDPchannel():
             return 1
 
         self.ts = round(time.time(),1)
-        sendstring += "id:"+self.host_id+"\n" # loodame, et ts_created on enam-vahem yhine neil teenustel...
+        sendstring += "id:"+str(self.host_id)+"\n" # loodame, et ts_created on enam-vahem yhine neil teenustel...
         if self.inum > 0: # "in:inum" to be added
-            sendstring += "in:"+str(self.inum)+","+str(round(self.ts))+"\n"
+            sendstring += "in:"+str(self.inum)+","+str(int(round(self.ts)))+"\n"
 
         self.traffic[1]=self.traffic[1]+len(sendstring) # adding to the outgoing UDP byte counter
 
@@ -400,7 +400,7 @@ class UDPchannel():
         if len(data) > 0: # something arrived
             #log.info('>>> got from receiver '+str(repr(raddr))+' '+str(repr(data))) 
             self.traffic[0]=self.traffic[0]+len(data) # adding top the incoming UDP byte counter
-            log.info('<<<< got from receiver '+str(data.replace('\n', ' '))) 
+            log.debug('<<<< got from receiver '+str(data.replace('\n', ' '))) 
 
             if (int(raddr[1]) < 1 or int(raddr[1]) > 65536):
                 msg='illegal remote port '+str(raddr[1])+' in the message received from '+raddr[0]
@@ -416,7 +416,7 @@ class UDPchannel():
             if "id:" in data: # first check based on host id existence in the received message, must exist to be valid message!
                 in_id=data[data.find("id:")+3:].splitlines()[0]
                 if in_id != self.host_id:
-                    print("invalid id "+in_id+" in server message from ", addr[0]) # this is not for us!
+                    log.warning("invalid id "+in_id+" in server message from "+str(raddr[0])) # this is not for us!
                     data=''
                     return data # error condition, traffic counter was still increased
                 else:
@@ -436,7 +436,7 @@ class UDPchannel():
                         line = lines[i].split(':')
                         sregister = line[0] # setup reg name
                         svalue = line[1] # setup reg value
-                        log.info('processing key:value '+sregister+':'+svalue)
+                        log.debug('processing key:value '+sregister+':'+svalue)
                         if sregister != 'in' and sregister != 'id': # may be setup or command (cmd:)
                             msg='got setup/cmd reg:val '+sregister+':'+svalue  # need to reply in order to avoid retransmits of the command(s)
                             log.debug(msg)
@@ -539,14 +539,14 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
         if bytes_in != None:
             if not bytes_in < 0:
                 self.traffic[0] = bytes_in
-                log.info('set bytes_in to '+str(bytes_in))
+                log.debug('set bytes_in to '+str(bytes_in))
             else:
                 log.warning('invalid bytes_in '+str(bytes_in))
 
         if bytes_out != None:
             if not bytes_out < 0:
                 self.traffic[1] = bytes_out
-                log.info('set bytes_out to '+str(bytes_in))
+                log.debug('set bytes_out to '+str(bytes_in))
             else:
                 print('invalid bytes_out',bytes_out)
                 log.warning('invalid bytes_out '+str(bytes_in))

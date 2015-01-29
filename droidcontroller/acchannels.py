@@ -119,7 +119,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                     if self.set_aivalue(str(key),member,value) == 0: # set setup value in sql table
                                         msg='setup changed for key '+str(key)+', member '+str(member)+' to value '+str(value)
                                         setup_changed=1
-                                        log.debug(msg)
+                                        log.info(msg)
                                         #udp.syslog(msg)
                                     else:
                                         msg='svc member setting problem for key '+str(key)+', member '+str(member)+' to value '+str(value)
@@ -207,7 +207,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     log.debug('set_counter: invalid parameters val_reg '+str(val_reg)+', member '+str(member))
                     return 1
             except:
-                log.debug('invalid parameters for set_counter() '+str(kwargs))
+                log.warning('invalid parameters for set_counter() '+str(kwargs))
                 return 2
 
             Cmd="select mbi,mba,regadd,wcount,x2,y2 from "+self.in_sql+" where val_reg='"+val_reg+"' and member='"+str(member)+"'"
@@ -252,7 +252,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 res=1
 
             if res == 0:
-                log.debug('write success to mba.regadd '+str(mba)+'.'+str(regadd))
+                log.info('write success to counter mba.regadd '+str(mba)+'.'+str(regadd))
             else:
                 log.warning('set_counter: write FAILED to mba '+str(mba)+', regadd '+str(regadd))
             return res
@@ -513,7 +513,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             cur.execute(Cmd)
 
             for row in cur: # got mba, regadd and value for registers that need to be updated / written
-                #log.info('row: '+str(repr(row))) # toob appd.log sisse
+                #log.debug('row: '+str(repr(row))) # toob appd.log sisse
                 regadd=0
                 mba=0
 
@@ -785,7 +785,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                             #res = self.cp[self.cpi].calc(ots, raw, ts_now = self.ts) # power calculation based on raw counter increase
                             res = self.cp[self.cpi].calc(raw) # based on current ts only!
                             
-                            log.info('got result from cp['+str(self.cpi)+']: '+str(res)+', params ots '+str(ots)+', raw '+str(raw)+', ts_now '+str(self.ts))  # debug
+                            log.debug('got result from cp['+str(self.cpi)+']: '+str(res)+', params ots '+str(ots)+', raw '+str(raw)+', ts_now '+str(self.ts))  # debug
                             if (cfg&128): # on off state from power
                                 raw = res[1] # state on/off
                                 if res[2] != 0: # on/off change

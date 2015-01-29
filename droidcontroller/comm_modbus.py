@@ -73,7 +73,7 @@ class CommModbus(Comm):
                 self.datadict={} # to give instant response from previous reading
                 #self.data=[]
                 #print('created npe channel to',self.saddr)
-                log.info('CommModbus() init1u: created CommModbus instance to use npe_io.sh over udp to',self.saddr,'type',self.type)
+                log.info('CommModbus() init1u: created CommModbus instance to use npe_io.sh over udp to '+str(self.saddr)+', type '+str(self.type))
             ###############
             elif '/dev/tty' in kwargs.get('host'): # direct serial connection defined via host
                 from pymodbus.client.sync import ModbusSerialClient as ModbusClient
@@ -265,7 +265,7 @@ class CommModbus(Comm):
                 return None
 
         else:
-            log.warning('unknown type',type)
+            log.warning('unknown type '+str(type))
             self.errorcount += 1
             return None
 
@@ -460,7 +460,7 @@ class CommModbus(Comm):
                             traceback.print_exc()
                             return None
                     if i == 10: # still no response?
-                        log.warning('udpcomm: repeating the query',sendstring)
+                        log.warning('udpcomm: repeating the query '+sendstring)
                         self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr) # repeat the query
                     i+=1
 
@@ -476,7 +476,7 @@ class CommModbus(Comm):
                     data=[int(eval(i)) for i in self.datadict[reg].split(' ')] # values list
                 return data
             else:
-                log.warning('not what we need in datadict for reg',reg,self.datadict)
+                log.warning('not what we need in datadict for reg '+str(reg)+': '+str(self.datadict))
                 return None # not ready yet
 
         else: # write a single register or fork something over npe_io.sh. types w or p
