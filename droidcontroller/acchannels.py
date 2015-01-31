@@ -165,7 +165,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                             log.debug('parse_udp: write for key '+key+' SKIPPED due to sqlvalue '+str(sqlvalue)+', value '+str(value)+', regtype '+regtype)
 
             if found > 0:  # process status too
-                make_svc(key,'') ### processing svc and notify
+                self.make_svc(key,'') ### processing svc and notify
 
         if setup_changed == 1:
             log.debug('going to dump table '+self.in_sql)
