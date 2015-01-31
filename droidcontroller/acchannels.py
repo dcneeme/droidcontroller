@@ -168,12 +168,12 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 self.make_svc(key,'') ### processing svc and notify
 
         if setup_changed == 1:
-            log.debug('going to dump table '+self.in_sql)
+            log.info('going to dump table '+self.in_sql)
             try:
                 s.dump_table(self.in_sql)
                 #sendstring=self.make_svc(key,key[:-1]+'S')
-                sendstring=self.make_svc(key)
-                log.debug('going to report back sendstring '+str(sendstring))
+                ###sendstring = self.make_svc(key) # ei taha ilma olekuta saatmisi
+                ###log.debug('going to report back sendstring '+str(sendstring))
                 #udp.send(sendstring) # ????
             except:
                 log.warning('FAILED to dump table '+self.in_sql)
@@ -667,7 +667,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     udp.send(sendtuple) # can send to buffer double if make_svc found change. no dbl sending if ts is the same.
                     log.debug ('buffered for reporting: '+str(sendtuple))
                 else:
-                    log.warning('FAILED to report svc '+val_reg+' '+sta_reg)
+                    log.warning('FAILED to report svc '+val_reg)
                     # return 1 # other services still need to be reported, commit needs to be done.
 
             conn.commit() # aicochannels svc_report transaction end
@@ -696,7 +696,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         lisa = ''
         value = None
         if sta_reg == '' and val_reg[-1] == 'W':
-            sta_reg = sta_reg[0:-1]+'S' # assuming S in the end
+            sta_reg = val_reg[0:-1]+'S' # assuming S in the end
             
         Cmd="select mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,regtype,grp,mbi,wcount from "+self.in_sql \
             +" where val_reg='"+val_reg+"' order by member asc" # avoid trouble with column order

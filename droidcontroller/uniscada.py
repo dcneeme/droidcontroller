@@ -341,7 +341,7 @@ class UDPchannel():
         try:
             sendlen=self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr) # tagastab saadetud baitide arvu
             self.traffic[1]=self.traffic[1]+sendlen # traffic counter udp out
-            msg='=== sent ' +str(sendlen)+' bytes to '+str(repr(self.saddr))+' '+sendstring.replace('\n',' ')   # show as one line
+            msg='==>> sent ' +str(sendlen)+' bytes to '+str(repr(self.saddr))+' '+sendstring.replace('\n',' ')   # show as one line
             print(msg)
             #syslog(msg)
             sendstring=''
@@ -439,8 +439,8 @@ class UDPchannel():
                         log.debug('processing key:value '+sregister+':'+svalue)
                         if sregister != 'in' and sregister != 'id': # may be setup or command (cmd:)
                             msg='got setup/cmd reg:val '+sregister+':'+svalue  # need to reply in order to avoid retransmits of the command(s)
-                            log.debug(msg)
-                            data_dict.update({ sregister : svalue }) # in and idf are not included in dict
+                            log.info(msg)
+                            data_dict.update({ sregister : svalue }) # in and id are not included in dict
                             #udp.syslog(msg) # cannot use udp here
                             #sendstring += sregister+":"+svalue+"\n"  # add to the answer - better to answer with real values immediately after change
 
@@ -465,10 +465,11 @@ class UDPchannel():
                                         time.sleep(1)
                                     self.conn.commit() # buff2server transaction end
 
-                        if len(sendstring) > 0:
-                            self.udpsend(sendstring) # send the response right away to avoid multiple retransmits
-                            # this answers to the server but does not update the setup or service table yet!
-
+                        #if len(sendstring) > 0:
+                        #    self.udpsend(sendstring) # send the response right away to avoid multiple retransmits
+                        #    log.info('response to server: '+str(sendstring)) # this answers to the server but does not update the setup or service table yet!
+                        #siin ei vasta
+                        
                 return data_dict # possible key:value pairs here for setup change or commands. returns {} for just ack with no cmd
         else:
             return None

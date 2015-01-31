@@ -527,7 +527,6 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             found = 0
             if key[-1] == 'W': # must end with W to be multivalue service containing setup values FIXME! 's!' needed instead!
                 valmembers=data_dict[key].split(' ') # convert value to member list
-                log.debug('number of members for '+key+' is '+str(len(valmembers))+', members '+str(valmembers))
                 for valmember in range(len(valmembers)): # 0...N-1
                     Cmd="select mba,regadd,val_reg,member,value,regtype from "+self.in_sql+" where val_reg='"+key+"' and member='"+str(valmember+1)+"'"
                     cur.execute(Cmd)
@@ -579,7 +578,9 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             #if res == 0:
                 #self.read_all() # reread the changed channels to avoid repeated restore - no need
 
-            if found > 0:
+            #if found > 0:
+            if setup_changed > 0:
+                log.info('reporting due to di setup change (no dumping to '+self.in_sql+' though) '+key)
                 self.make_dichannels(key) # notification needed changed or not, to confirm the state after chg trial
         return res # kui setup_changed ==1, siis todo = varlist! aga kui samal ajal veel miski ootel?
 

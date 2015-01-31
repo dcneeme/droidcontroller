@@ -134,7 +134,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
     def dump_table(self, table):
         ''' Writes a table into SQL-file '''
         msg='going to dump '+table+' into '+table+'.sql'
-        print(msg)
+        log.info(msg)
         try:
             with open(table+'.sql', 'w') as f:
                 for line in conn.iterdump(): # see dumbib koik kokku!
@@ -143,7 +143,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
             return 0
         except:
             msg='FAILURE dumping '+table+'! '+str(sys.exc_info()[1])
-            print(msg)
+            log.warning(msg)
             #syslog(msg)
             traceback.print_exc()
             return 1
@@ -265,7 +265,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
             conn.commit() # buff2server trans lopp
 
             msg='setup reported'
-            print(msg)
+            log.infot(msg)
             udp.syslog(msg) # log message to file
             sys.stdout.flush()
             time.sleep(0.5)
@@ -274,7 +274,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
         except: # setup reading  problem
             msg='setup reporting failure (setup reading problem) '+str(sys.exc_info()[1])
             udp.syslog(msg) # log message to file
-            print(msg)
+            log.warning(msg)
             time.sleep(1)
             return 1
 
