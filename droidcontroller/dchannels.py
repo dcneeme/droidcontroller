@@ -514,15 +514,17 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
 
     def parse_udp(self,data_dict): # search for setup or set di remote control signals
-        ''' Setup change for variables in sql for modbus di channels '''
+        ''' Setup change for variables in sql for modbus di channels. Ignore invalid parameters, not defined in self.in_sql! '''
         cur=conn.cursor()
         setup_changed = 0 # flag general setup change, data to be dumped into sql file
         msg=''
         mval=''
         res=0
         member=0
+        #found = 0
         log.debug('dchannels: parsing for possible key:value data ',data_dict) # debug
         for key in data_dict: # process per key:value
+            found = 0
             if key[-1] == 'W': # must end with W to be multivalue service containing setup values FIXME! 's!' needed instead!
                 valmembers=data_dict[key].split(' ') # convert value to member list
                 log.debug('number of members for '+key+' is '+str(len(valmembers))+', members '+str(valmembers))
@@ -530,7 +532,8 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                     Cmd="select mba,regadd,val_reg,member,value,regtype from "+self.in_sql+" where val_reg='"+key+"' and member='"+str(valmember+1)+"'"
                     cur.execute(Cmd)
                     conn.commit()
-                    for row in cur: # single member
+                    for row in cur: 
+                        found += 1
                         #print('srow:',row) # debug
                         sqlvalue=int(row[4]) if row[4] != '' else 0 # eval(row[4]) if row[4] != '' else 0 #
                         try:
@@ -576,7 +579,8 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             #if res == 0:
                 #self.read_all() # reread the changed channels to avoid repeated restore - no need
 
-        self.make_dichannels(key) # notification needed changed or not, to confirm the state after chg trial
+            if found > 0:
+                self.make_dichannels(key) # notification needed changed or not, to confirm the state after chg trial
         return res # kui setup_changed ==1, siis todo = varlist! aga kui samal ajal veel miski ootel?
 
 

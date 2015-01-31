@@ -88,17 +88,22 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             return 0
         log.debug('parsing for possible match key:value data ',data_dict) # debug
         for key in data_dict: # process per key:value
+            found = 0
             if key[-1] == 'W': # must end with W to be multivalue service containing setup values
                 valmembers=data_dict[key].split(' ') # convert value to member list
                 log.debug('number of members for '+str(key)+' is '+str(len(valmembers)))
                 for valmember in range(len(valmembers)): # 0...N-1
-                    Cmd="select mba,regadd,val_reg,member,value,regtype,wcount,mbi,x2,y2 from "+self.in_sql+" where val_reg='"+key+"' and member='"+str(valmember+1)+"'"
+                    Cmd="select mba,regadd,val_reg,member,value,regtype,wcount,mbi,x2,y2,cfg from "+self.in_sql+" where val_reg='"+key+"' and member='"+str(valmember+1)+"'"
                     #print(Cmd) # debug
                     cur.execute(Cmd)
                     conn.commit()
                     for row in cur: # single member
+                        found += 1
                         log.debug('srow:'+str(row)) # debug
-                        sqlvalue=int(row[4]) if row[4] != '' else 0 # eval(row[4]) if row[4] != '' else 0 #
+                        sqlvalue = int(row[4]) if row[4] != '' else 0 # eval(row[4]) if row[4] != '' else 0 #
+                        cfg = int(row[10]) if row[10] != '' else 0
+                        #val_reg = row[2] # pole vaja
+                        
                         try:
                             value=eval(valmembers[valmember])
                         except:
@@ -107,8 +112,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
                         regtype=row[5] # 'h' 'i' 's!'
 
-                        if sqlvalue != value and ((regtype == 'h' and value == 0 or value > sqlvalue) or (regtype == 's!')):
-                            # replace actual counters only if bigger than existing or zero, no limits for setup type 's!'
+                        if sqlvalue != value and ((regtype == 'h' and value == 0 or value > sqlvalue) or (regtype == 's!')) and (cfg&2048) == 0:
+                            # replace actual counters only if bigger than existing or zero and not 1wire channel, no limits for setup type 's!'
                             member=valmember+1
 
                             log.debug('going to replace '+key+' member '+str(member)+' existing value '+str(sqlvalue)+' with '+str(value)) # debug
@@ -159,16 +164,20 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         else: # skip
                             log.debug('parse_udp: write for key '+key+' SKIPPED due to sqlvalue '+str(sqlvalue)+', value '+str(value)+', regtype '+regtype)
 
-            if setup_changed == 1:
-                log.debug('going to dump table '+self.in_sql)
-                try:
-                    s.dump_table(self.in_sql)
-                    sendstring=self.make_svc(key,key[:-1]+'S')
-                    log.debug('going to report back sendstring '+sendstring)
-                    #udp.send(sendstring) # ????
-                except:
-                    log.warning('FAILED to dump table '+self.in_sql)
-                    traceback.print_exc() # debug
+            if found > 0:  # process status too
+                make_svc(key,'') ### processing svc and notify
+
+        if setup_changed == 1:
+            log.debug('going to dump table '+self.in_sql)
+            try:
+                s.dump_table(self.in_sql)
+                #sendstring=self.make_svc(key,key[:-1]+'S')
+                sendstring=self.make_svc(key)
+                log.debug('going to report back sendstring '+str(sendstring))
+                #udp.send(sendstring) # ????
+            except:
+                log.warning('FAILED to dump table '+self.in_sql)
+                traceback.print_exc() # debug
         #if res == 0:
             #self.read_all() # reread the changed channels to avoid repeated restore - no need
 
@@ -363,8 +372,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
     def read_all(self): # read all defined modbus ai and counter channels to sql in groups by regtype, usually 32 bit / 2 registers.
         ''' Must read the counter registers by sequential regadd blocks if possible (if regadd increment == wcount.
-            Also converts the raw data (incl member rows wo mba) into services and sends away to UDPchannel.
-            '''
+            Also converts the raw data (incl member rows wo mba) into services, calculates the svc component statuses
+            and summary stratus, sends away to UDPchannel.
+        '''
         respcode=0
         mba=0
         val_reg=''
@@ -400,7 +410,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             #
 
             conn.execute(Cmd)
-            Cmd="select mba,regadd,wcount,mbi,regtype from "+self.in_sql+" where mba != '' and regadd != '' group by mbi,mba,regtype,regadd" # tsykkel lugemiseks, tuleks regadd kasvavasse jrk grupeerida
+            Cmd="select mba,regadd,wcount,mbi,regtype from "+self.in_sql+" where mba != '' and regadd != '' group by mbi,mba,regtype,regadd" # gruppideks jagamine
             cur.execute(Cmd) # selle paringu alusel raw update, hiljem teha value arvutused iga teenuseliikme jaoks eraldi
             for row in cur: # these groups can be interrupted into pieces to be queried!
                 mba=int(row[0]) if int(row[0]) != '' else 0
@@ -448,9 +458,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             # now process raw -> value and find statuses using make_svc() for each service.
             #power calculations happen in make_svc too!
 
-            Cmd="select val_reg from "+self.in_sql+" group by val_reg" # find ervices
-            #print "Cmd=",Cmd
-            #cur.execute(Cmd) # getting services to be read and reported
+            Cmd="select val_reg from "+self.in_sql+" group by val_reg" # find services
+            log.debug('read_all Cmd='+Cmd) ### oli kommenteeritud 31.1?
+            cur.execute(Cmd) ### oli kommenteeritud 31.1?
 
             for row in cur: # SERVICES LOOP
                 #val_reg=''
@@ -458,12 +468,13 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 #status=0 #
                 #value=0
                 val_reg=row[0] # service value register name
-                sta_reg=val_reg[:-1]+"S" # status register name
+                #sta_reg=val_reg[:-1]+"S" # status register name ASSUMPTION. BUT MAKE_SVC ACCEPTS NOW STA_REG=''
 
+                log.debug('processing '+self.in_sql+' rows into service with val_reg '+val_reg+' sta_reg '+sta_reg)
+                #self.make_svc(val_reg,sta_reg) ## sets status and notifies id status chg in any member
+                self.make_svc(val_reg) ## sets status and notifies id status chg in any member
 
-                self.make_svc(val_reg,sta_reg) # sets status and notifies id status chg in any member
-
-            conn.commit() # also for make_svc()
+            conn.commit() #  haarab ka make_svc()
             sys.stdout.write('A')
             return 0
 
@@ -649,9 +660,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
             for row in cur: # services
                 val_reg=row[0] # teenuse nimi
-                sta_reg=val_reg[:-1]+"S" # nimi ilma viimase symbolita ja S - statuse teenuse nimi, analoogsuuruste ja temp kohta
+                #sta_reg=val_reg[:-1]+"S" # nimi ilma viimase symbolita ja S - statuse teenuse nimi, analoogsuuruste ja temp kohta
 
-                sendtuple=self.make_svc(val_reg,sta_reg)
+                sendtuple=self.make_svc(val_reg)
                 if sendtuple != None: #
                     udp.send(sendtuple) # can send to buffer double if make_svc found change. no dbl sending if ts is the same.
                     log.debug ('buffered for reporting: '+str(sendtuple))
@@ -672,10 +683,11 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
 
-    def make_svc(self, val_reg, sta_reg):  # ONE svc, both val_reg and sta_reg exist for ai and counters
+    def make_svc(self, val_reg, sta_reg=''):  # ONE svc, both val_reg and sta_reg exist for ai and counters
         ''' Make a single service record WITH STATUS based on existing values and update the scaled value in sql table. 
             Use block as hysteresis in value units for status change, if cfg&8192 == True.
             Use block as off_tout in s for counters with power-on/off detection if cfg&64 == True.
+            If sta_reg is empty and vale_reg ends with W, S is assumed for sta_reg name end.
         '''
 
         status = 0 # initially for whole service
@@ -683,10 +695,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         cur = conn.cursor()
         lisa = ''
         value = None
-        # cpi = -1 # count2pwr index / using self.cpi, initrially -1 by rea_all() 
-
-        #print('acchannels.make_svc: reading aico values for val_reg,sta_reg',val_reg,sta_reg) # debug
-
+        if sta_reg == '' and val_reg[-1] == 'W':
+            sta_reg = sta_reg[0:-1]+'S' # assuming S in the end
+            
         Cmd="select mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,regtype,grp,mbi,wcount from "+self.in_sql \
             +" where val_reg='"+val_reg+"' order by member asc" # avoid trouble with column order
         log.debug(Cmd)
@@ -840,7 +851,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         
                         
                         if value != None:
-                            Cmd="update "+self.in_sql+" set status='"+str(status)+"', value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
+                            Cmd="update "+self.in_sql+" set status='"+str(mstatus)+"', value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
                             conn.execute(Cmd) # who commits? the calling method, read_all()!!!
 
                         else:
