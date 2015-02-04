@@ -12,8 +12,12 @@ from pymodbus import *
 from droidcontroller.comm_modbus import CommModbus  # contains CommModbus, .read(), .write()
 from droidcontroller.uniscada import *
 #from droidcontroller.statekeeper import * # siin ei kasutata? aga childs?
-from droidcontroller.gpio_led import * # for olinuxino, what about npe? make it universal?
-
+#try:
+#    from droidcontroller.gpio_led import * # kes kasutab?
+#except:
+#    log.info('FAILED to import gpio_led')
+#    pass 
+    
 import logging
 log = logging.getLogger(__name__)
 
@@ -22,9 +26,9 @@ try:
         print('uniscada connection already existing to',host,port)
 except:
     udp=UDPchannel()
-    print('created uniscada UDP connection instance')
+    log.info('created uniscada UDP connection instance')
     tcp=TCPchannel()
-    print('created uniscada TCP connection instance')
+    log.info('created uniscada TCP connection instance')
 
 
 try:
