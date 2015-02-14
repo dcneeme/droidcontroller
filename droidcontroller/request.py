@@ -31,7 +31,7 @@ class Request:
             return 1 # kui ei saa gcal yhendust, siis lopetab ja vana ei havita!
 
         try:
-            print('response.content', response.content)
+            #print('response.content', response.content)
             if expected in str(response.content):
                 return 0
             else:

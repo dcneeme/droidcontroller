@@ -1,7 +1,9 @@
+# This Python file uses the following encoding: utf-8
+
 # additional modules by neeme in the end!
 
 from droidcontroller.comm import Comm
-from pymodbus import * 
+from pymodbus import *
 from pymodbus.exceptions import *
 from pymodbus.register_read_message import ReadHoldingRegistersResponse, ReadInputRegistersResponse
 from pymodbus.register_write_message import WriteMultipleRegistersResponse, WriteSingleRegisterResponse
@@ -49,7 +51,8 @@ class CommModbus(Comm):
 
         '''
 
-        self.errorcount = 0 # add here modbus problems
+        self.errorcount = 0 # add here modbus problems, related to mba
+        self.errors = {} # {mba:errcount}, per modbus address
         self.type = type # default h
         print(kwargs) # debug
         if ('host' in kwargs):
@@ -107,7 +110,12 @@ class CommModbus(Comm):
 
     def get_errorcount(self):
         ''' returns number of errors, becomes 0 after each successful modbus transaction '''
-        return self.errorcount
+        return self.errorcount # one simple number, does not say anything about individual devices
+
+
+    def get_errors(self):
+        ''' returns array of errorcounts per modbua aadress, becomes 0 after each successful modbus transaction '''
+        return self.errors # array mba:errcount
 
 
     def set_errorcount(self,invar):
@@ -120,9 +128,11 @@ class CommModbus(Comm):
         ''' returns type, to mark special comm channels to be used if not empty. n - npe_io '''
         return self.type
 
+
     def get_host(self):
         ''' returns type, to mark special comm channels to be used if not empty. n - npe_io '''
         return self.host
+
 
     def get_port(self):
         ''' returns type, to mark special comm channels to be used if not empty. n - npe_io '''
@@ -167,6 +177,20 @@ class CommModbus(Comm):
         self.on_data(id, res.registers, **kwargs)
 
 
+    def add_error(self, mba, error):
+        ''' Updates directory member, resets if 0 or adds if 1 '''
+        if error == 0: # ok
+            if mba in self.errors:
+                self.errors[mba] = 0
+            else:
+                self.errors.update({ mba:0 })
+        else:
+            if mba in self.errors:
+                self.errors[mba] += 1
+            else:
+                self.errors.update({ mba:1 })
+
+
     def read(self, mba, reg, count = 1, type = 'h', format='dec'): # FIXME format
         ''' Read Modbus register(s), either holding (type h), input (type i) or coils (type c).
             Exceptionally can be npe_io too, type n then!
@@ -184,18 +208,21 @@ class CommModbus(Comm):
         # actual reading
         if type == 'h':
             #res = self.client.read_holding_registers(address=reg, count=count, unit=mba)
-            try: 
+            try:
                 res = self.client.read_holding_registers(address=reg, count=count, unit=mba)
                 if isinstance(res, ReadHoldingRegistersResponse):
                     self.errorcount = 0
+                    self.add_error(mba, 0)
                     return res.registers
                 else:
                     log.warning('modbus read (h) failed from mba '+str(mba)+', reg '+str(reg)+', count '+str(count))
                     self.errorcount += 1
+                    self.add_error(mba, 1)
                     return None
             except:
                 log.warning('modbus read (h) failed from mba '+str(mba)+', reg '+str(reg)+', count '+str(count))
                 self.errorcount += 1
+                self.add_error(mba, 1)
                 return None
 
         elif type == 'i':
@@ -203,15 +230,18 @@ class CommModbus(Comm):
                 res = self.client.read_input_registers(address=reg, count=count, unit=mba)
                 if isinstance(res, ReadInputRegistersResponse):
                     self.errorcount = 0
+                    self.add_error(mba, 0)
                     return res.registers
                 else:
                     log.warning('modbus read (i) failed from mba '+str(mba)+', reg '+str(reg)+', count '+str(count))
                     self.errorcount += 1
+                    self.add_error(mba, 1)
                     return None
-                    
+
             except:
                 log.warning('modbus read (i) failed from mba '+str(mba)+', reg '+str(reg)+', count '+str(count))
                 self.errorcount += 1
+                self.add_error(mba, 1)
                 return None
 
         elif type == 'c':
@@ -224,6 +254,7 @@ class CommModbus(Comm):
                 #traceback.print_exc()
                 #self.on_error(id, **kwargs)
                 self.errorcount += 1
+                self.add_error(mba, 1)
                 return None
 
         elif type == 'n': # npe_io  ##################### NPE subprocess() READ ##################
@@ -282,7 +313,7 @@ class CommModbus(Comm):
         :param kwargs['values']: Modbus registers values array to write
         '''
         res = 0
-        
+
         if self.type == 'n' or self.type == 'u':  # type switch for npe_io
             type=self.type  # this instance does not use modbus at all! for npe_io!
 
@@ -304,34 +335,40 @@ class CommModbus(Comm):
                     res = self.client.write_register(address=reg, value=value, unit=mba)
                     if isinstance(res, WriteSingleRegisterResponse): # ok
                         self.errorcount = 0
+                        self.add_error(mba, 0)
                         return 0
                     else:
+                        self.add_error(mba, 1)
                         if isinstance(res, ModbusException): # viga
                             log.warning('write single register error: '+str(res))
                         else:
                             log.warning('UNKNOWN write single register error')
-                        return 2    
+                        return 2
                 except:
                     log.warning('write single register error: '+str(sys.exc_info()[1]))
                     #traceback.print_exc()
                     self.errorcount += 1
+                    self.add_error(mba, 1)
                     return 1
             else: # multiple register write
                 try:
                     res = self.client.write_registers(address=reg, count=count, unit=mba, values = values)
                     if isinstance(res, WriteMultipleRegistersResponse): # ok
                         self.errorcount = 0
+                        self.add_error(mba, 0)
                         return 0
                     else:
+                        self.add_error(mba, 1)
                         if isinstance(res, ModbusException): # viga
                             log.warning('write multiple register error: '+str(res))
                         else:
                             log.warning('UNKNOWN write multiple register error')
-                        return 2    
+                        return 2
                 except:
                     log.warning('write multiple registers error: '+str(sys.exc_info()[1]))
                     #traceback.print_exc() # self.on_error(id, **kwargs)
                     self.errorcount += 1
+                    self.add_error(mba, 1)
                     return 1
 
         elif type == 'c': # coil
@@ -388,35 +425,6 @@ class CommModbus(Comm):
             # Popen(['sleep','15'], shell=False) # example of using parameters
             return 0 # no idea how it really ends
 
-
-# #############  npe_read.sh and npe_write.sh not used, subprocess() usage is dangerous, socat is better #####
-    #def npe_read(self,register,count = 1): # mba ignored
-        #return self.subexec('/mnt/nand-user/d4c/npe_io.sh '+str(register)+' '+str(count)+' rs',1) # returns values read as string
-
-
-    #def npe_write(self,register, **kwargs): # write register or registers. mba ignored. value or values is needed
-        #try:
-        #    values = kwargs['values']
-        #    count = len(values)
-        #except:
-        #    try:
-        #        value = kwargs['value']
-        #        count = 1
-        #    except:
-        #        print('write parameters problem, no value or values given')
-         #       return None
-
-       # try:
-       #     if count == 1:
-        #        self.subexec('/mnt/nand-user/d4c/npe_io.sh '+str(register)+' '+str(1&value)+' w',1) # returns exit status
-
-        #    else:
-        #        value=" ".join(values) # list to string, multiple value # FIXME!
-        #        return 2 # self.subexec('/mnt/nand-user/d4c/npe_write.sh '+str(register)+' '+str(value),1) # returning exit status does not function!
-       #     return 0
-       # except:
-        #    print('subexec() failed in npe_write()')
-         #   return 1
 
 
     def udpcomm(self, reg, countvalue, type = 'r'): # type r, ra or w = read or write command. ra returns existing data (async). for npe

@@ -1,3 +1,5 @@
+# This Python file uses the following encoding: utf-8
+
 # send and receive monitoring and control messages to from UniSCADA monitoring system
 # udp kuulamiseks thread?
 # neeme
@@ -398,9 +400,9 @@ class UDPchannel():
             return None
 
         if len(data) > 0: # something arrived
-            #log.info('>>> got from receiver '+str(repr(raddr))+' '+str(repr(data))) 
+            #log.info('>>> got from receiver '+str(repr(raddr))+' '+str(repr(data)))
             self.traffic[0]=self.traffic[0]+len(data) # adding top the incoming UDP byte counter
-            log.debug('<<<< got from receiver '+str(data.replace('\n', ' '))) 
+            log.debug('<<<< got from receiver '+str(data.replace('\n', ' ')))
 
             if (int(raddr[1]) < 1 or int(raddr[1]) > 65536):
                 msg='illegal remote port '+str(raddr[1])+' in the message received from '+raddr[0]
@@ -469,7 +471,7 @@ class UDPchannel():
                         #    self.udpsend(sendstring) # send the response right away to avoid multiple retransmits
                         #    log.info('response to server: '+str(sendstring)) # this answers to the server but does not update the setup or service table yet!
                         #siin ei vasta
-                        
+
                 return data_dict # possible key:value pairs here for setup change or commands. returns {} for just ack with no cmd
         else:
             return None
@@ -615,7 +617,7 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
         dnsize=0 # size of downloaded file
         if start>filesize:
             msg='pull parameters: file '+filename+' start '+str(start)+' above filesize '+str(filesize)
-            print(msg)
+            log.debug(msg)
             #udp.syslog(msg)
             return 99 # illegal parameters or file bigger than stated during download resume
 
@@ -623,7 +625,7 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
         pullheaders={'Range': 'bytes=%s-' % (start)} # with requests
 
         msg='trying '+req+' from byte '+str(start)+' using '+repr(pullheaders)
-        print(msg)
+        log.info(msg)
         #udp.syslog(msg)
         try:
             response = requests.get(req, headers=pullheaders) # with python3
@@ -632,7 +634,7 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
             output.close()
         except:
             msg='pull: partial or failed download of temporary file '+filepart+' '+str(sys.exc_info()[1])
-            print(msg)
+            log.warning(msg)
             #udp.syslog(msg)
             #traceback.print_exc()
 

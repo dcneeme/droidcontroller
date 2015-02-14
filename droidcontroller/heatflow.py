@@ -106,7 +106,7 @@ class HeatExchange:
         log.info('HeatExchange init')
 
     def set_flowrate(self, flowrate):
-        '''Updates flow rate for pump based on actual flowmeter pulse
+        '''Updates flow rate l/s for pump based on actual flowmeter pulse
         processing.
 
         Use FlowRate class to find the flowrate value based on flowmeter

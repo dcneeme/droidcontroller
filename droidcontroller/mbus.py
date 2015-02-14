@@ -1,3 +1,5 @@
+# This Python file uses the following encoding: utf-8
+
 #mbys.py - query and process kamstrup and sensus meters via Mbus protocol, 2400 8E1
 # usage:
 # from mbus import *
@@ -85,7 +87,7 @@ class Mbus:
     def get_errors(self):
         return self.errors
 
-    def mb_decode(self, invar, key='', coeff = 1.0, length = 4, hex = 1): # len and hex may be overruled by key
+    def mb_decode(self, invar, key='', coeff = 1.0, desc = 'unknown', length = 4, hex = 1): # len and hex may be overruled by key
         ''' Returns decoded value from Mbus binary string self.mbm, length bytes starting from invar.
             If key (2 bytes as hex string before data start) is given,
             then it is used for finding len and decoding type selection.
@@ -129,12 +131,37 @@ class Mbus:
 
             if key != '' and str(key.lower()) not in str(encode(self.mbm[invar-2:invar], 'hex_codec')) \
                 and str(key.upper()) not in str(encode(self.mbm[invar-2:invar], 'hex_codec')): # check
-                log.warning('non-matching key '+str(key)+' in key+data ' + str(encode(self.mbm[invar-2:invar], 'hex_codec'))+ \
+                log.warning('non-matching key '+str(key)+' for '+desc+' in key+data ' + str(encode(self.mbm[invar-2:invar], 'hex_codec'))+ \
                     ' '+str(encode(self.mbm[invar:invar+4], 'hex_codec')))
                 self.errors += 1
                 return None
             else:
                 self.errors = 0
+                if desc == 'flow' and '2d' in str(encode(self.mbm[invar-1:invar], 'hex_codec')):
+                    coeff = 1.0
+                    log.info('2d coeff chg to '+str(coeff))
+                elif desc == 'power' and '2d' in str(encode(self.mbm[invar-1:invar], 'hex_codec')):
+                    coeff = 100.0 # multical 602 power karla koolis
+                    log.info('coeff chg for multical 602 power to '+str(coeff))
+                elif '3b' in str(encode(self.mbm[invar-1:invar], 'hex_codec')):
+                    coeff = 1.0
+                    log.debug('3b coeff chg to '+str(coeff))
+                elif '2b' in str(encode(self.mbm[invar-1:invar], 'hex_codec')): # sensusPE power rahvamaja
+                    coeff = 1.0
+                    log.debug('2b coeff chg to '+str(coeff))
+                elif '13' in str(encode(self.mbm[invar-1:invar], 'hex_codec')): # sensus volume rahvamaja
+                    coeff = 1.0
+                    log.debug('13 coeff chg to '+str(coeff))
+                elif '14' in str(encode(self.mbm[invar-1:invar], 'hex_codec')): # volume coeff 10
+                    coeff = 10.0
+                    log.debug('14 coeff chg to '+str(coeff))
+                elif '15' in str(encode(self.mbm[invar-1:invar], 'hex_codec')): # volume coeff 100
+                    coeff = 100.0
+                    log.debug('15 coeff chg to '+str(coeff))
+                else:
+                    log.info('coeff NOT changed, still '+str(coeff)+', key end '+str(encode(self.mbm[invar-1:invar], 'hex_codec')))
+
+                log.info('mb_decode coeff '+str(coeff)+' for '+desc+', key '+ str(encode(self.mbm[invar-2:invar], 'hex_codec')))
                 return res * coeff
         except:
             traceback.print_exc()
@@ -225,39 +252,39 @@ class Mbus:
             log.warning('unknown model '+self.model)
             return None
 
-        return self.mb_decode(start, key, coeff) # len always 4 = default
+        return self.mb_decode(start, key, coeff, 'energy') # len always 4 = default
 
 
     def get_volume(self):
         ''' Return volume from the last read result. Chk the datetime in self.mbm as well! '''
         key = ''
         coeff = 1.0
-        if self.model == 'kamstrup602':
+        if self.model == 'kamstrup602' or self.model == 'kamstrup402':
             start = 33
-            key = '0414'
+            key = '04' # 14'
             coeff = 10.0 # l
-        elif self.model == 'kamstrup402':
-            start = 33
-            key = '0415'
-            coeff = 100.0 # l
+        #elif self.model == 'kamstrup402':
+        #    start = 33
+        #    key = '0415'
+        #    coeff = 100.0 # l
         elif self.model == 'sensusPE':
             start = 27
-            key = '0c14'
+            key = '0c' # 14 or 13 the end for volume
             coeff = 10.0
         else:
             log.warning('unknown model '+self.model)
             return None
 
-        return self.mb_decode(start, key, coeff)
+        return self.mb_decode(start, key, coeff, 'volume')
 
 
     def get_power(self):
         ''' Return power from the last read result. Chk the datetime in self.mbm as well! '''
-        key= '' 
+        key= ''
         coeff = 1
         if self.model == 'kamstrup602' or self.model == 'kamstrup402': # similar
             start = 63
-            key = '042d' # use lower or upper case, no difference
+            key = '04' # 2d' # use lower or upper case, no difference
             coeff = 100.0 # W
         elif self.model == 'sensusPE':
             start = 39
@@ -268,7 +295,7 @@ class Mbus:
             log.warning('unknown model '+self.model)
             return None
 
-        return self.mb_decode(start, key, coeff)
+        return self.mb_decode(start, key, coeff, 'power')
 
     def get_flow(self):
         ''' Return power from the last read result. Chk the datetime in self.mbm as well! '''
@@ -276,10 +303,11 @@ class Mbus:
         coeff = 1
         if self.model == 'kamstrup602' or self.model == 'kamstrup402':
             start = 75 # CHK!
-            key = '042d' # use lower or upper case, no difference
+            #key = '042d' # use lower or upper case, no difference
+            key = '04' # teisest poolest soltub komakoht?
             coeff = 1.0 # L/H
         #elif self.model == 'kamstrup402':
-        #    start = 75 
+        #    start = 75
         #    key = '043b' # use lower or upper case, no difference
         #    coeff = 1.0 # L/H
         elif self.model == 'sensusPE':
@@ -291,7 +319,7 @@ class Mbus:
             log.warning('unknown model '+self.model)
             return None
 
-        return self.mb_decode(start, key, coeff)
+        return self.mb_decode(start, key, coeff, 'flow')
 
 
     def get_temperatures(self):
@@ -314,7 +342,7 @@ class Mbus:
 
         out = []
         for i in range(3):
-            out.append(round(self.mb_decode(start[i], key[i], coeff[i], length[i]),3)) # converted to degC
+            out.append(round(self.mb_decode(start[i], key[i], coeff[i], 'temperatures', length[i]),3)) # converted to degC
 
         return out
 
@@ -335,8 +363,20 @@ class Mbus:
             log.warning('unknown model '+self.model)
             return None
 
-        return self.mb_decode(start, key, coeff)
+        return self.mb_decode(start, key, coeff, 'datetime')
 
+
+    def get_all(self):
+        '''Returns all or most measured values '''
+        res = {}
+        res.update({ 'model' : self.get_model() })
+        res.update({ 'power W' : self.get_power() })
+        res.update({ 'energy kWh' : self.get_energy() })
+        res.update({ 'flow l/h' : self.get_flow() })
+        res.update({ 'volume l' : self.get_volume() })
+        res.update({ 'temperatures degC' : self.get_temperatures() })
+        res.update({ 'datetime' : self.get_datetime() })
+        return res
 
 ##########################################################
 if __name__ == '__main__':

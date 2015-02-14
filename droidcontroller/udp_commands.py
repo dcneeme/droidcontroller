@@ -25,7 +25,7 @@ class Commands(SQLgeneral): # p
             self.vpn_start='rcopenvpn-start' # olinuxino
             self.vpn_stop='rcopenvpn-stop'
         else:
-            log.warning('udp_commands: vpn start/stop commands undefined for OSTYPE',OSTYPE)
+            log.warning('udp_commands: vpn start/stop commands undefined for OSTYPE '+OSTYPE)
             time.sleep(1)
 
 

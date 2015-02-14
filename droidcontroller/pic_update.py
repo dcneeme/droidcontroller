@@ -12,11 +12,15 @@
 import traceback
 import os
 import sys
-from droidcontroller.sqlgeneral import *
-
 import time
 import logging
 log = logging.getLogger(__name__)
+
+try:
+    from droidcontroller.sqlgeneral import *
+except:
+    log.warning('droidcontroller.sqlgeneral not imported, probably ok')
+    
 
 ''' PIC uploader via modbus. Send  hex file lines as modbus multiwrite commands, without hex crc,
     stripping ":" from the beginning and CRC plus CRLF from the end.
@@ -41,7 +45,7 @@ class PicUpdate(SQLgeneral): # using modbus connections mb[] created by sqlgener
         self.skipsend = 0 # this becomes 1 for data eeprom
         self.set_params(mbi, mba, regadd, id, keepconf)
         self.sum = -1 # valid control sum 0..255
-        
+        log.info('PicUpdate instance created using regadd '+str(regadd))
         
     def set_params(self, mbi=0, mba=1, regadd=998, id=0, keepconf=1, simu=0):
         ''' Change the modbus address of the io-board to update '''
@@ -64,6 +68,10 @@ class PicUpdate(SQLgeneral): # using modbus connections mb[] created by sqlgener
     def get_sum(self):
         return self.sum
 
+    def add_sum(self, hexpiece):
+        self.sum = 0xff & (self.sum ^ int(hexpiece[0:2],16) ^ int(hexpiece[2:4],16)) # xor checksum as one byte, initially -1
+        log.debug('self.sum currently '+str(self.sum))
+    
     def upload_hex(self, filename='IOplaat.hex'):
         ''' Upload the hex file (converted to binary on the way), row by row as binary strings,
             stripping : from the beginning and CRC plus CRLF from the end.
@@ -94,9 +102,6 @@ class PicUpdate(SQLgeneral): # using modbus connections mb[] created by sqlgener
             for regnum in range(regcount): # index 0...count-1
                 hexpiece = line[4 * regnum : 4 * regnum + 4]
                 regword.append(int(hexpiece, 16)) #  2bytes into one word
-                if self.simu == 1:
-                    self.sum = 0xff & (self.sum ^ int(hexpiece[0:2],16) ^ int(hexpiece[2:4],16)) # xor checksum as one byte, initially -1
-                    # checksum update done
                 reghex += ' '+format("%04x" % regword[regnum])
 
             if self.keepconf == 1: # skip data EEPROM lines
@@ -109,12 +114,12 @@ class PicUpdate(SQLgeneral): # using modbus connections mb[] created by sqlgener
                     self.skipsend = 0
 
             if self.skipsend == 0 and self.simu == 0: # send, no simulation or skipping
-                log.info('sending to reg '+str(self.regadd)+': ' + reghex)
+                log.debug('sending to reg '+str(self.regadd)+': ' + reghex)
                 while i < linetrymax: # retry once
                     i += 1
-                    print('attempt '+str(i)+' to write mba '+str(self.mba)+' reg '+str(self.regadd)+' values ' +str(regword))
+                    #print('attempt '+str(i)+' to write mba '+str(self.mba)+' reg '+str(self.regadd)+' values ' +str(regword))
                     res = mb[self.mbi].write(self.mba, self.regadd, values=regword) # sending to pic   ############ SEND ###########
-                    time.sleep(0.01) # igaks juhuks
+                    time.sleep(0.01) # igaks juhuks. kiire modbusiga 0.01, muidu 0,1 voi 0,5 isegi
                     if res == 0: # ok
                         log.info('line '+reghex+' written')
                         break
@@ -130,8 +135,13 @@ class PicUpdate(SQLgeneral): # using modbus connections mb[] created by sqlgener
 
                 #time.sleep(0.05) # give some time to save portion of flash? no need, pic response means ready for next
 
+            elif self.skipsend == 0 and self.simu == 1:
+                log.debug('crc calculation')
+                self.add_sum(hexpiece) # adding to self.sum
+                
             else:
-                log.info('skipping line: '+reghex)
+                log.info('skipping line: '+reghex+' due to skipsend '+str(self.skipsend)+', simu '+str(self.simu))
+            ##############################
 
         else:
             if self.simu == 0:
@@ -143,9 +153,9 @@ class PicUpdate(SQLgeneral): # using modbus connections mb[] created by sqlgener
 
 
     def update(self, pic_id=0, filename='IOplaat.hex'):
-        ''' Starts and stops the upload process. pic id is 0 if not stored into registers  '''
+        ''' Starts and stops the upload process. pic id is 0 if not stored into registers. Returns crc if simu == 1 '''
         res = 0 # return code, 0 = ok
-        log.info('going to switch pic with id '+str(pic_id)+' into bootloader mode')
+        log.info('going to switch pic with id '+str(pic_id)+' into bootloader mode to upload '+filename)
         if pic_id != 0:
             self.pic_id = pic_id
 
@@ -172,7 +182,7 @@ class PicUpdate(SQLgeneral): # using modbus connections mb[] created by sqlgener
         if self.simu != 0 or (self.simu <= 0 and self.simu >= 255): # simulation only
             log.info('going to calculate control sum for lines to be sent from ' + filename)
             self.upload_hex(filename)
-            print('sum of the data to be uploaded: '+str(self.sum))
+            return self.sum # print('sum of the data to be uploaded: '+str(self.sum))
         else:
             log.info('going to send ' + filename + ' to mba ' + str(self.mba) + ', regadd '+ str(self.regadd))
             res = self.upload_hex(filename) # hex faili saatmine yks rida korraga
@@ -183,64 +193,15 @@ class PicUpdate(SQLgeneral): # using modbus connections mb[] created by sqlgener
                     uptime = mb[self.mbi].read(self.mba,498,2)[1] # read 32 bit always, use LSB
                     if uptime < 10 and uptime > 0:
                         log.info('upload done, pic autorestarted and responsive')
+                        return 0
                     else:
                         log.warning('pic uptime incorrect: ' + str(uptime))
+                        return 1
                 except:
                     log.warning('upload FAILED, pic still in bootloader mode')
                     traceback.print_exc()
+                    return 2
             else:
                 log.warning('upload FAILED, pic still in bootloader mode')
-
-            return res
-
-##################   MAIN  #####################
-
-
-#iseseisvalt kaivitamiseks: python droidcontroller/pic_update.py 1 0 /dev/ttyAPP0 IOplaat.hex
-
-if __name__ == '__main__': # parameters mba regadd host:port|tty filename
-    logging.basicConfig(level=logging.WARNING)
-    try:
-        mba = int(sys.argv[1])
-        regadd = 998 # testimiseks kasuta 400 voi 100
-        pic_id = int(sys.argv[2]) # koos reg 58 ja 259 sisu nagu MSB LSB
-        host = sys.argv[3]
-        if ':' in host:
-            host = host.split(':')[0]
-            port= int(host.split(':')[1])
-        else:
-            port = host
-        filename = sys.argv[4] # hex fail
-
-    except:
-        log.warning('missing or invalid parameters')
-        sys.exit()
-
-
-    try:
-        if mb:
-            log.info('modbus connection(s) already existing: '+str(mb))
-            pass
-    except:
-        #    self.mb=CommModbus()  # define in comm_modbus2
-        mb = []
-        try:
-            from comm_modbus3 import *  # # for PC
-        except:
-            #from droidcontroller.comm_modbus import *  # for olinuxino
-            from comm_modbus import *  # for olinuxino
-
-        mb.append(CommModbus(port=port)) # PC jaoks
-        log.info('modbus connection mb[self.mbi] created')
-
-
-    up = PicUpdate(mba, regadd, port, pic_id) # kwargs?
-
-    up.set_params(0,1,998,0,1,1) # mbi mba reg id keepconf simu
-    sum = res = up.update(pic_id, filename) # returns sum to be sent
-
-    up.set_params(0,1,998,0,1,0) # last param is self.simu
-    res = up.update(pic_id, filename)
-    if res > 0:
-        log.warning('pic update FAILED!')
+                return 3
 

@@ -37,14 +37,14 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
     def setReadPeriod(self, invar):
-        ''' Set the refresh period, executes sync if time from last read was earlier than period ago.
+        ''' Set the ai reading period in s, executes sync if time from last read was earlier than period ago.
             values considered as stalled after 10x self.readperiod
         '''
         self.readperiod = invar  # values considered as stalled after 10x self.readperiod
 
 
     def setSendPeriod(self, invar):
-        ''' Set the refresh period, executes sync if time from last read was earlier than period ago '''
+        ''' Set the ai notification period s, executes sync if time from last read was earlier than period ago '''
         self.sendperiod = invar
 
 
