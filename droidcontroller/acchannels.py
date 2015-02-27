@@ -591,8 +591,11 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
     def set_aivalue(self,svc,member,value): # sets variables like setpoints or limits to be reported within services, based on service name and member number
         ''' Setting member value using sqlgeneral set_membervalue. adding sql table below for that '''
-        return s.set_membervalue(svc,member,value,self.in_sql)
+        return s.set_membervalue(svc,member,value,self.in_sql,raw=False)
 
+    def set_airaw(self,svc,member,value): # sets variables like setpoints or limits to be reported within services, based on service name and member number
+        ''' Setting member raw value using sqlgeneral set_membervalue. adding sql table below for that '''
+        return s.set_membervalue(svc,member,value,self.in_sql,raw=True)
 
     def set_aovalue(self, value, mba, reg): # sets variables to control, based on physical addresses
         ''' Write value to follow into aochannels table. 
@@ -780,7 +783,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
             # cfg related tests and calc
-            if (regtype == 'h' or regtype == 'i'): # for channel data only, not setup values (?)
+            if (regtype == 'h' or regtype == 'i'  or regtype == 'c' or regtype == 'r'): # for channel data only, not for setup values (s, s!)
                 if raw != None:
                     if rowproblem == 1:
                         log.warning('svc processing skipped due to invalid data from '+self.in_sql+' for svc '+val_reg+', srow: '+repr(srow))

@@ -1,4 +1,8 @@
+# This Python file uses the following encoding: utf-8
+
 # keep connectivity or any other state together with up or down timestamps
+# needs regular up() in order to stay up
+
 import logging, time
 log = logging.getLogger(__name__)
 

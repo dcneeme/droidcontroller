@@ -54,15 +54,15 @@ class CommModbus(Comm):
         self.errorcount = 0 # add here modbus problems, related to mba
         self.errors = {} # {mba:errcount}, per modbus address
         self.type = type # default h
-        print(kwargs) # debug
+        #print(kwargs) # debug
         if ('host' in kwargs):
-            self.host=kwargs.get('host','127.0.0.1')
+            self.host = kwargs.get('host','127.0.0.1')
             ###############
-            if kwargs.get('host') == 'npe_io': # npe_io via subexec(), no pymodbus in use
-                self.type='n' # npe_io
+            if self.host == 'npe_io': # npe_io via subexec(), no pymodbus in use
+                self.type = 'n' # npe_io
                 log.info('CommModbus() init1: created CommModbus instance to use npe_read.sh and npe_write.sh via subprocess(), type',self.type)
-            elif kwargs.get('host') == 'npe_udpio': # npe_io via so_comm(), via udp port 444441 to read and 44442 to write.
-                self.type='u' # npe_udpio. do not forget to set this as channel type in sql too! FIXME: set up a client for that? ##############
+            elif self.host == 'npe_udpio': # npe_io via so_comm(), via udp port 444441 to read and 44442 to write.
+                self.type = 'u' # npe_udpio. do not forget to set this as channel type in sql too! FIXME: set up a client for that? ##############
                 #from droidcontroller.npechannels import NPEchannel # socat channel to use npe_io.sh for local io
                 #npe=NPEchannel(ip='127.0.0.1', port=44441) # universal (socat based udp) channel for both reading and writing
                 #self.timeout=timeout  # receive timeout, data in buffer waits for next time if not ready
@@ -70,43 +70,56 @@ class CommModbus(Comm):
                 from socket import socket, AF_INET, SOCK_DGRAM
                 self.UDPSock = socket(AF_INET,SOCK_DGRAM)
                 self.UDPSock.settimeout(0.1)
-                self.ip='127.0.0.1' # FIXME: SHOULD BE BASED ON PORT NUMBER LIKE WITH XPORT
-                self.port=44441
+                self.ip = '127.0.0.1' # FIXME: SHOULD BE BASED ON PORT NUMBER LIKE WITH XPORT
+                self.port = 44441
                 self.saddr = (self.ip,self.port)
-                self.datadict={} # to give instant response from previous reading
+                self.datadict = {} # to give instant response from previous reading
                 #self.data=[]
                 #print('created npe channel to',self.saddr)
-                log.info('CommModbus() init1u: created CommModbus instance to use npe_io.sh over udp to '+str(self.saddr)+', type '+str(self.type))
+                log.info('CommModbus() init1u: created CommModbus instance to use npe_io.sh over udp using params '+str(kwargs))
             ###############
-            elif '/dev/tty' in kwargs.get('host'): # direct serial connection defined via host
+            elif '/dev/tty' in self.host: # direct serial connection defined via host
                 from pymodbus.client.sync import ModbusSerialClient as ModbusClient
                 self.client = ModbusClient(method='rtu', stopbits=1, bytesize=8, parity='E', baudrate=19200, timeout=0.5, port=kwargs.get('host'))
                 #use improved by cougar ModbusClient package with expected response length calculation!
                 #otherwise 0.5 s tout is used for every transaction!!
-                print('CommModbus() init2: created CommModbus instance for ModbusRTU over RS485 using port',kwargs)
-            else: #tcp, possibly rtu over tcp
+                #print('CommModbus() init2: created CommModbus instance for ModbusRTU over RS485 using params '+str(kwargs))
+                log.info('CommModbus() init2: created CommModbus instance for ModbusRTU over RS485 using params '+str(kwargs))
+            
+            elif ('port' in kwargs): # both host and port - must be tcp, but possibly rtu over tcp
+                self.port = kwargs.get('port')
+                
                 from pymodbus.client.sync import ModbusTcpClient as ModbusClient
-                if kwargs.get('port') > 10000 and kwargs.get('port')<10003: # xport, rtu over tcp. use port 10001 or 10002
-                    self.port=kwargs.get('port')
-                    self.client = ModbusClient(
-                        kwargs.get('host', '127.0.0.1'),
-                        port=kwargs.get('port'),
-                        framer=ModbusRtuFramer)
-                    print('CommModbus() init3: created CommModbus instance for ModbusRTU over TCP',kwargs)
+                
+                if self.port > 10000 and self.port<10003: # xport, rtu over tcp. use port 10001 or 10002
+                    try:
+                        self.client = ModbusClient(
+                            host = self.host,
+                            port = self.port,
+                            framer = ModbusRtuFramer)
+                        log.info('CommModbus() init3: created CommModbus instance for ModbusRTU over TCPusing params '+str(kwargs))
+                        print('CommModbus() init3: created CommModbus instance for ModbusRTU over TCP using params '+str(kwargs))
+                    except:
+                        log.warning('failed to create CommModbus instance for ModbusRTU over TCP using params '+str(kwargs))
+                        #print('failed to create CommModbus instance for ModbusRTU over TCP using params '+str(kwargs))
+                        
                 else: # normal modbustcp
                     self.type='' # normal modbus
-                    self.port=kwargs.get('port')
                     self.client = ModbusClient(
-                            host=kwargs.get('host', '127.0.0.1'),
-                            port=kwargs.get('port', 502))
-                    print('CommModbus() init4: created CommModbus instance for ModbusTCP over TCP',kwargs)
+                            host = self.host,
+                            port = self.port )
+                    log.info('CommModbus() init4: created CommModbus instance for ModbusTCP over TCP using params '+str(kwargs))
+                    #print('CommModbus() init4: created CommModbus instance for ModbusTCP over TCP using params '+str(kwargs))
         else:
-            port=kwargs.get('port')
-            from pymodbus.client.sync import ModbusSerialClient as ModbusClient
-            self.client = ModbusClient(method='rtu', stopbits=1, bytesize=8, parity='E', baudrate=19200, timeout=0.5, port=port)
-            print('CommModbus() init5: created CommModbus instance for ModbusRTU over RS485 using port:',port)
-        #Comm.__init__(self, **kwargs) # for scheduler, not used
-
+            try:
+                port = kwargs.get('port')
+                from pymodbus.client.sync import ModbusSerialClient as ModbusClient
+                self.client = ModbusClient(method='rtu', stopbits=1, bytesize=8, parity='E', baudrate=19200, timeout=0.5, port=port)
+                #print('CommModbus() init5: created CommModbus instance for ModbusRTU over RS485 using params '+str(kwargs))
+                log.info('CommModbus() init5: created CommModbus instance for ModbusRTU over RS485 using using params '+str(kwargs))
+            except:
+                log.warning('failed to create CommModbus instance for ModbusRTU over RS485using params '+str(kwargs))
+                #print('failed to create CommModbus instance for ModbusRTU over RS485using params '+str(kwargs))
 
     def get_errorcount(self):
         ''' returns number of errors, becomes 0 after each successful modbus transaction '''
@@ -221,6 +234,7 @@ class CommModbus(Comm):
                     return None
             except:
                 log.warning('modbus read (h) failed from mba '+str(mba)+', reg '+str(reg)+', count '+str(count))
+                traceback.print_exc()
                 self.errorcount += 1
                 self.add_error(mba, 1)
                 return None
@@ -240,6 +254,7 @@ class CommModbus(Comm):
 
             except:
                 log.warning('modbus read (i) failed from mba '+str(mba)+', reg '+str(reg)+', count '+str(count))
+                traceback.print_exc()
                 self.errorcount += 1
                 self.add_error(mba, 1)
                 return None
@@ -250,8 +265,7 @@ class CommModbus(Comm):
                 #self.errorcount = 0
                 return res.registers
             except:
-                #traceback.print_exc()
-                #traceback.print_exc()
+                traceback.print_exc()
                 #self.on_error(id, **kwargs)
                 self.errorcount += 1
                 self.add_error(mba, 1)
@@ -270,7 +284,7 @@ class CommModbus(Comm):
                     log.warning('no data from npe_read.sh, error: '+str(sys.exc_info()[1]))
                     return None
             except:
-                #traceback.print_exc() # self.on_error(id, **kwargs)
+                traceback.print_exc() # self.on_error(id, **kwargs)
                 self.errorcount += 1
                 return None
 
@@ -346,7 +360,7 @@ class CommModbus(Comm):
                         return 2
                 except:
                     log.warning('write single register error: '+str(sys.exc_info()[1]))
-                    #traceback.print_exc()
+                    traceback.print_exc()
                     self.errorcount += 1
                     self.add_error(mba, 1)
                     return 1
@@ -366,7 +380,7 @@ class CommModbus(Comm):
                         return 2
                 except:
                     log.warning('write multiple registers error: '+str(sys.exc_info()[1]))
-                    #traceback.print_exc() # self.on_error(id, **kwargs)
+                    traceback.print_exc() # self.on_error(id, **kwargs)
                     self.errorcount += 1
                     self.add_error(mba, 1)
                     return 1

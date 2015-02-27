@@ -460,10 +460,10 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
         conn.commit()
         return value # tuple from member values
 
-
-    def set_membervalue(self, svc, member, value, table): # setting value in table based on svc and member
+        
+    def set_membervalue(self, svc, member, value, table, raw = False): # setting value in table based on svc and member
         ''' Sets variables like setpoints or limits to be reported within services, based on service name and member number.
-            Table can be either dichannels, aichannels or counters and must be known! FIXME: could be detected automatically!
+            Table can be either dichannels or aicochannels. For aicochannels also raw can be set instead of value, use raw = True then!
             Must tolerate but ignore None as value. Using time.time for ts to void stalled data despite changing.
         '''
         ts = int(time.time())
@@ -471,27 +471,31 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
             log.warning('no '+table+' update due to value='+str(value)+' instead of expected num value for svc '+svc+' member '+str(member))
             return 2
 
+        valraw = {False:'value', True:'raw'}
+        
         try:
             value=str(int(round(float(value),0)))
         except:
-            log.warning('no '+table+' update due to value'+str(value)+' instead of expected num value for '+svc+'.'+str(member))
+            log.warning('no '+table+' update due to '+valraw[raw]+' = '+str(value)+' instead of expected num for '+svc+'.'+str(member))
             return 2
 
         Cmd="BEGIN IMMEDIATE TRANSACTION" 
         conn.execute(Cmd)
-        Cmd="update "+table+" set value='"+str(value)+"', ts='"+str(ts)+"' where val_reg='"+svc+"' and member='"+str(member)+"'"
-        #print('set_membervalue',Cmd) # debug
+        Cmd="update "+table+" set "+valraw[raw]+"='"+str(value)+"', ts='"+str(ts)+"' where val_reg='"+svc+"' and member='"+str(member)+"'"
+        log.debug('set_membervalue cmd: '+Cmd)
         try:
             conn.execute(Cmd)
             conn.commit()
-            log.debug(table + ' updated with value='+str(value)+' for '+svc+'.'+str(member))
+            log.debug(table + ' updated with '+valraw[raw]+' = '+str(value)+' for '+svc+'.'+str(member))
             return 0
         except:
             msg='set_membervalue failure: '+str(sys.exc_info()[1])
             print(msg)
-            log.warning(table+' update failure, chk dichannels ts instead of ts_chg!')
+            log.warning(table+' update failure!')
             #udp.syslog(msg)
             return 1  # update failure
+
+            
 
 
     def setbit_do(self, bit, value, mba, regadd, mbi=0):  # to set a readable output channel by the physical
