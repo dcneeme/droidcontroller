@@ -129,7 +129,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                                 # dichannels table update with new bit values and change flags. no status change here. no update if not changed!
                                 Cmd="UPDATE "+self.in_sql+" set value='"+str(value)+"', chg='"+str(chg)+"', ts='"+str(self.ts)+"' \
                                     where mba='"+str(mba)+"' and regadd='"+str(regadd+i)+"' and mbi="+str(mbi)+" and bit='"+str(bit)+"'" # uus bit value ja chg lipp, 2 BITTI!
-                            else: # ts as ts_read now! change detection does not need that  timestamp!
+                            else: # just update the timestamp!
                                 chg=0
                                 Cmd="UPDATE "+self.in_sql+" set ts='"+str(self.ts)+"', chg='"+str(chg)+"' \
                                     where mba='"+str(mba)+"' and mbi="+str(mbi)+" and regadd='"+str(regadd+i)+"' and bit='"+str(bit)+"'" # old value unchanged, use ts_CHG AS TS!
@@ -253,21 +253,21 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
     def make_dichannels(self, svc = ''): # chk all if svc empty
         ''' Send di svc with changed member or (lapsed sendperiod AND
-            updated less than 5 s ago (still fresh). ts used as update ts.
+            updated less than sendperiod s ago (still fresh)). ts used as update ts.
             If svc != '' then that svc is resent without ts check
         '''
         # mask == 1: send changed, mask == 3: send all
-        mba=0 # local here
-        val_reg=''
-        desc=''
-        comment=''
-        mcount=0
-        ts_created=self.ts # timestamp
+        mba = 0 # local here
+        val_reg = ''
+        desc = ''
+        comment = ''
+        mcount = 0
+        ts_created = self.ts # timestamp
         #sumstatus=0 # summary status for a service, based on service member statuses
-        chg=0 # status change flag with 2 bits in use!
-        value=0
-        ts_last=0 # last time the service member has been reported to the server
-        cur=conn.cursor()
+        chg = 0 # status change flag with 2 bits in use!
+        value = 0
+        ts_last = 0 # last time the service member has been reported to the server
+        cur = conn.cursor()
         try:
             Cmd="BEGIN IMMEDIATE TRANSACTION" # transaction, dichannels
             conn.execute(Cmd) # dichannels
@@ -286,12 +286,12 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 for row in cur: # services to be processed. either just changed or to be resent
 
                     #lisa='' # string of space-separated values
-                    val_reg=''
-                    sta_reg=''
-                    sumstatus=0 # at first
+                    val_reg = ''
+                    sta_reg = ''
+                    sumstatus = 0 # at first
 
-                    val_reg=row[0] # service name
-                    chg=int(row[1]) # change bitflag here, 0 or 1
+                    val_reg = row[0] # service name
+                    chg = int(row[1]) # change bitflag here, 0 or 1
                     ts_last=int(row[2]) # last reporting time
                     if chg == 1: # message due to bichannel state change
                         msg='DI service to be reported due to change: '+val_reg
@@ -299,7 +299,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                     udp.send(self.make_dichannel_svc(val_reg)) # sends this service tuple away via udp.send()
 
             else:
-                msg='DI service '+svc+' to be rereported'
+                msg = 'DI service '+svc+' to be rereported'
                 log.debug(msg)
                 udp.send(self.make_dichannel_svc(svc)) # sends this service as a correction
 
@@ -329,6 +329,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         cur=conn.cursor()
         Cmd="select * from dichannels where val_reg='"+val_reg+"' order by member asc" # data for one service ###########
         cur.execute(Cmd)
+        rowproblem = 0 # do not report service where meber of type h is stalled
         for srow in cur: # ridu tuleb nii palju kui selle teenuse liikmeid, pole oluline milliste mba ja readd vahele jaotatud
             #print 'row in cursor3a',srow # temporary debug
             mba=0 # local here
@@ -366,39 +367,47 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
             #print 'make_dichannel_svc():',val_reg,'member',member,'value before status proc',value,', lisa',lisa  # temporary debug
 
-            if lisa != "": # not the first member any nmore
-                lisa=lisa+" "
+            if ots < self.ts + self.sendperiod: # stalled!
+                rowproblem - 1 # do not send this svc
+                log.warning('svc '+val_reg+' member '+str(member)+' stalled for '+str(int(self.ts - ots))+' s!')
+            
+            if lisa != "": # not the first member any more
+                lisa = lisa+" "
 
             # status and inversions according to configuration byte
-            status=0 # initially for each member
+            status = 0 # initially for each member
             if (cfg&4): # value2value inversion
-                value=(1^value) # possible member values 0 voi 1
-            lisa=lisa+str(value) # adding possibly inverted member value to multivalue string
+                value = (1^value) # possible member values 0 voi 1
+            lisa=lisa + str(value) # adding possibly inverted member value to multivalue string
 
             if (cfg&8): # value2status inversion
-                value=(1^value) # member value not needed any more
+                value = (1^value) # member value not needed any more
 
             if (cfg&1): # status warning if value 1
-                status=value #
+                status = value #
             if (cfg&2): # status critical if value 1
-                status=2*value
+                status = 2*value
 
-            if status>sumstatus: # summary status is defined by the biggest member sstatus
-                sumstatus=status # suurem jaab kehtima
+            if status > sumstatus: # summary status is defined by the biggest member sstatus
+                sumstatus = status # suurem jaab kehtima
 
             #print 'make_channel_svc():',val_reg,'member',member,'value after status proc',value,', status',status,', sumstatus',sumstatus,', lisa',lisa  # debug
 
 
-            #dichannels table update with new chg ja status values. no changes for values! chg bit 0 off! set ts_msg!
-            Cmd="UPDATE "+self.in_sql+" set ts_msg='"+str(self.ts)+"', chg='"+str(chg&2)+"' where val_reg='"+str(val_reg)+"'" # koik liikmed korraga sama ts_msg
-            conn.execute(Cmd)
+            #dichannels table update with new chg and status values. no changes for values! chg bit 0 off! set ts_msg!
+            if rowproblem == 0: # no problem with this svc members
+                Cmd="UPDATE "+self.in_sql+" set ts_msg='"+str(self.ts)+"', chg='"+str(chg&2)+"' where val_reg='"+str(val_reg)+"'" # koik liikmed korraga sama ts_msg
+                conn.execute(Cmd)
 
         sta_reg=val_reg[:-1]+"S" # service status register name
         if sta_reg == val_reg: # only status will be sent then!
             val_reg=''
             lisa=''
 
-        return sta_reg,sumstatus,val_reg,lisa  # returns tuple to send. to be send to udp.send([])
+        if rowproblem == 0:
+            return sta_reg, sumstatus, val_reg, lisa  # returns tuple to send. to be send to udp.send([])
+        else:
+            return None
 
 
 

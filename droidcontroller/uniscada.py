@@ -29,8 +29,10 @@ class UDPchannel():
     def __init__(self, id = '000000000000', ip = '127.0.0.1', port = 44445, receive_timeout = 0.1, retrysend_delay = 5, loghost = '0.0.0.0', logport=514): # delays in seconds
         #from droidcontroller.connstate import ConnState
         from droidcontroller.statekeeper import StateKeeper
-        self.sk = StateKeeper(off_tout=300, on_tout=0) # conn state with up/down times
-
+        self.sk = StateKeeper(off_tout=300, on_tout=0) # conn state with up/down times. 
+        # do hard reboot via 0xFEED when changed to down. 
+        # what to do if never up? keep hard rebooting?
+        
         try:
             from droidcontroller.gpio_led import GPIOLED
             self.led = GPIOLED() # led alarm and conn
@@ -180,6 +182,10 @@ class UDPchannel():
         ''' Adds service components into buffer table to be sent as a string message
             the components are sta_reg = '', status = 0, val_reg = '', value = ''
         '''
+        if servicetuple == None:
+            log.warning('ignored servicetuple with value None')
+            return 2
+            
         try:
             sta_reg=str(servicetuple[0])
             status=int(servicetuple[1])
