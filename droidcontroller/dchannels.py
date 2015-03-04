@@ -367,7 +367,8 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
             #print 'make_dichannel_svc():',val_reg,'member',member,'value before status proc',value,', lisa',lisa  # temporary debug
 
-            if ots < self.ts + self.sendperiod: # stalled!
+            #if ots < self.ts + self.sendperiod: # stalled!
+            if self.ts > ots + self.sendperiod: # stalled!
                 rowproblem - 1 # do not send this svc
                 log.warning('svc '+val_reg+' member '+str(member)+' stalled for '+str(int(self.ts - ots))+' s!')
             
