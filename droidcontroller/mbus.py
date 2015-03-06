@@ -116,7 +116,7 @@ class Mbus:
                     hf = self.mbm[invar:invar+4] # need to be reordered, WITH UNPACK
                     hfs = str(encode(hf, 'hex_codec'))[2:10]
                     res = struct.unpack('<f', bytes.fromhex(hfs))[0] # py3, converts to float from 32real hex LITTLE ENDIAN
-                    return res # no coeff needed
+                    return res * coeff # coeff defined in parent
                     
                 else:
                     log.warning('unsupported encoding for data, key '+str(key[0:2]))
@@ -257,7 +257,7 @@ class Mbus:
             #key = '0c07'
             key = '0c'
         elif self.model == 'axisSKU03':
-            start = 59
+            start = 52
             key = '0486'
         else:
             log.warning('unknown model '+self.model)
@@ -309,7 +309,7 @@ class Mbus:
         elif self.model == 'axisSKU03':
             start = 65
             key = '052e' # from fex float
-            
+            coeff = 1000.0
         else:
             log.warning('unknown model '+self.model)
             return None
@@ -335,8 +335,9 @@ class Mbus:
             key='0c'
             coeff = 10.0 #  L/h
         elif self.model == 'axisSKU03':
-            start = 78
+            start = 71
             key = '053e' # from fex float
+            coeff = 1000.0
             
         else:
             log.warning('unknown model '+self.model)
