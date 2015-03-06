@@ -1,17 +1,20 @@
 # This Python file uses the following encoding: utf-8
+# last change 5.3.2014
 
-#mbys.py - query and process kamstrup and sensus meters via Mbus protocol, 2400 8E1
+''' 
+mbys.py - query and process kamstrup, sensus or axis heat meters via Mbus protocol, 2400 8E1
 # usage:
 # from mbus import *
 # m=Mbus()
 # m.read()
 # m.get_temperatures()
-
+'''
 
 from codecs import encode # for encode to work in py3
 import time
 import serial
 import traceback
+import struct  # struct.unpack for float from hex 
 import sys, logging
 logging.basicConfig(stream=sys.stderr, level=logging.DEBUG) # temporary
 log = logging.getLogger(__name__)
@@ -109,11 +112,16 @@ class Mbus:
                 elif key[1] == 'C' or key[1] == 'c':
                     length = 4
                     hex = 0
+                elif key[1] == '5': # hex float 32 bit real
+                    hf = self.mbm[invar:invar+4] # need to be reordered, WITH UNPACK
+                    hfs = str(encode(hf, 'hex_codec'))[2:10]
+                    res = struct.unpack('<f', bytes.fromhex(hfs))[0] # py3, converts to float from 32real hex LITTLE ENDIAN
+                    return res # no coeff needed
+                    
                 else:
                     log.warning('unsupported encoding for data, key '+str(key[0:2]))
-                #FIXME key teine bait maarab kymnendkoha!
-
-        try:
+                    return None
+        try: # swap the bytes order and convert to integer
             res = 0
             for i in range(length):
                 if hex == 1:
@@ -128,7 +136,7 @@ class Mbus:
                     #    if (int(str(self.mbm[len - 1]), 10) & 0xF0) == 0xF0: # the result is negative
                     #        res= -res
 
-
+            # modify coefficients
             if key != '' and str(key.lower()) not in str(encode(self.mbm[invar-2:invar], 'hex_codec')) \
                 and str(key.upper()) not in str(encode(self.mbm[invar-2:invar], 'hex_codec')): # check
                 log.warning('non-matching key '+str(key)+' for '+desc+' in key+data ' + str(encode(self.mbm[invar-2:invar], 'hex_codec'))+ \
@@ -139,10 +147,10 @@ class Mbus:
                 self.errors = 0
                 if desc == 'flow' and '2d' in str(encode(self.mbm[invar-1:invar], 'hex_codec')):
                     coeff = 1.0
-                    log.info('2d coeff chg to '+str(coeff))
+                    log.debug('2d coeff chg to '+str(coeff))
                 elif desc == 'power' and '2d' in str(encode(self.mbm[invar-1:invar], 'hex_codec')):
                     coeff = 100.0 # multical 602 power karla koolis
-                    log.info('coeff chg for multical 602 power to '+str(coeff))
+                    log.debug('coeff chg for multical 602 power to '+str(coeff))
                 elif '3b' in str(encode(self.mbm[invar-1:invar], 'hex_codec')):
                     coeff = 1.0
                     log.debug('3b coeff chg to '+str(coeff))
@@ -159,9 +167,9 @@ class Mbus:
                     coeff = 100.0
                     log.debug('15 coeff chg to '+str(coeff))
                 else:
-                    log.info('coeff NOT changed, still '+str(coeff)+', key end '+str(encode(self.mbm[invar-1:invar], 'hex_codec')))
+                    log.debug('coeff NOT changed, still '+str(coeff)+', key end '+str(encode(self.mbm[invar-1:invar], 'hex_codec')))
 
-                log.info('mb_decode coeff '+str(coeff)+' for '+desc+', key '+ str(encode(self.mbm[invar-2:invar], 'hex_codec')))
+                log.debug('mb_decode coeff '+str(coeff)+' for '+desc+', key '+ str(encode(self.mbm[invar-2:invar], 'hex_codec')))
                 return res * coeff
         except:
             traceback.print_exc()
@@ -248,6 +256,9 @@ class Mbus:
             start = 21
             #key = '0c07'
             key = '0c'
+        elif self.model == 'axisSKU03':
+            start = 59
+            key = '0486'
         else:
             log.warning('unknown model '+self.model)
             return None
@@ -271,6 +282,10 @@ class Mbus:
             start = 27
             key = '0c' # 14 or 13 the end for volume
             coeff = 10.0
+        elif self.model == 'axisSKU03':
+            start = 59
+            key = '0413' # from fex float
+        
         else:
             log.warning('unknown model '+self.model)
             return None
@@ -291,6 +306,10 @@ class Mbus:
             #key='0c2c'
             key='0c'
             coeff = 10.0 #
+        elif self.model == 'axisSKU03':
+            start = 65
+            key = '052e' # from fex float
+            
         else:
             log.warning('unknown model '+self.model)
             return None
@@ -315,6 +334,10 @@ class Mbus:
             #key='0c3c'
             key='0c'
             coeff = 10.0 #  L/h
+        elif self.model == 'axisSKU03':
+            start = 78
+            key = '053e' # from fex float
+            
         else:
             log.warning('unknown model '+self.model)
             return None
@@ -332,17 +355,24 @@ class Mbus:
             key = ['0459', '045D', '0461'] # inlet outlet diff
             coeff = [0.01, 0.01, 0.01] # 10 mK unit
         elif self.model == 'sensusPE':
-            start = [45, 49, 53] # FIXME
+            start = [45, 49, 53] 
             key = ['0a5a', '0a5e', '0b60']
             coeff = [0.1, 0.1, 0.001]
             length = [2, 2, 3]
+        elif self.model == 'axisSKU03':
+            start = [77, 83, 96]
+            key = ['055b', '055f', '0563'] # from fex float
         else:
             log.warning('unknown model '+self.model)
             return None, None, None
 
         out = []
-        for i in range(3):
-            out.append(round(self.mb_decode(start[i], key[i], coeff[i], 'temperatures', length[i]),3)) # converted to degC
+        try:
+            for i in range(3):
+                out.append(round(self.mb_decode(start[i], key[i], coeff[i], 'temperatures', length[i]),3)) # converted to degC
+        except:
+            log.warning('failed to append mb_decode temperatures output')
+            traceback.print_exc()
 
         return out
 
@@ -375,7 +405,8 @@ class Mbus:
         res.update({ 'flow l/h' : self.get_flow() })
         res.update({ 'volume l' : self.get_volume() })
         res.update({ 'temperatures degC' : self.get_temperatures() })
-        res.update({ 'datetime' : self.get_datetime() })
+        #res.update({ 'datetime' : self.get_datetime() }) # annab vea index out of range
+
         return res
 
 ##########################################################
