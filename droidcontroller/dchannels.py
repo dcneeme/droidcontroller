@@ -131,9 +131,8 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                                     where mba='"+str(mba)+"' and regadd='"+str(regadd+i)+"' and mbi="+str(mbi)+" and bit='"+str(bit)+"'" # uus bit value ja chg lipp, 2 BITTI!
                             else: # just update the timestamp!
                                 chg=0
-                                Cmd="UPDATE "+self.in_sql+" set ts='"+str(self.ts)+"', chg='"+str(chg)+"' \
-                                    where mba='"+str(mba)+"' and mbi="+str(mbi)+" and regadd='"+str(regadd+i)+"' and bit='"+str(bit)+"'" # old value unchanged, use ts_CHG AS TS!
-                            #print('dichannels udpdate:',Cmd) # debug
+                                Cmd="UPDATE "+self.in_sql+" set ts='"+str(self.ts)+"', chg='"+str(chg)+"' where mba='"+str(mba)+"' and mbi="+str(mbi)+" and regadd='"+str(regadd+i)+"' and bit='"+str(bit)+"'" # old value unchanged, use ts_CHG AS TS!
+                            log.debug('dichannels udpdate:',Cmd) 
                             conn.execute(Cmd) # write
                         except:
                             traceback.print_exc()
@@ -619,6 +618,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
 
     def get_divalue(self,svc,member): # returns value based on di service name and member number
+        ''' Returns di channel value as integer '''
         #Cmd3="BEGIN IMMEDIATE TRANSACTION" # conn3, et ei saaks muutuda lugemise ajal
         #conn3.execute(Cmd3)
         Cmd="select value from dichannels where val_reg='"+svc+"' and member='"+str(member)+"'"

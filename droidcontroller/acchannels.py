@@ -37,18 +37,23 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
     def setReadPeriod(self, invar):
-        ''' Set the ai reading period in s, executes sync if time from last read was earlier than period ago.
-            values considered as stalled after 10x self.readperiod
-        '''
+        ''' Set the ai reading period in s, to execute sync if time from last read was earlier than period ago. '''
         self.readperiod = invar  # values considered as stalled after 10x self.readperiod
 
+    def getReadPeriod(self):
+        ''' Returns the ai reading period in s '''
+        return self.readperiod  # values considered as stalled after 10x self.readperiod
 
     def setSendPeriod(self, invar):
-        ''' Set the ai notification period s, executes sync if time from last read was earlier than period ago '''
+        ''' Set the ai notification period s, to execute sync if time from last read was earlier than period ago '''
         self.sendperiod = invar
 
+    def getSendPeriod(self):
+        ''' Set the ai notification period s, executes sync if time from last read was earlier than period ago '''
+        return self.sendperiod
 
     def sqlread(self, table):
+        ''' Read the sql file into memory '''
         s.sqlread(table) #
 
     def Initialize(self): # before using this create s=SQLgeneral()
@@ -556,7 +561,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
 
-    def get_aivalue(self,svc,member): # r
+    def get_aivalue(self,svc,member): 
         ''' Returns raw,value,lo,hi,substatus values based on service name and member number '''
         # status gets reported as summary status foir service, not svc member!
         #(mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,comment,type integer)
