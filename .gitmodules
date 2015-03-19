@@ -1,0 +1,4 @@
+[submodule "pymodbus"]
+	path = pymodbus
+	url = https://github.com/droid4control/pymodbus.git
+	branch = python3
