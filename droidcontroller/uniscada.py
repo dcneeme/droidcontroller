@@ -56,7 +56,7 @@ class UDPchannel():
         self.UDPlogSock.settimeout(None) # for syslog
         self.UDPlogSock.setsockopt(SOL_SOCKET, SO_BROADCAST, 1) # broadcast allowed
 
-        print('init: created uniscada and syslog connections to '+ip+':'+str(port)+' and '+loghost+':'+str(logport))
+        log.info('init: created uniscada and syslog connections to '+ip+':'+str(port)+' and '+loghost+':'+str(logport))
         self.table = 'buff2server' # can be anything, not accessible to other objects WHY? would be useful to know the queue length...
         self.Initialize()
 
@@ -128,13 +128,13 @@ class UDPchannel():
             if not bytes_in < 0:
                 self.traffic[0] = bytes_in
             else:
-                print('invalid bytes_in',bytes_in)
+                log.warning('invalid bytes_in',bytes_in)
 
         if bytes_out != None:
             if not bytes_out < 0:
                 self.traffic[1] = bytes_out
             else:
-                print('invalid bytes_out',bytes_out)
+                log.warning('invalid bytes_out',bytes_out)
 
 
     def set_inum(self,inum = 0): # set message counter
@@ -172,7 +172,7 @@ class UDPchannel():
         try:
             self.conn.execute(Cmd)
             self.conn.commit()
-            print('buffer content deleted')
+            log.debug('buffer content deleted')
         except:
             traceback.print_exc()
 
@@ -199,7 +199,7 @@ class UDPchannel():
         except:
             msg='FAILED to write svc into buffer'
             #syslog(msg) # incl syslog
-            print(msg)
+            log.warning(msg)
             traceback.print_exc()
             return 1
 
@@ -237,14 +237,14 @@ class UDPchannel():
                 Cmd="delete from "+self.table
                 self.conn.execute(Cmd)
                 msg='deleted '+str(delcount)+' unsent messages from '+self.table+'!'
-                print(msg)
+                log.warning(msg)
                 #syslog(msg)
             self.conn.commit() # buff2server transaction end
             return delcount # 0
             #time.sleep(1) # prooviks
         except:
             msg='problem with unsent, '+str(sys.exc_info()[1])
-            print(msg)
+            log.warning(msg)
             #syslog(msg)
             traceback.print_exc()
             #sys.stdout.flush()
@@ -269,7 +269,7 @@ class UDPchannel():
         try:
             self.conn.execute(Cmd)
         except:
-            print('could not start transaction on self.conn, '+self.table)
+            log.warning('could not start transaction on self.conn, '+self.table)
             traceback.print_exc()
 
         Cmd = "SELECT * from "+self.table+" where ts_tried=0 or (ts_tried+0>1358756016 and ts_tried+0<"+str(self.ts)+"+0-"+str(timetoretry)+") AND status+0 != 3 order by ts_created asc limit 30"
@@ -348,9 +348,9 @@ class UDPchannel():
 
         try:
             sendlen=self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr) # tagastab saadetud baitide arvu
-            self.traffic[1]=self.traffic[1]+sendlen # traffic counter udp out
+            self.traffic[1] = self.traffic[1]+sendlen # traffic counter udp out
             msg='==>> sent ' +str(sendlen)+' bytes to '+str(repr(self.saddr))+' '+sendstring.replace('\n',' ')   # show as one line
-            print(msg)
+            log.debug(msg)
             #syslog(msg)
             sendstring=''
             self.ts_udpsent=self.ts # last successful udp send
@@ -358,7 +358,7 @@ class UDPchannel():
         except:
             msg='udp send failure in udpsend() to saddr '+repr(self.saddr)+', lasting s '+str(int(self.ts - self.ts_udpsent)) # cannot send, this means problem with connectivity
             #syslog(msg)
-            print(msg)
+            log.warning(msg)
             traceback.print_exc()
 
             try:
@@ -412,29 +412,29 @@ class UDPchannel():
 
             if (int(raddr[1]) < 1 or int(raddr[1]) > 65536):
                 msg='illegal remote port '+str(raddr[1])+' in the message received from '+raddr[0]
-                print(msg)
+                log.warning(msg)
                 #syslog(msg)
 
             if raddr[0] != self.ip:
                 msg='illegal sender '+str(raddr[0])+' of message: '+data+' at '+str(int(self.ts))  # ignore the data received!
-                print(msg)
+                log.warning(msg)
                 #syslog(msg)
                 data='' # data destroy
 
             if "id:" in data: # first check based on host id existence in the received message, must exist to be valid message!
-                in_id=data[data.find("id:")+3:].splitlines()[0]
+                in_id = data[data.find("id:")+3:].splitlines()[0]
                 if in_id != self.host_id:
                     log.warning("invalid id "+in_id+" in server message from "+str(raddr[0])) # this is not for us!
-                    data=''
+                    data = ''
                     return data # error condition, traffic counter was still increased
                 else:
-                    self.ts_udpgot=self.ts # timestamp of last udp received
-
-                try:
-                    self.led.commLED(1) # data from server, comm OK
-                except:
-                    pass
-                self.sk.up()
+                    log.info('got ack or cmd from server '+str(raddr[0])) #### 
+                    self.sk.up()
+                    self.ts_udpgot = self.ts # timestamp of last udp received
+                    try:
+                        self.led.commLED(1) # data from server, comm OK
+                    except:
+                        pass
 
                 lines=data.splitlines() # split message into key:value lines
                 for i in range(len(lines)): # looking into every member of incoming message
@@ -468,7 +468,7 @@ class UDPchannel():
                                         self.conn.execute(Cmd) # deleted
                                     except:
                                         msg='problem with '+Cmd+'\n'+str(sys.exc_info()[1])
-                                        print(msg)
+                                        log.warning(msg)
                                         #syslog(msg)
                                         time.sleep(1)
                                     self.conn.commit() # buff2server transaction end
@@ -571,7 +571,7 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
             pass
         else:
             msg='push: found no file '+filename
-            print(msg)
+            log.warningt(msg)
             return 2 # no such file
 
         if '.gz' in filename or '.tgz' in filename: # packed already
@@ -697,12 +697,12 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
                     output.write(f.read());
                     output.close() # file with filename2 created
                     msg='pull: gz file '+filename+' unzipped to '+filename2+', previous file kept as '+filebak
-                    print(msg)
+                    log.warning(msg)
                 except:
                     os.rename(filename2+'.bak', filename2) # restore the previous versioon if unzip failed
                     msg='pull: file '+filename+' unzipping failure, previous file '+filename2+' restored. '+str(sys.exc_info()[1])
                     #traceback.print_exc()
-                    print(msg)
+                    log.info(msg)
                     #udp.syslog(msg)
                     self.traffic[0] += dnsize
                     return 1
@@ -713,12 +713,12 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
                     f.extractall() # extract all into the current directory
                     f.close()
                     msg='pull: tgz file '+filename+' successfully unpacked'
-                    print(msg)
+                    log.info(msg)
                     #udp.syslog(msg)
                 except:
                     msg='pull: tgz file '+filename+' unpacking failure! '+str(sys.exc_info()[1])
                     #traceback.print_exc()
-                    print(msg)
+                    log.warning(msg)
                     #udp.syslog(msg)
                     self.traffic[0] += dnsize
                     return 1
@@ -744,13 +744,13 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
         else:
             if dnsize<filesize:
                 msg='pull: file '+filename+' received partially with size '+str(dnsize)
-                print(msg)
+                log.warning(msg)
                 #udp.syslog(msg)
                 self.traffic[0] += dnsize
                 return 1 # next try will continue
             else:
                 msg='pull: file '+filename+' received larger than unexpected, in size '+str(dnsize)
-                print(msg)
+                log.warning(msg)
                 #udp.syslog(msg)
                 self.traffic[0] += dnsize
                 return 99
@@ -818,15 +818,15 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
                 self.conn.execute(Cmd)
             self.conn.commit()
             msg='calendar table updated'
-            print(msg)
+            log.warning(msg)
             #udp.syslog(msg) # FIXME - syslog via UDPchannel does not work. syslog() is found, but not it's logaddr?
             #self.syslog(msg) # common parent UDP TCP channel
             return 0
         except:
             msg='delete + insert to calendar table failed!'
-            print(msg)
+            log.warning(msg)
             #udp.syslog(msg)
-            print('logaddr in tcp',self.logaddr)
+            log.warning('logaddr in tcp',self.logaddr)
             #self.syslog(msg,logaddr=self.logaddr) # class UDPchannel is parent to TCPchannel
             #UDPchannel.syslog(msg)
             traceback.print_exc() # debug
