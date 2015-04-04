@@ -440,8 +440,8 @@ class RegularComm(SQLgeneral): # r
         ''' sends regular service messages that are not related to aichannels, dichannels or counters.
             Returns number of bytes sent, None if send queue was not appended at this time.
         '''
-        self.ts=time.time()
-        res=None
+        self.ts = time.time()
+        res = None
         if self.ts > self.ts_regular + self.interval: # time to send again
 
 
@@ -464,7 +464,7 @@ class RegularComm(SQLgeneral): # r
                 elif svc == 'ip': # own ip
                     sendstring += svc+':'+str(self.host_ip)+'\n'
 
-            res=udp.udpsend(sendstring) # loop over, SEND AWAY
+            res = udp.udpsend(sendstring) # loop over, SEND AWAY
             self.ts_regular = self.ts
 
             # put python alive mark into the process list
@@ -484,7 +484,7 @@ class RegularComm(SQLgeneral): # r
         ''' to enable checking application activity the process with lifetime of 2*interval is started via subexec() '''
         if interval == 0:
             interval=2*self.interval  # regular communication will keep about 2 processes alive
-        tbs=alivecmd+' '+str(interval) # +' &' # & not needed
+        tbs = alivecmd+' '+str(interval) # +' &' # & not needed
         print('alive_fork',tbs) # debug
         if alivecmd != '':
             try:

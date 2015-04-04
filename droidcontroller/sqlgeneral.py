@@ -1,3 +1,5 @@
+# This Python file uses the following encoding: utf-8
+
 #to be imported into modbus_sql. needs mb and conn
 '''  Creates multiple modbus access channels for various access channels defined in devices.sql.
     Also creates communication channel to uniscada server, statekeeper and gpioled instances.
@@ -11,12 +13,6 @@ import sys
 from pymodbus import *
 from droidcontroller.comm_modbus import CommModbus  # contains CommModbus, .read(), .write()
 from droidcontroller.uniscada import *
-#from droidcontroller.statekeeper import * # siin ei kasutata? aga childs?
-#try:
-#    from droidcontroller.gpio_led import * # kes kasutab?
-#except:
-#    log.info('FAILED to import gpio_led')
-#    pass 
     
 import logging
 log = logging.getLogger(__name__)
@@ -157,17 +153,17 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
         return mb[mbi].read(mba,reg,count)
 
 
-    def sqlread(self, table): # drops table and reads from file table.sql that must exist
+    def sqlread(self, table): # drops table and reads from file <table>.sql that must exist
         sql=''
         filename=table+'.sql' # the file to read from
         try:
             sql = open(filename).read()
             msg='found '+filename
-            print(msg)
+            log.info(msg)
         except:
             msg='FAILURE in opening '+filename+': '+str(sys.exc_info()[1])
             print(msg)
-            udp.syslog(msg)
+            #udp.syslog(msg)
             traceback.print_exc()
             time.sleep(1)
             return 1
@@ -179,14 +175,14 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
             conn.executescript(sql) # read table into database
             conn.commit()
             msg='sqlread: successfully recreated table '+table
-            print(msg)
-            udp.syslog(msg)
+            log.info(msg)
+            #udp.syslog(msg)
             return 0
 
         except:
             msg='sqlread() problem for '+table+': '+str(sys.exc_info()[1])
-            print(msg)
-            udp.syslog(msg)
+            log.warning(msg)
+            #udp.syslog(msg)
             traceback.print_exc()
             time.sleep(1)
             return 1
@@ -204,8 +200,8 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
         if value == '':
             msg='no setup value '+register+'! using 0 instead!'
             value='0'
-            print(msg) # debug
-            udp.syslog(msg)
+            log.warning(msg) # debug
+            #udp.syslog(msg)
         return value # str
 
 
@@ -269,7 +265,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
             conn.commit() # buff2server trans lopp
 
             msg='setup reported'
-            log.infot(msg)
+            log.info(msg)
             udp.syslog(msg) # log message to file
             sys.stdout.flush()
             time.sleep(0.5)

@@ -1,8 +1,6 @@
 # This Python file uses the following encoding: utf-8
 
 # send and receive monitoring and control messages to from UniSCADA monitoring system
-# udp kuulamiseks thread?
-# neeme
 
 import time, datetime
 import sqlite3
@@ -26,7 +24,7 @@ class UDPchannel():
 
     '''
 
-    def __init__(self, id = '000000000000', ip = '127.0.0.1', port = 44445, receive_timeout = 0.1, retrysend_delay = 5, loghost = '0.0.0.0', logport=514): # delays in seconds
+    def __init__(self, id = '000000000000', ip = '127.0.0.1', port = 44445, receive_timeout = 0.1, retrysend_delay = 5, loghost = '0.0.0.0', logport=514, copynotifier=None): # delays in seconds
         #from droidcontroller.connstate import ConnState
         from droidcontroller.statekeeper import StateKeeper
         self.sk = StateKeeper(off_tout=300, on_tout=0) # conn state with up/down times. 
@@ -38,7 +36,8 @@ class UDPchannel():
             self.led = GPIOLED() # led alarm and conn
         except:
             log.warning('GPIOLED not imported')
-
+                        
+        self.set_copynotifier(copynotifier) # parallel to uniscada notification in another format
         self.host_id = id
         self.ip = ip
         self.port = port
@@ -58,6 +57,7 @@ class UDPchannel():
 
         log.info('init: created uniscada and syslog connections to '+ip+':'+str(port)+' and '+loghost+':'+str(logport))
         self.table = 'buff2server' # can be anything, not accessible to other objects WHY? would be useful to know the queue length...
+        self.sent = '' # last servicetuple sent to the buffer
         self.Initialize()
 
     def Initialize(self):
@@ -74,6 +74,9 @@ class UDPchannel():
         self.setLogIP(self.loghost)
 
 
+    def set_copynotifier(self, copynotifier):
+        self.copynotifier = copynotifier
+    
     def setIP(self, invar):
         ''' Set the monitoring server ip address '''
         self.ip = invar
@@ -195,6 +198,9 @@ class UDPchannel():
             Cmd="INSERT into "+self.table+" values('"+sta_reg+"',"+str(status)+",'"+val_reg+"','"+value+"',"+str(self.ts)+",0,0)" # inum and ts_tried left initially empty
             #print(Cmd) # debug
             self.conn.execute(Cmd)
+            #self.last = servicetuple
+            if self.copynotifier:
+                self.copynotifier(servicetuple) # see on nagios.py sees asuv output_and_send
             return 0
         except:
             msg='FAILED to write svc into buffer'
@@ -204,7 +210,11 @@ class UDPchannel():
             return 1
 
 
-
+    #def get_last(self):
+    #    ''' Return last servicetuple sent to the buffer. Can be used for parallel messaging for example. '''
+    #    return self.last
+    
+    
     def unsent(self):  # delete unsent for too long messages - otherwise the udp messages will contain older key:value duplicates!
         ''' Counts the non-acknowledged messages and removes older than 3 times retrysend_delay '''
         if self.ts - self.ts_unsent < self.retrysend_delay / 2: # no need to recheck too early
@@ -216,7 +226,7 @@ class UDPchannel():
         try:
             Cmd="BEGIN IMMEDIATE TRANSACTION"  # buff2server
             self.conn.execute(Cmd)
-            Cmd="SELECT count(sta_reg),min(ts_created),max(ts_created) from "+self.table+" where ts_created+0+"+str(3*self.retrysend_delay)+"<"+str(self.ts) # yle 3x regular notif
+            Cmd="SELECT count(sta_reg),min(ts_created),max(ts_created) from "+self.table+" where ts_created+0+"+str(10*self.retrysend_delay)+"<"+str(self.ts) # yle 3x regular notif
             cur = self.conn.cursor()
             cur.execute(Cmd)
             for rida in cur: # only one line for count if any at all
@@ -226,6 +236,10 @@ class UDPchannel():
                     mintscreated=rida[1]
                     maxtscreated=rida[2]
                     print(delcount,'services lines waiting ack for',10*self.retrysend_delay,' s to be deleted')
+                    Cmd="select * from "+self.table+" where ts_created+0+"+str(10*self.retrysend_delay)+"<"+str(self.ts) # 
+                    self.conn.execute(Cmd)
+                    for rida in cur:
+                        print(str(repr(rida))) # debug
                     Cmd="delete from "+self.table+" where ts_created+0+"+str(10*self.retrysend_delay)+"<"+str(self.ts) # +" limit 10" # limit lisatud 23.03.2014 aga miks?
                     self.conn.execute(Cmd)
 
@@ -341,11 +355,9 @@ class UDPchannel():
 
         self.traffic[1]=self.traffic[1]+len(sendstring) # adding to the outgoing UDP byte counter
 
-        try:
+        if 'led' in dir(self):
             self.led.commLED(0) # off, blinking shows sending and time to ack
-        except:
-            pass
-
+        
         try:
             sendlen=self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr) # tagastab saadetud baitide arvu
             self.traffic[1] = self.traffic[1]+sendlen # traffic counter udp out
@@ -361,11 +373,9 @@ class UDPchannel():
             log.warning(msg)
             traceback.print_exc()
 
-            try:
+            if 'led' in dir(self):
                 self.led.alarmLED(1) # send failure
-            except:
-                pass
-
+            
             return None
 
 
@@ -431,11 +441,9 @@ class UDPchannel():
                     log.info('got ack or cmd from server '+str(raddr[0])) #### 
                     self.sk.up()
                     self.ts_udpgot = self.ts # timestamp of last udp received
-                    try:
+                    if 'led' in dir(self):
                         self.led.commLED(1) # data from server, comm OK
-                    except:
-                        pass
-
+                    
                 lines=data.splitlines() # split message into key:value lines
                 for i in range(len(lines)): # looking into every member of incoming message
                     if ":" in lines[i]:
@@ -483,7 +491,7 @@ class UDPchannel():
             return None
 
 
-    def syslog(self, msg,logaddr=()): # sending out syslog message to self.logaddr.
+    def syslog(self, msg,logaddr=()): # sending out syslog message to self.logaddr
         msg=msg+"\n" # add newline to the end
         #print('syslog send to',self.logaddr) # debug
         dnsize=0
