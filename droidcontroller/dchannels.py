@@ -132,7 +132,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                             else: # just update the timestamp!
                                 chg=0
                                 Cmd="UPDATE "+self.in_sql+" set ts='"+str(self.ts)+"', chg='"+str(chg)+"' where mba='"+str(mba)+"' and mbi="+str(mbi)+" and regadd='"+str(regadd+i)+"' and bit='"+str(bit)+"'" # old value unchanged, use ts_CHG AS TS!
-                            log.debug('dichannels udpdate:',Cmd) 
+                            log.debug('dichannels udpdate: '+Cmd) 
                             conn.execute(Cmd) # write
                         except:
                             traceback.print_exc()
