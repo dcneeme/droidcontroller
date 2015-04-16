@@ -781,9 +781,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 if raw != None:
                     if rowproblem == 1:
                         log.warning('svc processing skipped due to invalid data from '+self.in_sql+' for svc '+val_reg+', srow: '+repr(srow))
-                    elif (ots < ts_now - 10*self.readperiod and ots < ts_now - 2*self.sendperiod): # raw too old, stalled
+                    elif regtype != 'r' and (ots < ts_now - 10*self.readperiod and ots < ts_now - 2*self.sendperiod): # raw too old, stalled
                         log.warning('svc processing skipped due to stalled (for '+str(int(ts_now - ots))+' s) raw data ('+str(raw)+') for '+val_reg+'.'+str(member))
-                    else: # data fresh enough, going to process
+                    else: # data fresh enough, going to process. data of type r is never stalled.
 
                         ## POWER? FILTER? ####
                         if (cfg&64): # power, no sign, increment to be calculated! divide increment to time from the last reading to get the power
@@ -848,9 +848,13 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         
                         
                         if value != None:
-                            Cmd="update "+self.in_sql+" set status='"+str(mstatus)+"', value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
-                            conn.execute(Cmd) # who commits? the calling method, read_all()!!!
-
+                            if (outhi > 0 and value < 5 * outhi) or outhi == 0: # update status and value
+                                Cmd="update "+self.in_sql+" set status='"+str(mstatus)+"', value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
+                                # limit possible value spikes after restart due to counter reset
+                                conn.execute(Cmd) # who commits? the calling method, read_all()!!!
+                                log.debug(Cmd) # status and value update based on raw
+                            else:
+                                log.warning('skipped updating '+self.in_sql+' with too large value '+str(value)+' for val_reg '+val_reg+' member '+str(member)+' while outhi '+str(outhi))
                         else:
                             log.warning(self.in_sql+' NOT updated due to '+val_reg+' member '+str(member)+' value None! chk regadd '+str(regadd))
                             rowproblem = 1
