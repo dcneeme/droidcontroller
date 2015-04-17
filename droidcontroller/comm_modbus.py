@@ -27,7 +27,7 @@ class CommModbus(Comm):
         Otherwise 0.5 s tout is used for every transaction!!
     '''
 
-    def __init__(self, type = 'h', **kwargs):
+    def __init__(self, **kwargs):
         ''' Initialize Modbus client
 
         For Modbus serial client use:
@@ -53,7 +53,8 @@ class CommModbus(Comm):
 
         self.errorcount = 0 # add here modbus problems, related to mba
         self.errors = {} # {mba:errcount}, per modbus address
-        self.type = type # default h
+        self.type = '' # normal modbus, may be changed to n or u for npe
+        self.port = None # only exists for tcp (rtu or tcp over tcp)
         #print(kwargs) # debug
         if ('host' in kwargs):
             self.host = kwargs.get('host','127.0.0.1')

@@ -356,8 +356,13 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 return 1
         else:
             #log.warning('recreating modbus channel due to error on '+str(mbhost[mbi]))
-            mb[mbi] = CommModbus(host=mbhost[mbi])
-            msg = 'recreated mb['+str(mbi)+'], this aicochannels grp read FAILED for mbi,mba,regadd,count '+str(mbi)+', '+str(mba)+', '+str(regadd)+', '+str(count)
+            port = mb[mbi].get_port() # None if not tcp
+            host = mb[mbi].get_host() # always exists, ip or /dev/tty
+            #type = mb[mbi].get_type() # always exists, not needed, defined by host
+            
+            #mb[mbi] = CommModbus(host=mbhost[mbi]) # open again
+            mb[mbi] = CommModbus(host=host, port=port) # open again
+            msg = 'recreated mb['+str(mbi)+'] due to read FAILURE for mbi,mba,regadd,count '+str(mbi)+', '+str(mba)+', '+str(regadd)+', '+str(count)
             log.warning(msg)
             time.sleep(0.5) # hopefully helps to avoid sequential error / recreations
             return 1
@@ -795,11 +800,11 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                             
                             log.debug('got result from cp['+str(self.cpi)+']: '+str(res)+', params ots '+str(ots)+', raw '+str(raw)+', ts_now '+str(self.ts))  # debug
                             if (cfg&128): # on off state from power
-                                raw = res[1] # state on/off
+                                raw = res[1] # state on/off 0 or 1
                                 if res[2] != 0: # on/off change
                                     chg = 1 # immediate notification needed due to state change
                                     log.info('state change in cp['+str(self.cpi)+']')
-                            else:
+                            else: # just power, not state
                                 raw = res[0] # power
 
                         elif (cfg&2048): # 1wire filter. should have cfg bit 4096 as well!

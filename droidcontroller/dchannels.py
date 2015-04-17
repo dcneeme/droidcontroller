@@ -145,8 +145,12 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         else:
             #failure, recreate mb[mbi]
             #print('recreating modbus channel due to error to', mbhost[mbi])
-            mb[mbi] = CommModbus(host=mbhost[mbi])
-            msg='recreated mb['+str(mbi)+'], this di grp data read FAILED for mbi,mba,regadd,count '+str(mbi)+', '+str(mba)+', '+str(regadd)+', '+str(count)
+            #mb[mbi] = CommModbus(host=mbhost[mbi])
+            
+            port = mb[mbi].get_port() # None if not tcp
+            host = mb[mbi].get_host() # always exists, ip or /dev/tty
+            mb[mbi] = CommModbus(host=host, port=port) # open again
+            msg='recreated mb['+str(mbi)+'] due to di grp data read FAILED for mbi,mba,regadd,count '+str(mbi)+', '+str(mba)+', '+str(regadd)+', '+str(count)
             log.warning(msg)
             # should not be necessary with improved by cougar pymodbus is in use!!
             time.sleep(0.5) # hopefully helps to avoid sequential error / recreations
@@ -328,7 +332,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         cur=conn.cursor()
         Cmd="select * from dichannels where val_reg='"+val_reg+"' order by member asc" # data for one service ###########
         cur.execute(Cmd)
-        rowproblem = 0 # do not report service where meber of type h is stalled
+        rowproblem = 0 # do not report service where member of type h is stalled
         for srow in cur: # ridu tuleb nii palju kui selle teenuse liikmeid, pole oluline milliste mba ja readd vahele jaotatud
             #print 'row in cursor3a',srow # temporary debug
             mba=0 # local here
@@ -367,8 +371,8 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             #print 'make_dichannel_svc():',val_reg,'member',member,'value before status proc',value,', lisa',lisa  # temporary debug
 
             #if ots < self.ts + self.sendperiod: # stalled!
-            if self.ts > ots + self.sendperiod: # stalled!
-                rowproblem - 1 # do not send this svc
+            if self.ts > ots + self.sendperiod: # stalled! FIXME / only for type h?? 
+                rowproblem = 1 # do not send this svc
                 log.warning('svc '+val_reg+' member '+str(member)+' stalled for '+str(int(self.ts - ots))+' s!')
             
             if lisa != "": # not the first member any more

@@ -237,7 +237,7 @@ class UDPchannel():
                     maxtscreated=rida[2]
                     print(delcount,'services lines waiting ack for',10*self.retrysend_delay,' s to be deleted')
                     Cmd="select * from "+self.table+" where ts_created+0+"+str(10*self.retrysend_delay)+"<"+str(self.ts) # 
-                    self.conn.execute(Cmd)
+                    cur.execute(Cmd)
                     for rida in cur:
                         print(str(repr(rida))) # debug
                     Cmd="delete from "+self.table+" where ts_created+0+"+str(10*self.retrysend_delay)+"<"+str(self.ts) # +" limit 10" # limit lisatud 23.03.2014 aga miks?
