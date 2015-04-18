@@ -367,31 +367,42 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 ots=eval(srow[9]) # value ts timestamp
             if srow[10] != '':
                 chg=eval(srow[10]) # change flag 0..3
-
+            #if srow[11] != '':  # desc not needed
+            if srow[12] != '':
+                regtype = srow[12] # change flag 0..3
+                
             #print 'make_dichannel_svc():',val_reg,'member',member,'value before status proc',value,', lisa',lisa  # temporary debug
 
             #if ots < self.ts + self.sendperiod: # stalled!
-            if self.ts > ots + self.sendperiod: # stalled! FIXME / only for type h?? 
-                rowproblem = 1 # do not send this svc
-                log.warning('svc '+val_reg+' member '+str(member)+' stalled for '+str(int(self.ts - ots))+' s!')
+            if (regtype == 'h' or regtype == 'i'  or regtype == 'c' or regtype == 'r'): # for channel data only, not for setup values (s, s!)
+                if self.ts > ots + self.sendperiod: # stalled! FIXME / only for type h?? 
+                    rowproblem = 1 # do not send this svc
+                    log.warning('svc '+val_reg+' member '+str(member)+' stalled for '+str(int(self.ts - ots))+' s!')
+                
+                if lisa != "": # not the first member any more
+                    lisa = lisa+" "
+
+                # status and inversions according to configuration byte
+                status = 0 # initially for each member
+                if (cfg&4): # value2value inversion
+                    value = (1^value) # possible member values 0 voi 1
+                lisa=lisa + str(value) # adding possibly inverted member value to multivalue string
+
+                if (cfg&8): # value2status inversion
+                    value = (1^value) # member value not needed any more
+
+                if (cfg&1): # status warning if value 1
+                    status = value #
+                if (cfg&2): # status critical if value 1
+                    status = 2 * value
+
+            elif 's' in regtype: # setup value
+                value = ovalue # use the value in table without conversion or influence on status
+                status = 0 # there should be no status from setup
+                if mba > 0:
+                    log.warning('NO mba SHOULD be set for setup value '+val_reg+'.'+str(member)) # debug
+                    
             
-            if lisa != "": # not the first member any more
-                lisa = lisa+" "
-
-            # status and inversions according to configuration byte
-            status = 0 # initially for each member
-            if (cfg&4): # value2value inversion
-                value = (1^value) # possible member values 0 voi 1
-            lisa=lisa + str(value) # adding possibly inverted member value to multivalue string
-
-            if (cfg&8): # value2status inversion
-                value = (1^value) # member value not needed any more
-
-            if (cfg&1): # status warning if value 1
-                status = value #
-            if (cfg&2): # status critical if value 1
-                status = 2*value
-
             if status > sumstatus: # summary status is defined by the biggest member sstatus
                 sumstatus = status # suurem jaab kehtima
 
