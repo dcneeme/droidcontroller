@@ -1,5 +1,7 @@
 #temp and humidity compensation for humidity and co2 sensor
 import traceback
+import logging
+log = logging.getLogger(__name__)
             
 class RhCoCalc:
     ''' Humidity reading depends on temperature.
@@ -16,7 +18,7 @@ class RhCoCalc:
     def __init__(self, a=0.41, b=-520, c=0.5, d= 3.35, e= -650, f= -9.3, g= -1.8):
         ''' a = kordaja  niiskuse  y=ax+b
             b = nihe hum
-            c = temp moju niisklusele kordaja
+            c = temp moju niiskusele kordaja
             d = kordaja co2 arv 
             f = temp komp kordaja co2
             g = niiskuse komp kordaja co2
@@ -61,7 +63,8 @@ class RhCoCalc:
         #    self.outhum = None
         #    traceback.print_exc()
             
-        print('hum calc',round(self.rawhum*self.a), round(self.b), round(self.c*self.temp)) # debug
+        log.info('rawtemp '+str(self.temp)+', rawhum '+str(self.rawhum)+', rawco2 '+str(self.rawco2))
+        print('hum calc', round(self.rawhum*self.a), round(self.b), round(self.c*self.temp)) # kordaja, nihe, temp moju
         if self.outhum != None:
             self.outco2 = int(round(self.rawco2*self.d+self.e+self.f*self.temp+self.g*self.outhum, 0))
             print('co2 calc', round(self.rawco2*self.d), round(self.e), round(self.f*self.temp), round(self.g*self.outhum))

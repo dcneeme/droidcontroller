@@ -13,8 +13,14 @@ import tarfile
 import requests
 import logging
 log = logging.getLogger(__name__)
-
-
+try:
+    import netifaces
+    nf = 1 # ip = netifaces.ifaddresses('eth0')[2][0]['addr']
+    log.info('netifaces imported')
+except:
+    nf = None # ip='install_netifaces!'
+    log.warning('netifaces NOT imported!')
+    
 
 class UDPchannel():
     ''' Sends away the messages, combining different key:value pairs and adding host id and time. Listens for incoming commands and setup data.
@@ -70,10 +76,28 @@ class UDPchannel():
         self.conn = sqlite3.connect(':memory:')
         #self.cur=self.conn.cursor() # cursors to read data from tables / cursor can be local
         self.makebuff() # create buffer table for unsent messages
-        self.setIP(self.ip)
-        self.setLogIP(self.loghost)
+        #self.setIP(self.ip)
+        #self.setLogIP(self.loghost)
 
 
+    def get_conf(self, key, filename, delimiter = ' '): # delimiter separated key and string in the file
+        ''' Return the string after the key and delimiter from the file '''
+        try:
+            with open(filename) as f:
+                lines = f.read().splitlines()
+                for line in lines:
+                    if key+delimiter in line[0:len(key)+len(delimiter)]:
+                        return line.split(delimiter)[1] # [4:len(key)+1]
+        except:
+            log.error('no readable file '+filename+' for '+key)
+        return None
+
+    
+    def get_ip(self):
+        ''' Returns ONE effective ip address, the selection order is: tun0, eth0, wlan0, eth1 '''
+        pass # kuidas jalgida ip adr vms olekut pythonist?
+        
+    
     def set_copynotifier(self, copynotifier):
         self.copynotifier = copynotifier
     

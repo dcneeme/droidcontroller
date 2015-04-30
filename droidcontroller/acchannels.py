@@ -590,11 +590,11 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
     def set_aivalue(self,svc,member,value): # sets variables like setpoints or limits to be reported within services, based on service name and member number
         ''' Setting member value using sqlgeneral set_membervalue. adding sql table below for that '''
-        return s.set_membervalue(svc,member,value,self.in_sql,raw=False)
+        return s.set_membervalue(svc,member,value,self.in_sql,raw=False) # set value
 
     def set_airaw(self,svc,member,value): # sets variables like setpoints or limits to be reported within services, based on service name and member number
         ''' Setting member raw value using sqlgeneral set_membervalue. adding sql table below for that '''
-        return s.set_membervalue(svc,member,value,self.in_sql,raw=True)
+        return s.set_membervalue(svc,member,value,self.in_sql,raw=True) # set raw, value will be calc by make_
 
     def set_aovalue(self, value, mba, reg): # sets variables to control, based on physical addresses
         ''' Write value to follow into aochannels table. 
@@ -742,13 +742,13 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 val_reg = srow[2] # see on string
                 member = int(srow[3]) if srow[3] != '' else 0
                 cfg = int(srow[4]) if srow[4] != '' else 0 # konfibait nii ind kui grp korraga, esita hex kujul hiljem
-                x1 = int(srow[5]) if srow[5] != '' else 0
-                x2 = int(srow[6]) if srow[6] != '' else 0
-                y1 = int(srow[7]) if srow[7] != '' else 0
-                y2 = int(srow[8]) if srow[8] != '' else 0
-                outlo = int(srow[9]) if srow[9] != '' else 0
-                outhi = int(srow[10]) if srow[10] != '' else 0
-                avg = int(srow[11]) if srow[11] != '' else 0  #  averaging strength, values 0 and 1 do not average!
+                x1 = float(srow[5]) if srow[5] != '' else 0
+                x2 = float(srow[6]) if srow[6] != '' else 0
+                y1 = float(srow[7]) if srow[7] != '' else 0
+                y2 = float(srow[8]) if srow[8] != '' else 0
+                outlo = float(srow[9]) if srow[9] != '' else 0
+                outhi = float(srow[10]) if srow[10] != '' else 0
+                avg = float(srow[11]) if srow[11] != '' else 0  #  averaging strength, values 0 and 1 do not average!
                 block = int(srow[12]) if srow[12] != '' else 0 # off-tout for power related on/off
                 raw = int(srow[13]) if srow[13] != '' else 0 # Nonen teeb jama
                 ovalue = int(srow[14]) if (srow[14] != None and srow[14] != '' ) else 0 # teenuseliikme endine vaartus - MIKS vahel None???
@@ -821,18 +821,18 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                 
          
                             if x1 != x2 and y1 != y2: # seems like normal input data, also not state from power
-                                value=(raw-x1)*(y2-y1)/(x2-x1)
-                                value=int(round(y1+value)) # integer values to be reported only
+                                value = (raw-x1) * (y2-y1) / (x2-x1)
+                                value = int(round(y1+value)) # integer values to be reported only
                             else:
                                 #log.debug('val_reg '+val_reg+' member '+str(member)+', raw '+str(raw)+' ai2scale conversion NOT DONE! using value = raw ='+str(raw))
                                 #log.warning('val_reg '+val_reg+' member '+str(member)+', raw '+str(raw)+' ai2scale conversion NOT DONE!')
-                                value=None
+                                value = None
                                 rowproblem = 1 # this service will not be used in notification
-                                ## binary services defined in aicochjannels must have x1 x2 y1 y2! 0 1 0 1    
+                                ## binary services defined in aicochannels must have x1 x2 y1 y2! 0 1 0 1    
 
                         if value != None and avg != None and ovalue != None:
                             if avg > 1 and abs(value - ovalue) < value / 2:  # averaging the readings. big jumps (more than 50% change) are not averaged.
-                                value=int(((avg - 1) * ovalue+value)/avg) # averaging with the previous value, works like RC low pass filter
+                                value = int(((avg - 1) * ovalue+value)/avg) # averaging with the previous value, works like RC low pass filter
                                 log.debug('averaging on, value became '+str(value)) # debug
 
                             if (cfg&256) and abs(value - ovalue) > value / 5.0: # change more than 20% detected, use num w comma!
@@ -843,7 +843,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                             # counter2power and scaling done, status check begins ##########
                             if cfg&8192: # use hysteresis from block
                                 hyst = block # int
-                            mstatus=self.value2status(value,cfg,outlo,outhi,ostatus, hyst) # default hyst=0 value units
+                            mstatus = self.value2status(value,cfg,outlo,outhi,ostatus, hyst) # default hyst=0 value units
 
 
                             if mstatus != ostatus: # member status change detected
@@ -864,7 +864,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                             log.warning(self.in_sql+' NOT updated due to '+val_reg+' member '+str(member)+' value None! chk regadd '+str(regadd))
                             rowproblem = 1
 
-                    ############# h or i processing done #######
+                    ############# h, c, r or i processing done #######
 
             elif 's' in regtype: # setup value
                 value = ovalue # use the value in table without conversion or influence on status

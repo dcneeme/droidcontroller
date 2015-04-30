@@ -111,7 +111,8 @@ class PID:
             age = 0
         return self.onLimit, age
 
-
+           
+        
     def getvars(self, filter = None):
         ''' Returns internal variables as dictionary '''
         self.vars.update({'Kp' : self.Kp, \
@@ -333,7 +334,16 @@ class ThreeStep:
             if filter in self.vars:
                 return self.vars.get(filter)
 
-
+    def setLimit(self, invar):
+        ''' Sets the limit externally, together with the cumulative runtime '''
+        if invar != 0 and abs(int(invar)) == 1:
+            self.onLimit = invar
+            self.runtime = invar * self.MotorTime # sign depends on onLimit sign
+            log.debug('onLimit now '+str(self.onLimit)+', runtime '+str(self.runtime))
+        else:
+            log.warning('invalid parameter value '+str(invar)+' for setLimit')
+     
+     
     def setSetpoint(self, invar):
         """ Set the setpoint for the actual value to follow """
         self.Setpoint = invar

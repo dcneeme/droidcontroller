@@ -357,7 +357,7 @@ class CommModbus(Comm):
                         if isinstance(res, ModbusException): # viga
                             log.warning('write single register error: '+str(res))
                         else:
-                            log.warning('UNKNOWN write single register error')
+                            log.warning('UNKNOWN write single register error (neither response or exception), address '+str(mba)+', register '+str(reg))
                         return 2
                 except:
                     log.warning('write single register error: '+str(sys.exc_info()[1]))
