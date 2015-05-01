@@ -96,7 +96,7 @@ class NagiosMessage(object):
 
         if notfound > 0:
             print('translation for sendtuple '+str(sendtuple)+' not found in table '+self.table)
-            return ''
+            return '' # will not send this service 
 
         if svc_name[0] == '_': # skip, not needed for another nagios
             log.debug('skipped sending debug service '+svc_name)

@@ -334,16 +334,7 @@ class ThreeStep:
             if filter in self.vars:
                 return self.vars.get(filter)
 
-    def setLimit(self, invar):
-        ''' Sets the limit externally, together with the cumulative runtime '''
-        if invar != 0 and abs(int(invar)) == 1:
-            self.onLimit = invar
-            self.runtime = invar * self.MotorTime # sign depends on onLimit sign
-            log.debug('onLimit now '+str(self.onLimit)+', runtime '+str(self.runtime))
-        else:
-            log.warning('invalid parameter value '+str(invar)+' for setLimit')
-     
-     
+      
     def setSetpoint(self, invar):
         """ Set the setpoint for the actual value to follow """
         self.Setpoint = invar
@@ -435,7 +426,7 @@ class ThreeStep:
                 if self.onLimit != 0:
                     self.runtime = self.onLimit * self.MotorTime # to keep the limit active and runtime logical
                     self.tsLimit = time.time() # timestamp  of new state begin
-                    log.debug('threestep onlimit set to '+str(self.onLimit))
+                    log.info('threestep onlimit set to '+str(self.onLimit))
                 
             else:
                 log.debug('invalid value for set_onlimit or no need for state change')
@@ -503,7 +494,7 @@ class ThreeStep:
                     self.last_start = self.currtime
                     self.state = -1
                 
-                log.info(self.Name+': STARTED PULSE w len '+str(length))
+                log.debug(self.Name+': STARTED PULSE w len '+str(length))
                 self.runtime = self.runtime+length # new cumulative
             else: # no need for a new pulse
                 length = 0
@@ -512,7 +503,7 @@ class ThreeStep:
             length = 0
             #self.state = self.last_state
             msg='3step: waiting for runperiod end to start a new pulse'
-            log.info(msg)
+            log.debug(msg)
             
 
         #if abs(self.error) < self.MinpulseError and state != 0: # stop the ongoing pulse - not strictly needed, level output hardly in use anyway

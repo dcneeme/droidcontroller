@@ -556,7 +556,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
     def get_aivalue(self,svc,member): 
-        ''' Returns raw,value,lo,hi,substatus values based on service name and member number '''
+        ''' Returns value,lo,hi,substatus values based on service name and member number '''
         # status gets reported as summary status foir service, not svc member!
         #(mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,comment,type integer)
         cur=conn.cursor()
@@ -574,7 +574,6 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         for row in cur: # should be one row only
             #print(repr(row)) # debug
             found=1
-            #raw=int(float(row[0])) if row[0] != '' and row[0] != None else 0
             value=int(eval(row[0])) if row[0] != '' and row[0] != None else 0
             outlo=int(eval(row[1])) if row[1] != '' and row[1] != None else 0
             outhi=int(eval(row[2])) if row[2] != '' and row[2] != None else 0
