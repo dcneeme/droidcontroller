@@ -1,5 +1,8 @@
 # make gpio channel meanings selectable
 import os, traceback
+import logging
+log = logging.getLogger(__name__)
+
 try:
     import iMX233_GPIO as GPIO
 except:

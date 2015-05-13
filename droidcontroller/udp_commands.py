@@ -369,6 +369,8 @@ class RegularComm(SQLgeneral): # r
         self.ts_regular=self.app_start - interval # for immediate sending on start
         self.ts=self.app_start
         self.uptime=[0,0,0]
+        self.host_ip = 'unknown'
+                
         try:
             self.sync_uptime() # sys apptime to uptime[0]
             #uptime[0]=int(self.subexec('cut -f1 -d. /proc/uptime',1)) # should be avoided on npe, use only once

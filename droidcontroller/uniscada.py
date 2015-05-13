@@ -603,7 +603,7 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
             pass
         else:
             msg='push: found no file '+filename
-            log.warningt(msg)
+            log.warning(msg)
             return 2 # no such file
 
         if '.gz' in filename or '.tgz' in filename: # packed already

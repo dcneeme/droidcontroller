@@ -401,7 +401,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             if status > sumstatus: # summary status is defined by the biggest member sstatus
                 sumstatus = status # suurem jaab kehtima
 
-            #print 'make_channel_svc():',val_reg,'member',member,'value after status proc',value,', status',status,', sumstatus',sumstatus,', lisa',lisa  # debug
+            log.debug(val_reg+'.'+str(member)+' value after status proc '+str(value)+', sumstatus '+str(sumstatus)+', lisa '+str(lisa))
 
 
             #dichannels table update with new chg and status values. no changes for values! chg bit 0 off! set ts_msg!
