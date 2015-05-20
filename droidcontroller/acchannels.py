@@ -292,7 +292,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
         msg = 'grp read from mba '+str(mba)+'.'+str(regadd)+', cnt '+str(count)+', wc '+str(wcount)+', mbi '+str(mbi)+', regtype '+regtype
 
-        if count>0 and mba != 0 and wcount != 0:
+        if count > 0 and wcount > 0 and wcount < 5: # 64 bit max should be enough
             try:
                 if mb[mbi]:
                     result = mb[mbi].read(mba, regadd, count=count, type=regtype) # client.read_holding_registers(address=regadd, count=1, unit=mba)
@@ -307,7 +307,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 log.warning(msg)
                 return 2
         else:
-            msg += ' -- invalid count, mba, wcount or regtype!'
+            msg += ' -- invalid count or wcount!'
             log.warning(msg)
             return 2
 
@@ -527,13 +527,13 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 regadd=0
                 mba=0
 
-                mba=int(eval(row[0])) if row[0] != '' else 0 # must be a number
+                mba=int(eval(row[0])) if row[0] != '' else None  #  0 # must be a number
                 regadd=int(eval(row[1])) if row[1] != '' else 0 # must be a number
                 value=int(eval(row[2])) if row[2] != '' else 0  # komaga nr voib olla, teha int!
                 mbi=row[3] if row[3] != None else 0  # mbi on num!
                 
                 try:
-                    if mb[mbi] and mba > 0:
+                    if mb[mbi] and mba: # alpha innotek kasutab mba 0!  > 0:
                         respcode=respcode+mb[mbi].write(mba=mba, reg=regadd, value=value)
                         if respcode == 0:
                             log.debug('successfully written value '+str(value)+' to mbi '+str(mbi)+', mba '+str(mba)+' regadd '+str(regadd))
@@ -867,7 +867,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
             elif 's' in regtype: # setup value
                 value = ovalue # use the value in table without conversion or influence on status
-                if mba > 0:
+                if mba:
                     log.warning('NO mba SHOULD be set for setup value '+val_reg+'.'+str(member)) # debug
 
 
