@@ -73,7 +73,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         cur=conn.cursor()
         msg='d_grp read from mba '+str(mba)+', regadd '+str(regadd)+', count '+str(count)+', regtype '+regtype
 
-        if count>0 and mba != 0:
+        if count>0:
             try:
                 if mb[mbi]:
                     result = mb[mbi].read(mba, regadd, count=count, type=regtype)
@@ -88,7 +88,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 traceback.print_exc()
                 return 2
         else:
-            msg += '-- FAIL, invalid parameters of mba '+str(mba)+' or count '+str(count)
+            msg += '-- FAIL, invalid parameter count '+str(count)
             log.warning(msg)
             return 2
 
