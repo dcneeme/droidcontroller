@@ -63,8 +63,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         cur.execute(Cmd) # getting services to be read and reported
         for row in cur: # possibly multivalue service members
             val_reg=row[0]
+            sta_reg=val_reg[:-1]+'S' # status
             #cfg=int(row[1]) if row[1] != '' else 0
-            udp.udpsend(val_reg+':?\n') # ask last value from uniscada server if counter
+            udp.send([sta_reg,1,val_reg,'?']) # udp.udpsend(val_reg+':?\n') # ask via buffer only
         conn.commit()
         return 0
 
@@ -165,16 +166,11 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             log.info('going to dump table '+self.in_sql)
             try:
                 s.dump_table(self.in_sql)
-                #sendstring=self.make_svc(key,key[:-1]+'S')
-                ###sendstring = self.make_svc(key) # ei taha ilma olekuta saatmisi
-                ###log.debug('going to report back sendstring '+str(sendstring))
-                #udp.send(sendstring) # ????
+                
             except:
                 log.warning('FAILED to dump table '+self.in_sql)
                 traceback.print_exc() # debug
-        #if res == 0:
-            #self.read_all() # reread the changed channels to avoid repeated restore - no need
-
+        
         return res # kui setup_changed ==1, siis todo = varlist! aga kui samal ajal veel miski ootel?
 
 

@@ -109,7 +109,7 @@ class Mbus:
                 elif key[1] == 'B' or key[1] == 'b':
                     length = 3
                     hex = 0
-                elif key[1] == 'C' or key[1] == 'c':
+                elif key[1] == 'C' or key[1] == 'c' or key[1] == '2': # viimane on axis sks3 temp
                     length = 4
                     hex = 0
                 elif key[1] == '5': # hex float 32 bit real
@@ -119,7 +119,7 @@ class Mbus:
                     return res * coeff # coeff defined in parent
                     
                 else:
-                    log.warning('unsupported encoding for data, key '+str(key[0:2]))
+                    log.warning('unsupported encoding for data, key '+str(key[0:2])+', key[1] = '+str(key[1]))
                     return None
         try: # swap the bytes order and convert to integer
             res = 0
@@ -259,6 +259,10 @@ class Mbus:
         elif self.model == 'axisSKU03':
             start = 52
             key = '0486'
+        elif self.model == 'axisSKS3':
+            coeff = 10 
+            start = 27
+            key = '0407'
         else:
             log.warning('unknown model '+self.model)
             return None
@@ -285,7 +289,9 @@ class Mbus:
         elif self.model == 'axisSKU03':
             start = 59
             key = '0413' # from fex float
-        
+        elif self.model == 'axisSKS3':
+            start = 33
+            key = '8440' # from fex float
         else:
             log.warning('unknown model '+self.model)
             return None
@@ -308,6 +314,10 @@ class Mbus:
             coeff = 10.0 #
         elif self.model == 'axisSKU03':
             start = 65
+            key = '052e' # from fex float
+            coeff = 1000.0
+        elif self.model == 'axisSKS3':
+            start = 40
             key = '052e' # from fex float
             coeff = 1000.0
         else:
@@ -338,7 +348,10 @@ class Mbus:
             start = 71
             key = '053e' # from fex float
             coeff = 1000.0
-            
+        elif self.model == 'axisSKS3':
+            start = 46
+            key = '053e' # from fex float
+            coeff = 1000.0
         else:
             log.warning('unknown model '+self.model)
             return None
@@ -363,6 +376,10 @@ class Mbus:
         elif self.model == 'axisSKU03':
             start = [77, 83, 96]
             key = ['055b', '055f', '0563'] # from fex float
+        elif self.model == 'axisSKS3':
+            coeff = [0.01, 0.01, 0.01]
+            start = [53, 57, 61]    # 32, 32, 16 bit numbers. 
+            key = ['0259', '025d', '02fd'] # FIXME 
         else:
             log.warning('unknown model '+self.model)
             return None, None, None
