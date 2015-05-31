@@ -22,8 +22,8 @@ log = logging.getLogger(__name__)
     stripping ":" from the beginning and CRC plus CRLF from the end.
     
     TESTING:
-    from main_koskla2 import *; from droidcontroller.pic_update import *; pic=PicUpdate(mb)
-    pic.update(filename='1, IOplaat.hex') # mba is the first parameter
+    from main_koskla2 import *; from droidcontroller.pic_update import *; pic=PicUpdate(mb); pic.update(mba=1, filename='IOplaat.hex')
+
 '''
 
 class PicUpdate(object): # using the existing mb instance
@@ -185,10 +185,13 @@ class PicUpdate(object): # using the existing mb instance
             #traceback.print_exc()
             log.warning('device possibly in bootloader mode already, going to check with 3F3F')
             try:
-                self.mb[self.mbi].write(self.mba, self.regadd, values=[pic_id, 0x3F3F]) # test for bootloader mode, write success in this case
-                self.log.info('tested with 0x3F3F to regadd 998 - device on mba '+str(self.mba)+' already in bootloader mode!')
+                res = self.mb[self.mbi].write(self.mba, self.regadd, values=[pic_id, 0x3F3F]) # test for bootloader mode, write success in this case
+                if res == 0:
+                    self.log.info('tested with 0x3F3F to regadd 998 - device on mba '+str(self.mba)+' already in bootloader mode!')
+                else:
+                    self.log.warning('device on modbus address '+str(self.mba)+' not not in normal neither in bootloader mode, FATAL FAILURE!')
             except:
-                self.log.warning('device on modbus address '+str(self.mba)+' not device 0xF1 or not in normal neither in bootloader mode, FATAL FAILURE!')
+                self.log.warning('device on modbus address '+str(self.mba)+' not in normal neither in bootloader mode, FATAL FAILURE! chk mba!')
                 #traceback.print_exc()
                 time.sleep(2)
                 return 2
@@ -216,21 +219,22 @@ class PicUpdate(object): # using the existing mb instance
             self.log.info('going to write mba '+str(self.mba)+', regadd '+str(self.regadd)+', values '+str(values))
             res = self.mb[self.mbi].write(self.mba, self.regadd, values=values)  ##### into bootloader mode
             if res == 0: # ok
-                self.log.debug('bootloader for pic with id '+str(pic_id)+' started')
+                self.log.debug('bootloader ready to receive')
             else:
-                try:
-                    res = self.mb[self.mbi].read(self.mba,1,1) # ega enam loetav pole tavaline reg
-                    if res == 0:
-                        self.log.warning('bootloader for pic with id '+str(pic_id)+' NOT started, still in normal mode!')
-                        time.sleep(5)
-                        return 100
-                except:
-                    res = self.mb[self.mbi].write(self.mba, self.regadd, values=[pic_id, 0x3F3F])
-                    if res == 0:
-                        self.log.info('bootloader for pic with id '+str(pic_id)+' already started...')
+                time.sleep(12) # viimase versiooni viga
+                res = self.mb[self.mbi].write(self.mba, self.regadd, values=[pic_id, 0x3F3F])
+                if res == 0:
+                    self.log.info('pic with id '+str(pic_id)+' in bootloader mode after delay...')
+                    res = self.mb[self.mbi].write(self.mba, self.regadd, values=values)
+                    if res == 0: # ok
+                        self.log.debug('bootloader ready to receive')
                     else:
-                        self.log.info('device to be updated invalid state, not responding!')
+                        self.log.warning('bootloader PROBLEM for pic with id '+str(pic_id))
                         return 2
+                else:
+                    self.log.info('device to be updated invalid state, not responding!')
+                    return 2
+               
         except:
             self.log.warning('mode switching with values '+str(values)+' to regadd 998 FAILED, response '+str(res))
             traceback.print_exc()
