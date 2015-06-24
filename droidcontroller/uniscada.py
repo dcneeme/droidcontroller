@@ -524,16 +524,17 @@ class UDPchannel():
                                 except:
                                     inumm = 0
                                     
-                                if inumm >= 0 and inumm<65536:  # valid inum, response to message sent if 1...65535. datagram including "in:0" is a server initiated "fast communication" message
+                                if inumm >= 0:  # valid inum, response to message sent if 1...65535. datagram including "in:0" is a server initiated "fast communication" message
                                     #print "found valid inum",inum,"in the incoming message " # temporary
                                     msg='got ack '+str(inumm)+' in message: '+data.replace('\n',' ')
-                                    log.debug(msg)
+                                    log.info(msg)
                                     #syslog(msg)
 
                                     Cmd="BEGIN IMMEDIATE TRANSACTION" # buff2server, to delete acknowledged rows from the buffer
                                     self.conn.execute(Cmd) # buff2server ack transactioni algus, loeme ja kustutame saadetud read
                                     Cmd="DELETE from "+self.table+" WHERE inum='"+str(inumm)+"'"  # deleting all rows where inum matches server ack
                                     try:
+                                        log.info('deleting from buffer: '+Cmd)
                                         self.conn.execute(Cmd) # deleted
                                     except:
                                         msg='problem with '+Cmd+'\n'+str(sys.exc_info()[1])
@@ -541,11 +542,6 @@ class UDPchannel():
                                         #syslog(msg)
                                         time.sleep(1)
                                     self.conn.commit() # buff2server transaction end
-
-                        #if len(sendstring) > 0:
-                        #    self.udpsend(sendstring) # send the response right away to avoid multiple retransmits
-                        #    log.info('response to server: '+str(sendstring)) # this answers to the server but does not update the setup or service table yet!
-                        #siin ei vasta
 
                 return data_dict # possible key:value pairs here for setup change or commands. returns {} for just ack with no cmd
         else:
