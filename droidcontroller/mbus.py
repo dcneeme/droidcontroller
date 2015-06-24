@@ -37,13 +37,17 @@ class Mbus:
     '''
 
     def __init__(self, port='auto', autokey='FTDI', tout=3, speed=2400, model='sensusPE'):  # tout 1 too small! win port like 'COM27'
-        ports=list(serial.tools.list_ports.comports())
-        found = 0
+        ports = list(serial.tools.list_ports.comports())
+        #found = 0
         if port == 'auto':
-            for i in range(len(ports)):
-                if autokey in ports[i][1]:
-                    found = 1
-                    self.port = ports[i][0]
+            try:
+                for i in range(len(ports)):
+                    if autokey in ports[i][1]:
+                        #found = 1
+                        self.port = ports[i][0]
+            except:
+                log.warning('USB port autodiscovery for Mbus FAILED')
+                self.port = '/devAMA0' # console
         else: # no
             self.port = port
 
@@ -91,10 +95,11 @@ class Mbus:
         return self.errors
 
     def mb_decode(self, invar, key='', coeff = 1.0, desc = 'unknown', length = 4, hex = 1): # len and hex may be overruled by key
-        ''' Returns decoded value from Mbus binary string self.mbm, length bytes starting from invar.
+        ''' Returns decoded value from Mbus binary string self.mbm or None if no valid self.mbm.
+            Decoded part of length bytes in mbm starts from invar.
             If key (2 bytes as hex string before data start) is given,
             then it is used for finding len and decoding type selection.
-            Coeff is used for unit normalization, to produce output in usual units.
+            Coeff is used for unit normalization, to produce output in common units.
         '''
         # default encoding (hex == 1) is hex 4 bytes, LSB first
         # if hex == 0, BCD is used with numbers 0..9 only used
@@ -267,13 +272,15 @@ class Mbus:
             log.warning('unknown model '+self.model)
             return None
 
-        return self.mb_decode(start, key, coeff, 'energy') # len always 4 = default
-
+        res = self.mb_decode(start, key, coeff, 'energy') # len always 4 = default
+        if res == 0: 
+            log.warning('invalid mb_decode output '+str(res))
 
     def get_volume(self):
         ''' Return volume from the last read result. Chk the datetime in self.mbm as well! '''
         key = ''
         coeff = 1.0
+        res = None
         if self.model == 'kamstrup602' or self.model == 'kamstrup402':
             start = 33
             key = '04' # 14'
@@ -296,7 +303,11 @@ class Mbus:
             log.warning('unknown model '+self.model)
             return None
 
-        return self.mb_decode(start, key, coeff, 'volume')
+        res = self.mb_decode(start, key, coeff, 'energy') # len always 4 = default
+        if res == 0: 
+            log.warning('invalid mb_decode output '+str(res))
+            return None
+        return res
 
 
     def get_power(self):
@@ -361,7 +372,8 @@ class Mbus:
 
     def get_temperatures(self):
         ''' Return temperature readings out, return diff extracted from the last read result. Chk the datetime in self.mbm as well! '''
-        key =['','','']
+        temp = None
+        key = ['','','']
         coeff = [1.0, 1.0, 1.0]
         length = [4, 4, 4] # bytes
         if self.model == 'kamstrup602' or self.model == 'kamstrup402': # checked, 402 is similar
@@ -372,6 +384,7 @@ class Mbus:
             start = [45, 49, 53] 
             key = ['0a5a', '0a5e', '0b60']
             coeff = [0.1, 0.1, 0.001]
+            length = [2, 2, 3]
             length = [2, 2, 3]
         elif self.model == 'axisSKU03':
             start = [77, 83, 96]

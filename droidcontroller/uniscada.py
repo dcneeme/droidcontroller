@@ -1,6 +1,7 @@
 # This Python file uses the following encoding: utf-8
 
 # send and receive monitoring and control messages to from UniSCADA monitoring system
+# able to use sha256 signature
 
 import time, datetime
 import sqlite3
@@ -13,14 +14,7 @@ import tarfile
 import requests
 import logging
 log = logging.getLogger(__name__)
-try:
-    import netifaces
-    nf = 1 # ip = netifaces.ifaddresses('eth0')[2][0]['addr']
-    log.info('netifaces imported')
-except:
-    nf = None # ip='install_netifaces!'
-    log.warning('netifaces NOT imported!')
-    
+
 
 class UDPchannel():
     ''' Sends away the messages, combining different key:value pairs and adding host id and time. Listens for incoming commands and setup data.
@@ -30,7 +24,8 @@ class UDPchannel():
 
     '''
 
-    def __init__(self, id = '000000000000', ip = '127.0.0.1', port = 44445, receive_timeout = 0.1, retrysend_delay = 5, loghost = '0.0.0.0', logport=514, copynotifier=None): # delays in seconds
+    def __init__(self, id = '000000000000', ip = '127.0.0.1', port = 44445, receive_timeout = 0.1, \
+            retrysend_delay = 5, loghost = '0.0.0.0', logport=514, copynotifier=None, secret_key = None): # delays in seconds
         #from droidcontroller.connstate import ConnState
         from droidcontroller.statekeeper import StateKeeper
         self.sk = StateKeeper(off_tout=300, on_tout=0) # conn state with up/down times. 
@@ -44,6 +39,7 @@ class UDPchannel():
             log.warning('GPIOLED not imported')
                         
         self.set_copynotifier(copynotifier) # parallel to uniscada notification in another format
+        self.secret_key = secret_key
         self.host_id = id
         self.ip = ip
         self.port = port
@@ -52,8 +48,9 @@ class UDPchannel():
         self.logaddr = (self.loghost,self.logport) # tuple
 
         self.traffic = [0,0] # UDP bytes in, out
+        self.receive_timeout = receive_timeout
         self.UDPSock = socket(AF_INET,SOCK_DGRAM)
-        self.UDPSock.settimeout(receive_timeout)
+        self.UDPSock.settimeout(self.receive_timeout)
         self.retrysend_delay = retrysend_delay
         self.inum = 0 # sent message counter
 
@@ -64,6 +61,12 @@ class UDPchannel():
         log.info('init: created uniscada and syslog connections to '+ip+':'+str(port)+' and '+loghost+':'+str(logport))
         self.table = 'buff2server' # can be anything, not accessible to other objects WHY? would be useful to know the queue length...
         self.sent = '' # last servicetuple sent to the buffer
+        
+        try:
+            from droidcontroller.sdp import SDP
+        except:
+            log.warning('sdp not imported!') # pass  # no signing due to no sdp.py available?
+        
         self.Initialize()
 
     def Initialize(self):
@@ -98,8 +101,15 @@ class UDPchannel():
         pass # kuidas jalgida ip adr vms olekut pythonist?
         
     
+    def udpreset(self):
+        ''' Reopen socket  s the first measure to reconnect '''
+        self.UDPSock = socket(AF_INET,SOCK_DGRAM)
+        self.UDPSock.settimeout(self.receive_timeout)
+        
+    
     def set_copynotifier(self, copynotifier):
         self.copynotifier = copynotifier
+    
     
     def setIP(self, invar):
         ''' Set the monitoring server ip address '''
@@ -117,12 +127,21 @@ class UDPchannel():
         self.port = invar
         self.saddr = (self.ip,self.port) # refresh needed
 
-
+    def getPort(self):
+        ''' Return the monitoring UDP port '''
+        return self.port
+        
     def setID(self, invar):
         ''' Set the host id '''
         self.host_id = invar
 
 
+    def set_secret_key(self, secret_key): # used by sdp
+        ''' Set secret key for HMAC '''
+        self.secret_key = secret_key
+        log.info('secret_key for signature set')
+
+        
     def setRetryDelay(self, invar):
         ''' Set the monitoring server UDP port '''
         self.retrysend_delay = invar
@@ -178,8 +197,8 @@ class UDPchannel():
 
     def makebuff(self): # drops buffer table and creates
         ''' Dumped buffer to read and send first if not empty '''
-        Cmd='drop table if exists '+self.table
-        sql="CREATE TABLE "+self.table+"(sta_reg,status NUMERIC,val_reg,value,ts_created NUMERIC,inum NUMERIC,ts_tried NUMERIC);" # semicolon needed for NPE for some reason!
+        Cmd = 'drop table if exists '+self.table
+        sql = "CREATE TABLE "+self.table+"(sta_reg,status NUMERIC,val_reg,value,ts_created NUMERIC,inum NUMERIC,ts_tried NUMERIC);" # semicolon needed for NPE for some reason!
         try:
             self.conn.execute(Cmd) # drop the table if it exists
             self.conn.executescript(sql) # read table into database
@@ -207,11 +226,12 @@ class UDPchannel():
 
 
     def send(self, servicetuple): # store service components to buffer for send and resend
-        ''' Adds service components into buffer table to be sent as a string message
+        ''' Invar is actually list. 
+            Adds service components into buffer table to be sent as a string message
             the components are sta_reg = '', status = 0, val_reg = '', value = ''
         '''
-        if servicetuple == None:
-            log.warning('ignored servicetuple with value None')
+        if servicetuple == None or servicetuple == []:
+            log.warning('ignored empty servicetuple')
             return 2
             
         try:
@@ -220,7 +240,7 @@ class UDPchannel():
             val_reg=str(servicetuple[2])
             value=str(servicetuple[3])
             self.ts = round(time.time(),1)
-            Cmd="INSERT into "+self.table+" values('"+sta_reg+"',"+str(status)+",'"+val_reg+"','"+value+"',"+str(self.ts)+",0,0)" # inum and ts_tried left initially empty
+            Cmd = "INSERT into "+self.table+" values('"+sta_reg+"',"+str(status)+",'"+val_reg+"','"+value+"',"+str(self.ts)+",0,0)" # inum and ts_tried left initially empty
             #print(Cmd) # debug
             self.conn.execute(Cmd)
             #self.last = servicetuple
@@ -228,7 +248,7 @@ class UDPchannel():
                 self.copynotifier(servicetuple) # see on nagios.py sees asuv output_and_send
             return 0
         except:
-            msg='FAILED to write svc into buffer'
+            msg = 'FAILED to write svc into buffer'
             #syslog(msg) # incl syslog
             log.warning(msg)
             traceback.print_exc()
@@ -246,43 +266,43 @@ class UDPchannel():
             return 0
         self.ts = round(time.time(),1)
         self.ts_unsent = self.ts
-        mintscreated=0
-        maxtscreated=0
+        mintscreated = 0
+        maxtscreated = 0
         try:
             Cmd="BEGIN IMMEDIATE TRANSACTION"  # buff2server
             self.conn.execute(Cmd)
-            Cmd="SELECT count(sta_reg),min(ts_created),max(ts_created) from "+self.table+" where ts_created+0+"+str(10*self.retrysend_delay)+"<"+str(self.ts) # yle 3x regular notif
+            Cmd = "SELECT count(sta_reg),min(ts_created),max(ts_created) from "+self.table+" where ts_created+0+"+str(10*self.retrysend_delay)+"<"+str(self.ts) # yle 3x regular notif
             cur = self.conn.cursor()
             cur.execute(Cmd)
             for rida in cur: # only one line for count if any at all
-                delcount=rida[0] # int
-                if delcount>0: # stalled services found
+                delcount = rida[0] # int
+                if delcount > 0: # stalled services found
                     #print repr(rida) # debug
-                    mintscreated=rida[1]
-                    maxtscreated=rida[2]
-                    print(delcount,'services lines waiting ack for',10*self.retrysend_delay,' s to be deleted')
-                    Cmd="select * from "+self.table+" where ts_created+0+"+str(10*self.retrysend_delay)+"<"+str(self.ts) # 
+                    mintscreated = rida[1]
+                    maxtscreated = rida[2]
+                    log.warning(str(delcount)+' service lines waiting for ack more than '+str(10 * self.retrysend_delay)+' s will be deleted')
+                    Cmd = "select * from "+self.table+" where ts_created+0+"+str(10*self.retrysend_delay)+"<"+str(self.ts) # 
                     cur.execute(Cmd)
                     for rida in cur:
-                        print(str(repr(rida))) # debug
-                    Cmd="delete from "+self.table+" where ts_created+0+"+str(10*self.retrysend_delay)+"<"+str(self.ts) # +" limit 10" # limit lisatud 23.03.2014 aga miks?
+                        log.warning(str(repr(rida))) # debug
+                    Cmd = "delete from "+self.table+" where ts_created+0+"+str(10*self.retrysend_delay)+"<"+str(self.ts) # +" limit 10" # limit lisatud 23.03.2014 aga miks?
                     self.conn.execute(Cmd)
 
             Cmd="SELECT count(sta_reg),min(ts_created),max(ts_created) from "+self.table
             cur.execute(Cmd)
             for rida in cur: # only one line for count if any at all
-                delcount=rida[0] # int
-            if delcount>50: # delete all!
-                Cmd="delete from "+self.table
+                delcount = rida[0] # int
+            if delcount > 50: # delete all!
+                Cmd = "delete from "+self.table
                 self.conn.execute(Cmd)
-                msg='deleted '+str(delcount)+' unsent messages from '+self.table+'!'
+                msg = 'deleted '+str(delcount)+' unsent messages from '+self.table+'!'
                 log.warning(msg)
                 #syslog(msg)
             self.conn.commit() # buff2server transaction end
             return delcount # 0
             #time.sleep(1) # prooviks
         except:
-            msg='problem with unsent, '+str(sys.exc_info()[1])
+            msg = 'problem with unsent, '+str(sys.exc_info()[1])
             log.warning(msg)
             #syslog(msg)
             traceback.print_exc()
@@ -367,8 +387,8 @@ class UDPchannel():
 
 
 
-    def udpsend(self, sendstring = ''): # actual udp sending, no resend. give message as parameter. used by buff2server too.
-        ''' Sends UDP data immediately, adding self.inum if >0. '''
+    def udpsend(self, sendstring = '', ask_ack = True): # actual udp sending, no resend. give message as parameter. used by buff2server too.
+        ''' Sends UDP data immediately, adding self.inum if >0. ask_ack not yet in use '''
         if sendstring == '': # nothing to send
             print('udpsend(): nothing to send!')
             return 1
@@ -378,22 +398,32 @@ class UDPchannel():
         if self.inum > 0: # "in:inum" to be added
             sendstring += "in:"+str(self.inum)+","+str(int(round(self.ts)))+"\n"
 
-        self.traffic[1]=self.traffic[1]+len(sendstring) # adding to the outgoing UDP byte counter
+        self.traffic[1] = self.traffic[1] + len(sendstring) # adding to the outgoing UDP byte counter
 
         if 'led' in dir(self):
             self.led.commLED(0) # off, blinking shows sending and time to ack
         
         try:
-            sendlen=self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr) # tagastab saadetud baitide arvu
+            ''' SDP ei ole kattesaadav, sdp sisu tryhjendaa aga ei saa '''
+            #try:
+                #sdp = SDP(self.secret_key)
+                #sdp.decode(sendstring)
+                #sendstring = sdp.encode() # hash added as the last key:value pair
+            #except:
+                #log.warning('no signature added') # pass
+                #traceback.print_exc()
+                
+            sendlen = self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr) # tagastab saadetud baitide arvu
             self.traffic[1] = self.traffic[1]+sendlen # traffic counter udp out
-            msg='==>> sent ' +str(sendlen)+' bytes to '+str(repr(self.saddr))+' '+sendstring.replace('\n',' ')   # show as one line
-            log.debug(msg)
+            msg = '==>> sent ' +str(sendlen)+' bytes to '+str(repr(self.saddr))+' '+sendstring.replace('\n',' ')   # show as one line
+            ##msg='==>> sent ' +str(sendlen)+' bytes to '+str(repr(self.saddr))+' with host_id '+self.host_id   # show as one line
+            log.info(msg)
             #syslog(msg)
-            sendstring=''
-            self.ts_udpsent=self.ts # last successful udp send
+            sendstring = ''
+            self.ts_udpsent = self.ts # last successful udp send
             return sendlen
         except:
-            msg='udp send failure in udpsend() to saddr '+repr(self.saddr)+', lasting s '+str(int(self.ts - self.ts_udpsent)) # cannot send, this means problem with connectivity
+            msg = 'udp send failure in udpsend() to saddr '+repr(self.saddr)+', lasting s '+str(int(self.ts - self.ts_udpsent)) # cannot send, this means problem with connectivity
             #syslog(msg)
             log.warning(msg)
             traceback.print_exc()
@@ -430,11 +460,12 @@ class UDPchannel():
         data=''
         data_dict={} # possible setup and commands
         sendstring = ''
+        instr = ''
 
         try: # if anything is comes into udp buffer before timepout
-            buf=1024
+            buf = 1024
             rdata,raddr = self.UDPSock.recvfrom(buf)
-            data=rdata.decode("utf-8") # python3 related need due to mac in hex
+            data = rdata.decode("utf-8") # python3 related need due to mac in hex
         except:
             #print('no new udp data received') # debug
             #traceback.print_exc()
@@ -442,19 +473,19 @@ class UDPchannel():
 
         if len(data) > 0: # something arrived
             #log.info('>>> got from receiver '+str(repr(raddr))+' '+str(repr(data)))
-            self.traffic[0]=self.traffic[0]+len(data) # adding top the incoming UDP byte counter
-            log.debug('<<<< got from receiver '+str(data.replace('\n', ' ')))
+            self.traffic[0] = self.traffic[0] + len(data) # adding top the incoming UDP byte counter
+            log.info('<<<< got from server ' + str(data.replace('\n', ' ')))
 
             if (int(raddr[1]) < 1 or int(raddr[1]) > 65536):
-                msg='illegal remote port '+str(raddr[1])+' in the message received from '+raddr[0]
+                msg = 'illegal remote port ' + str(raddr[1])+' in the message received from '+raddr[0]
                 log.warning(msg)
                 #syslog(msg)
 
             if raddr[0] != self.ip:
-                msg='illegal sender '+str(raddr[0])+' of message: '+data+' at '+str(int(self.ts))  # ignore the data received!
+                msg = 'illegal sender '+str(raddr[0])+' of message: '+data+' at '+str(int(self.ts))  # ignore the data received!
                 log.warning(msg)
                 #syslog(msg)
-                data='' # data destroy
+                data = '' # data destroy
 
             if "id:" in data: # first check based on host id existence in the received message, must exist to be valid message!
                 in_id = data[data.find("id:")+3:].splitlines()[0]
@@ -463,13 +494,13 @@ class UDPchannel():
                     data = ''
                     return data # error condition, traffic counter was still increased
                 else:
-                    log.info('got ack or cmd from server '+str(raddr[0])) #### 
+                    #log.info('got ack or cmd from server '+str(raddr[0])) #### 
                     self.sk.up()
                     self.ts_udpgot = self.ts # timestamp of last udp received
                     if 'led' in dir(self):
                         self.led.commLED(1) # data from server, comm OK
                     
-                lines=data.splitlines() # split message into key:value lines
+                lines = data.splitlines() # split message into key:value lines
                 for i in range(len(lines)): # looking into every member of incoming message
                     if ":" in lines[i]:
                         #print "   "+lines[i]
@@ -487,7 +518,12 @@ class UDPchannel():
 
                         else:
                             if sregister == "in": # one such a key in message
-                                inumm=eval(data[data.find("in:")+3:].splitlines()[0].split(',')[0]) # loodaks integerit
+                                instr = data[data.find("in:")+3:].splitlines()[0].split(',')[0] 
+                                try:
+                                    inumm=eval(instr)# loodaks integerit
+                                except:
+                                    inumm = 0
+                                    
                                 if inumm >= 0 and inumm<65536:  # valid inum, response to message sent if 1...65535. datagram including "in:0" is a server initiated "fast communication" message
                                     #print "found valid inum",inum,"in the incoming message " # temporary
                                     msg='got ack '+str(inumm)+' in message: '+data.replace('\n',' ')
@@ -888,3 +924,4 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
             traceback.print_exc()
             return None
 
+    ## END ##

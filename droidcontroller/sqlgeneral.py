@@ -12,7 +12,7 @@ import traceback
 import sys
 from pymodbus import *
 from droidcontroller.comm_modbus import CommModbus  # contains CommModbus, .read(), .write()
-from droidcontroller.uniscada import *
+from droidcontroller.uniscada import UDPchannel, TCPchannel
     
 import logging
 log = logging.getLogger(__name__)
@@ -21,9 +21,9 @@ try:
     if udp:
         print('uniscada connection already existing to',host,port)
 except:
-    udp=UDPchannel()
+    udp = UDPchannel()
     log.info('created uniscada UDP connection instance')
-    tcp=TCPchannel()
+    tcp = TCPchannel()
     log.info('created uniscada TCP connection instance')
 
 
@@ -41,7 +41,7 @@ try:
 except:
     # several connections may be needed, tuple of modbus connections! also direct rtu, rtu via tcp-serial or tcp-modbustcp
     for file in ['devices.sql','setup.sql']: # channel tables opened by dchannels or acchannels
-        sql=open(file).read() # (num integer,rtuaddr integer,tcpaddr)
+        sql = open(file).read() # (num integer,rtuaddr integer,tcpaddr)
         print('reading',file)
         try:
             conn.executescript(sql) # read table into database
@@ -51,10 +51,10 @@ except:
             print('creating table from file',file,'FAILED!')
             traceback.print_exc()
 
-    mb=[] # modbus comm instance
+    mb = [] # modbus comm instance
     #mbhost=[] # tcp or tty
-    Cmd="select mbi, tcpaddr from devices group by mbi"
-    cur=conn.cursor()
+    Cmd = "select mbi, tcpaddr from devices group by mbi"
+    cur = conn.cursor()
     cur.execute(Cmd)
     conn.commit()
     for row in cur:
@@ -83,7 +83,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
             self.OSTYPE='android'
             import BeautifulSoup # ?
             import termios
-            msg='running on android, current directory '+os.getcwd()
+            msg = 'running on android, current directory '+os.getcwd()
             print(msg)
             udp.syslog(msg)
 
@@ -107,12 +107,12 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
 
     def set_apver(self, APVER):
         ''' Sets application version for reporting '''
-        self.APVER=APVER
+        self.APVER = APVER
 
 
     def print_table(self, table, column = '*'):
         ''' reads and returns he content of the table '''
-        output=[]
+        output = []
         Cmd ="SELECT "+column+" from "+table
         cur = conn.cursor()
         cur.execute(Cmd)
@@ -124,7 +124,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
 
     def dump_table(self, table):
         ''' Writes a table into SQL-file '''
-        msg='going to dump '+table+' into '+table+'.sql'
+        msg = 'going to dump '+table+' into '+table+'.sql'
         log.info(msg)
         try:
             with open(table+'.sql', 'w') as f:
@@ -133,7 +133,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
                         f.write('%s\n' % line)
             return 0
         except:
-            msg='FAILURE dumping '+table+'! '+str(sys.exc_info()[1])
+            msg = 'FAILURE dumping '+table+'! '+str(sys.exc_info()[1])
             log.warning(msg)
             #syslog(msg)
             traceback.print_exc()
@@ -146,13 +146,13 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
 
     def sqlread(self, table): # drops table and reads from file <table>.sql that must exist
         sql=''
-        filename=table+'.sql' # the file to read from
+        filename = table+'.sql' # the file to read from
         try:
             sql = open(filename).read()
-            msg='found '+filename
+            msg = 'found '+filename
             log.info(msg)
         except:
-            msg='FAILURE in opening '+filename+': '+str(sys.exc_info()[1])
+            msg = 'FAILURE in opening '+filename+': '+str(sys.exc_info()[1])
             print(msg)
             #udp.syslog(msg)
             traceback.print_exc()
@@ -165,13 +165,13 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
             conn.commit()
             conn.executescript(sql) # read table into database
             conn.commit()
-            msg='sqlread: successfully recreated table '+table
+            msg = 'sqlread: successfully recreated table '+table
             log.info(msg)
             #udp.syslog(msg)
             return 0
 
         except:
-            msg='sqlread() problem for '+table+': '+str(sys.exc_info()[1])
+            msg = 'sqlread() problem for '+table+': '+str(sys.exc_info()[1])
             log.warning(msg)
             #udp.syslog(msg)
             traceback.print_exc()
@@ -181,37 +181,37 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
 
     def get_setup(self, register, table = 'setup'):
         ''' Returns value for one register '''
-        Cmd="select value from "+table+" where register='"+register+"'"
+        Cmd = "select value from "+table+" where register='"+register+"'"
         #print(Cmd) # debug
         cur.execute(Cmd)
-        value='' # string!
+        value = '' # string!
         for row in cur: # should be one row only
             value=row[0]
         conn.commit() # setup database
         if value == '':
-            msg='no setup value '+register+'! using 0 instead!'
-            value='0'
+            msg = 'no setup value '+register+'! using 0 instead!'
+            value = '0'
             log.warning(msg) # debug
             #udp.syslog(msg)
         return value # str
 
 
     def report_setup(self): # READ and send setup data to server
-        mba=0
-        reg=''
-        value=''
-        Cmd=''
-        svc_name='setup value'
-        oldmac=''
-        sendstring=''
-        loghost=''
+        mba = 0
+        reg = ''
+        value = ''
+        Cmd = ''
+        svc_name = 'setup value'
+        oldmac = ''
+        sendstring = ''
+        loghost = ''
 
         cur=conn.cursor()
         try:
             Cmd="BEGIN IMMEDIATE TRANSACTION" # conn1 buff2server
             conn.execute(Cmd)
 
-            Cmd="select register,value from setup" # no multimember registers for setup!
+            Cmd = "select register,value from setup" # no multimember registers for setup!
             #print(Cmd4) # temporary
             cur.execute(Cmd)
 
@@ -275,7 +275,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
 
     def change_setup(self, register, value, table='setup'):  # if register found in table, then change value. no protection here.
         ''' If register found as service in table, then change the value. No protection here against misusage. '''
-        ts=time.time()
+        ts = time.time()
         print('setup change of '+table+' started for', register, value)
         #Cmd="BEGIN IMMEDIATE TRANSACTION" # setup table. there may be no setup changes, no need for empty transactions
         try:
@@ -298,12 +298,12 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
 
     def channelconfig(self, table = 'setup'): # modbus slaves register writes for configuration if needed, based on setup.sql
         ''' Modbus slave register writes for configuration if needed, based on setup.sql '''
-        mba=0
-        register=''
-        value=0
-        regok=0
-        mba_array=[]
-        cur=conn.cursor()
+        mba = 0
+        register = ''
+        value = 0
+        regok = 0
+        mba_array = []
+        cur = conn.cursor()
         try:
             #Cmd="BEGIN IMMEDIATE TRANSACTION" #
             #conn.execute(Cmd)
@@ -311,8 +311,8 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
             cur.execute(Cmd) # read setup variables into cursor
 
             for row in cur:
-                regok=0
-                msg='setup record '+str(repr(row))
+                regok = 0
+                msg = 'setup record '+str(repr(row))
                 print(msg)
                 udp.syslog(msg)
                 register=row[0] # contains W<mba>.<regadd> or R<mba>.<regadd>
