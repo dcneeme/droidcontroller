@@ -82,8 +82,7 @@ class Mbus:
         self.read() # dummy, contains zeroes, some buffer??
 
     def set_model(self, invar):
-        if invar in ['kamstrup602', 'sensusPE']:
-            self.model = invar
+        self.model = invar
 
     def get_model(self):
         return self.model
@@ -94,7 +93,8 @@ class Mbus:
     def get_errors(self):
         return self.errors
 
-    def mb_decode(self, invar, key='', coeff = 1.0, desc = 'unknown', length = 4, hex = 1): # len and hex may be overruled by key
+    def mb_decode(self, start, key='', coeff = 1.0, desc = 'unknown', length = None, hex = None): 
+        # len and hex will be autodetected if hex not given
         ''' Returns decoded value from Mbus binary string self.mbm or None if no valid self.mbm.
             Decoded part of length bytes in mbm starts from invar.
             If key (2 bytes as hex string before data start) is given,
@@ -103,7 +103,7 @@ class Mbus:
         '''
         # default encoding (hex == 1) is hex 4 bytes, LSB first
         # if hex == 0, BCD is used with numbers 0..9 only used
-        if key != '' and len(key) > 1: # 2 or 4 characters, first 2 define data length, the next is unknown for me, may vary even for the same model
+        if (length == None or hex == None) and key != '' and len(key) > 1: # 2 or 4 characters, first 2 define data length
             if key[0] == '0':
                 if key[1] == '4':
                     length = 4
@@ -118,63 +118,81 @@ class Mbus:
                     length = 4
                     hex = 0
                 elif key[1] == '5': # hex float 32 bit real
-                    hf = self.mbm[invar:invar+4] # need to be reordered, WITH UNPACK
-                    hfs = str(encode(hf, 'hex_codec'))[2:10]
-                    res = struct.unpack('<f', bytes.fromhex(hfs))[0] # py3, converts to float from 32real hex LITTLE ENDIAN
-                    return res * coeff # coeff defined in parent
-                    
+                    length = 4
+                    hex = 3 # real32
                 else:
-                    log.warning('unsupported encoding for data, key '+str(key[0:2])+', key[1] = '+str(key[1]))
+                    log.warning('length/hex autodetection failed, length '+str(length)+', key '+key)
                     return None
+            else:
+                log.warning('length/hex autodetection failed, length '+str(length)+', key '+key)
+                return None
+        else:
+            log.debug('using length '+str(length)+' and hex '+str(hex)+' for decoding starting from '+str(start))
+        
+        if length == None or hex == None:
+            log.warning('invalid hex='+str(hex)+' or length='+str(length))
+            return None
+            
         try: # swap the bytes order and convert to integer
             res = 0
+            log.debug('decoding data string '+str(self.mbm[start:start+length])) ##
             for i in range(length):
                 if hex == 1:
-                    #res += int(ord(self.mbm[invar + i])) << (i * 8) # ok for py2, but not for py3
-                    res += int(str(self.mbm[invar + i]), 16) << (i * 8) # py3. numbers still 0..9, base 10!
+                    #res += int(ord(self.mbm[start + i])) << (i * 8) # ok for py2, but not for py3
+                    res += int(str(self.mbm[start + i]), 16) << (i * 8) # py3. numbers still 0..9, base 10!
                     log.debug('decoding HEX value step '+str(i)+', res='+str(res))
                 elif hex == 0: # MSB == F then it signals negative number! A...E are invalid!
                     # UNTESTED WITH NEGATIVE NUMBERS!!!
-                    res += int(str(self.mbm[invar + i]), 10) * (10 ** (2*i))
+                    res += int(str(self.mbm[start + i]), 10) * (10 ** (2*i))
                     log.debug('decoding BCD value step '+str(i)+', res='+str(res))
                     #if i == length - 1: # last (MSB), possible sign data
                     #    if (int(str(self.mbm[len - 1]), 10) & 0xF0) == 0xF0: # the result is negative
                     #        res= -res
-
+                elif hex == 2: # axis energy
+                    res += int(str(self.mbm[start + i]), 10) << (i * 8)
+                elif hex == 3:
+                    hf = self.mbm[start:start+4] # need to be reordered, WITH UNPACK
+                    hfs = str(encode(hf, 'hex_codec'))[2:10]
+                    res = struct.unpack('<f', bytes.fromhex(hfs))[0] # py3, converts to float from 32real hex LITTLE ENDIAN
+                    #return res * coeff # coeff defined in parent
+                else:
+                    log.warning('illegal hex value '+str(hex))
+                    return None
+                    
             # modify coefficients
-            if key != '' and str(key.lower()) not in str(encode(self.mbm[invar-2:invar], 'hex_codec')) \
-                and str(key.upper()) not in str(encode(self.mbm[invar-2:invar], 'hex_codec')): # check
-                log.warning('non-matching key '+str(key)+' for '+desc+' in key+data ' + str(encode(self.mbm[invar-2:invar], 'hex_codec'))+ \
-                    ' '+str(encode(self.mbm[invar:invar+4], 'hex_codec')))
+            if key != '' and str(key.lower()) not in str(encode(self.mbm[start-2:start], 'hex_codec')) \
+                and str(key.upper()) not in str(encode(self.mbm[start-2:start], 'hex_codec')): # check
+                log.warning('non-matching key '+str(key)+' for '+desc+' in key+data ' + str(encode(self.mbm[start-2:start], 'hex_codec'))+ \
+                    ' '+str(encode(self.mbm[start:start+4], 'hex_codec')))
                 self.errors += 1
                 return None
             else:
                 self.errors = 0
-                if desc == 'flow' and '2d' in str(encode(self.mbm[invar-1:invar], 'hex_codec')):
+                if desc == 'flow' and '2d' in str(encode(self.mbm[start-1:start], 'hex_codec')):
                     coeff = 1.0
                     log.debug('2d coeff chg to '+str(coeff))
-                elif desc == 'power' and '2d' in str(encode(self.mbm[invar-1:invar], 'hex_codec')):
+                elif desc == 'power' and '2d' in str(encode(self.mbm[start-1:start], 'hex_codec')):
                     coeff = 100.0 # multical 602 power karla koolis
                     log.debug('coeff chg for multical 602 power to '+str(coeff))
-                elif '3b' in str(encode(self.mbm[invar-1:invar], 'hex_codec')):
+                elif '3b' in str(encode(self.mbm[start-1:start], 'hex_codec')):
                     coeff = 1.0
                     log.debug('3b coeff chg to '+str(coeff))
-                elif '2b' in str(encode(self.mbm[invar-1:invar], 'hex_codec')): # sensusPE power rahvamaja
+                elif '2b' in str(encode(self.mbm[start-1:start], 'hex_codec')): # sensusPE power rahvamaja
                     coeff = 1.0
                     log.debug('2b coeff chg to '+str(coeff))
-                elif '13' in str(encode(self.mbm[invar-1:invar], 'hex_codec')): # sensus volume rahvamaja
+                elif '13' in str(encode(self.mbm[start-1:start], 'hex_codec')): # sensus volume rahvamaja
                     coeff = 1.0
                     log.debug('13 coeff chg to '+str(coeff))
-                elif '14' in str(encode(self.mbm[invar-1:invar], 'hex_codec')): # volume coeff 10
+                elif '14' in str(encode(self.mbm[start-1:start], 'hex_codec')): # volume coeff 10
                     coeff = 10.0
                     log.debug('14 coeff chg to '+str(coeff))
-                elif '15' in str(encode(self.mbm[invar-1:invar], 'hex_codec')): # volume coeff 100
+                elif '15' in str(encode(self.mbm[start-1:start], 'hex_codec')): # volume coeff 100
                     coeff = 100.0
                     log.debug('15 coeff chg to '+str(coeff))
                 else:
-                    log.debug('coeff NOT changed, still '+str(coeff)+', key end '+str(encode(self.mbm[invar-1:invar], 'hex_codec')))
+                    log.debug('coeff NOT changed, still '+str(coeff)+', key end '+str(encode(self.mbm[start-1:start], 'hex_codec')))
 
-                log.debug('mb_decode coeff '+str(coeff)+' for '+desc+', key '+ str(encode(self.mbm[invar-2:invar], 'hex_codec')))
+                log.debug('mb_decode coeff '+str(coeff)+' for '+desc+', key '+ str(encode(self.mbm[start-2:start], 'hex_codec')))
                 return res * coeff
         except:
             traceback.print_exc()
@@ -246,10 +264,20 @@ class Mbus:
                 else:
                     print(i, str(encode(self.mbm[i-2:i], 'hex_codec')), str(encode(self.mbm[i:i+4], 'hex_codec')))
 
+    def get_test(self, start, key='', length = 4, hex = 1):
+        ''' returns data from m.mbm based on variables start, key ''' 
+        res = self.mb_decode(start, key, coeff = 1.0, desc = 'test', length = length, hex = hex) # len always 4 = default
+        #if res == 0: 
+        #    log.warning('invalid mb_decode output '+str(res))
+        #    return None
+        return res
+        
 
     def get_energy(self):
         ''' Return energy from the last read result. Chk the datetime in self.mbm as well! '''
         key = ''
+        length = None
+        hex = None # autodetect in mb_decode() where not given
         coeff = 1.0 # kwh
         if self.model == 'kamstrup602':
             start = 27 # check with mtools and compare with debug output
@@ -261,26 +289,34 @@ class Mbus:
             start = 21
             #key = '0c07'
             key = '0c'
-        elif self.model == 'axisSKU03':
-            start = 52
-            key = '0486'
-        elif self.model == 'axisSKS3':
+        elif self.model == 'axisSKU03': # lasteaed
+            start = 53
+            key = '863b'
+            hex = 2
+            length = 4
+        elif self.model == 'axisSKS3': # katlamaja x 10 kWh
             coeff = 10 
             start = 27
             key = '0407'
+            hex = 2
+            length = 4
         else:
-            log.warning('unknown model '+self.model)
+            log.warning('unknown meter model '+self.model)
             return None
 
-        res = self.mb_decode(start, key, coeff, 'energy') # len always 4 = default
-        if res == 0: 
+        res = self.mb_decode(start, key, coeff, 'energy', length = length, hex = hex) # len always 4 = default
+        if res == 0: # double protection
             log.warning('invalid mb_decode output '+str(res))
-
+            return None
+        return res
+            
+            
     def get_volume(self):
-        ''' Return volume from the last read result. Chk the datetime in self.mbm as well! '''
+        ''' Return volume in l from the last read result. Chk the datetime in self.mbm as well! '''
         key = ''
         coeff = 1.0
-        res = None
+        hex = None
+        length = None
         if self.model == 'kamstrup602' or self.model == 'kamstrup402':
             start = 33
             key = '04' # 14'
@@ -293,18 +329,23 @@ class Mbus:
             start = 27
             key = '0c' # 14 or 13 the end for volume
             coeff = 10.0
-        elif self.model == 'axisSKU03':
+        elif self.model == 'axisSKU03': # lasteaed
             start = 59
-            key = '0413' # from fex float
-        elif self.model == 'axisSKS3':
-            start = 33
-            key = '8440' # from fex float
+            key = '0413'
+            hex = 2
+            coeff = 1.0
+            length = 4
+        elif self.model == 'axisSKS3': # katlamaja
+            start = 34
+            key = '4015'
+            length = 4
+            hex = 2
         else:
             log.warning('unknown model '+self.model)
             return None
 
-        res = self.mb_decode(start, key, coeff, 'energy') # len always 4 = default
-        if res == 0: 
+        res = self.mb_decode(start, key, coeff, 'energy', length = length, hex = hex) # len always 4 = default
+        if res == 0: # double protection
             log.warning('invalid mb_decode output '+str(res))
             return None
         return res
@@ -314,6 +355,8 @@ class Mbus:
         ''' Return power from the last read result. Chk the datetime in self.mbm as well! '''
         key= ''
         coeff = 1
+        length = None
+        hex = None
         if self.model == 'kamstrup602' or self.model == 'kamstrup402': # similar
             start = 63
             key = '04' # 2d' # use lower or upper case, no difference
@@ -323,24 +366,30 @@ class Mbus:
             #key='0c2c'
             key='0c'
             coeff = 10.0 #
-        elif self.model == 'axisSKU03':
+        elif self.model == 'axisSKU03': # lasteaed
             start = 65
-            key = '052e' # from fex float
+            key = '052e' # from fex float, 32real
             coeff = 1000.0
-        elif self.model == 'axisSKS3':
+            hex = 1
+        elif self.model == 'axisSKS3': # katlamaja
             start = 40
-            key = '052e' # from fex float
+            key = '052e' # from fex float, 32real
             coeff = 1000.0
+            hex = 1
         else:
             log.warning('unknown model '+self.model)
             return None
 
-        return self.mb_decode(start, key, coeff, 'power')
-
+        res = self.mb_decode(start, key, coeff, 'power', length = length, hex = hex)
+        return res
+        
+        
     def get_flow(self):
         ''' Return power from the last read result. Chk the datetime in self.mbm as well! '''
         key= ''
         coeff = 1
+        length = None
+        hex = None
         if self.model == 'kamstrup602' or self.model == 'kamstrup402':
             start = 75 # CHK!
             #key = '042d' # use lower or upper case, no difference
@@ -355,20 +404,26 @@ class Mbus:
             #key='0c3c'
             key='0c'
             coeff = 10.0 #  L/h
-        elif self.model == 'axisSKU03':
+            #length = 4 # autodetect with None
+        elif self.model == 'axisSKU03': # lasteaed
             start = 71
             key = '053e' # from fex float
             coeff = 1000.0
-        elif self.model == 'axisSKS3':
-            start = 46
-            key = '053e' # from fex float
+            hex = 3
+            length = 4
+        elif self.model == 'axisSKS3': # katlamaja
+            start = 47
+            key = '403e' # from fex float
             coeff = 1000.0
+            hex = 3
+            length = 4
         else:
             log.warning('unknown model '+self.model)
             return None
 
-        return self.mb_decode(start, key, coeff, 'flow')
-
+        res = self.mb_decode(start, key, coeff, 'flow', length = length, hex = hex)
+        return res
+        
 
     def get_temperatures(self):
         ''' Return temperature readings out, return diff extracted from the last read result. Chk the datetime in self.mbm as well! '''
@@ -376,23 +431,30 @@ class Mbus:
         key = ['','','']
         coeff = [1.0, 1.0, 1.0]
         length = [4, 4, 4] # bytes
+        hex = 1
         if self.model == 'kamstrup602' or self.model == 'kamstrup402': # checked, 402 is similar
             start = [45, 51, 57]
             key = ['0459', '045D', '0461'] # inlet outlet diff
             coeff = [0.01, 0.01, 0.01] # 10 mK unit
+            hex = 0
         elif self.model == 'sensusPE':
             start = [45, 49, 53] 
             key = ['0a5a', '0a5e', '0b60']
             coeff = [0.1, 0.1, 0.001]
             length = [2, 2, 3]
-            length = [2, 2, 3]
-        elif self.model == 'axisSKU03':
-            start = [77, 83, 96]
-            key = ['055b', '055f', '0563'] # from fex float
-        elif self.model == 'axisSKS3':
+            hex=0
+        elif self.model == 'axisSKU03': # lasteaed
+            coeff = [1.0, 1.0, 1.0]
+            start = [77, 83, 89]
+            key = ['055b', '055f', '0563'] 
+            length = [4, 4, 4]
+            hex = 3 # !!!  float
+        elif self.model == 'axisSKS3': # katlamaja
             coeff = [0.01, 0.01, 0.01]
-            start = [53, 57, 61]    # 32, 32, 16 bit numbers. 
-            key = ['0259', '025d', '02fd'] # FIXME 
+            start = [53, 57, 68]    # 32, 32, 16 bit numbers. 
+            key = ['0259', '025d', 'fd17']  
+            length = [2, 2, 2]
+            hex = 2
         else:
             log.warning('unknown model '+self.model)
             return None, None, None
@@ -400,7 +462,11 @@ class Mbus:
         out = []
         try:
             for i in range(3):
-                out.append(round(self.mb_decode(start[i], key[i], coeff[i], 'temperatures', length[i]),3)) # converted to degC
+                temp = round(self.mb_decode(start[i], key[i], coeff[i], 'temperatures', length=length[i], hex=hex),3)
+                if temp != 0:
+                    out.append(temp) # converted to degC
+                else:
+                    out.append(None) # 0 kraadi on voimatu veetorustikus
         except:
             log.warning('failed to append mb_decode temperatures output')
             traceback.print_exc()
