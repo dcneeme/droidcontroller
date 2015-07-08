@@ -527,14 +527,14 @@ class UDPchannel():
                                 if inumm >= 0:  # valid inum, response to message sent if 1...65535. datagram including "in:0" is a server initiated "fast communication" message
                                     #print "found valid inum",inum,"in the incoming message " # temporary
                                     msg='got ack '+str(inumm)+' in message: '+data.replace('\n',' ')
-                                    log.info(msg)
+                                    log.debug(msg)
                                     #syslog(msg)
 
                                     Cmd="BEGIN IMMEDIATE TRANSACTION" # buff2server, to delete acknowledged rows from the buffer
                                     self.conn.execute(Cmd) # buff2server ack transactioni algus, loeme ja kustutame saadetud read
                                     Cmd="DELETE from "+self.table+" WHERE inum='"+str(inumm)+"'"  # deleting all rows where inum matches server ack
                                     try:
-                                        log.info('deleting from buffer: '+Cmd)
+                                        log.debug('deleting from buffer: '+Cmd)
                                         self.conn.execute(Cmd) # deleted
                                     except:
                                         msg='problem with '+Cmd+'\n'+str(sys.exc_info()[1])

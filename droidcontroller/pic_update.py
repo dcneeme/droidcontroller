@@ -23,7 +23,8 @@ log = logging.getLogger(__name__)
     
     TESTING:
     from main_koskla2 import *; from droidcontroller.pic_update import *; pic=PicUpdate(mb); pic.update(mba=1, filename='IOplaat.hex')
-
+    or
+    pic=PicUpdate(mb, mbi=0); pic.update(1, 'IOplaat.hex')
 '''
 
 class PicUpdate(object): # using the existing mb instance
@@ -160,7 +161,7 @@ class PicUpdate(object): # using the existing mb instance
     def update(self, mba, filename='IOplaat.hex'): # this is for the whole process
         ''' Starts and stops the upload process. pic id is 0 if not stored into registers. Returns crc if simu == 1 '''
         pic_id = 0 # means unknown
-        self.mba = mba
+        self.mba = mba # the device id to update
         try:
             devtype = self.mb[self.mbi].read(self.mba,256,1)[0] # 241 = F1h
             oldver = self.mb[self.mbi].read(self.mba,257,1)[0]
@@ -189,7 +190,8 @@ class PicUpdate(object): # using the existing mb instance
                 if res == 0:
                     self.log.info('tested with 0x3F3F to regadd 998 - device on mba '+str(self.mba)+' already in bootloader mode!')
                 else:
-                    self.log.warning('device on modbus address '+str(self.mba)+' not not in normal neither in bootloader mode, FATAL FAILURE!')
+                    self.log.warning('device on modbus address '+str(self.mba)+' not in normal neither in bootloader mode, FATAL FAILURE!')
+                    return 2
             except:
                 self.log.warning('device on modbus address '+str(self.mba)+' not in normal neither in bootloader mode, FATAL FAILURE! chk mba!')
                 #traceback.print_exc()
@@ -197,6 +199,7 @@ class PicUpdate(object): # using the existing mb instance
                 return 2
             
         ver = 0 
+        # only to continue if verified being in bootloader mode
         
         if os.path.isfile(filename):
             self.log.info('hex file '+filename+' found, going to calculate crc')

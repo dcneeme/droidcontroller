@@ -31,7 +31,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         Able to sync input and output channels and accept changes to service members by their sta_reg code
     '''
 
-    def __init__(self, in_sql = 'dichannels.sql', out_sql = 'dochannels.sql', readperiod = 0, sendperiod = 30): # sends immediately on change too!
+    def __init__(self, in_sql = 'dichannels.sql', out_sql = 'dochannels.sql', readperiod = 0, sendperiod = 120): # sends immediately on change too!
         # readperiod 0 means read on every execution. this is usually wanted behaviour to detect any di changes as soon as possible.
         self.setReadPeriod(readperiod)
         self.setSendPeriod(sendperiod)
@@ -293,7 +293,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 cur.execute(Cmd)
 
                 for row in cur: # services to be processed. either just changed or to be resent
-                    log.info('processing row '+str(repr(row))) ## 
+                    log.debug('processing row '+str(repr(row))) ## 
                     val_reg = ''
                     sta_reg = ''
                     sumstatus = 0 # at first
@@ -306,20 +306,25 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                             msg='DI service '+val_reg+' has changed (chg!): '
                         else:
                             msg='DI service '+val_reg+' unchanged: '
+                        log.debug(msg)
                         
                         sendtuple = self.make_dichannel_svc(val_reg) # for each service
-                        
+                        udp.send(sendtuple)
+                        msg = 'buffered for reporting all '+str(sendtuple) ####
+                        log.info(msg)
                     else:
                         log.warning('FAILED to select row for '+val_reg)
                         
             else:
                 sendtuple = self.make_dichannel_svc(svc)
-                msg = 'processed svc '+svc+', ' ####
-                
-            if sendtuple != None and sendtuple != []:
                 udp.send(sendtuple)
-                msg += str(sendtuple)
+                msg = 'buffered for reporting single '+str(sendtuple) ####
                 log.info(msg)
+                
+            #if sendtuple != None and sendtuple != []:
+            #    udp.send(sendtuple)
+            #    msg += str(sendtuple)
+            #    log.info(msg)
             #else:
             #    log.warning('empty sendtuple '+str(sendtuple)+' for svc '+svc)
             # ilmselt ei ole muutnud ega aeg korrata veel kaes    

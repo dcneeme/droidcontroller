@@ -36,7 +36,7 @@ class UDPchannel():
 
     '''
 
-    def __init__(self, id = '000000000000', ip = '127.0.0.1', port = 44445, receive_timeout = 0.1, retrysend_delay = 5, loghost = '0.0.0.0', logport=514, copynotifier=None): # delays in seconds
+    def __init__(self, id ='000000000000', ip='127.0.0.1', port=44445, receive_timeout=0.1, retrysend_delay=5, loghost='0.0.0.0', logport=514, copynotifier=None): # delays in seconds
         #from droidcontroller.connstate import ConnState
         from droidcontroller.statekeeper import StateKeeper
         self.sk = StateKeeper(off_tout=300, on_tout=0) # conn state with up/down times. 
@@ -50,9 +50,9 @@ class UDPchannel():
             log.warning('GPIOLED not imported')
                         
         self.set_copynotifier(copynotifier) # parallel to uniscada notification in another format
-        self.host_id = id
-        self.ip = ip
-        self.port = port
+        self.host_id = id # controller ip as tun0 wlan0 eth0 127.0.0.1
+        self.ip = ip # monitoring server
+        self.port = port # monitoring server
         self.loghost = loghost
         self.logport = logport
         self.logaddr = (self.loghost,self.logport) # tuple
@@ -77,8 +77,10 @@ class UDPchannel():
         self.ts = int(round(time.time(),0)) # current time?
         #self.ts_inum = self.ts # inum increase time, is it used at all? NO!
         self.ts_unsent = self.ts # last unsent chk
-        self.ts_udpsent=self.ts
-        self.ts_udpgot=self.ts
+        self.ts_udpsent = self.ts
+        self.ts_udpgot = self.ts
+        self.ts_udpunsent = self.ts # failed send timestamp
+        
         self.conn = sqlite3.connect(':memory:')
         #self.cur=self.conn.cursor() # cursors to read data from tables / cursor can be local
         self.makebuffer() # create buffer table for unsent messages
@@ -213,7 +215,7 @@ class UDPchannel():
             
             
     def makebuffer(self): # rereads buffer dump or creates new empty one if dump does not exist
-        ''' Dumped buffer to read and send first if not empty '''
+        ''' Old dumped rows in buffer will be sent first if not empty '''
         
         if self.sqlread(self.table) == 0: # dump read
             log.info('reusing buffer dump to fill the possible gaps')
@@ -244,6 +246,7 @@ class UDPchannel():
             self.conn.execute(Cmd)
             self.conn.commit()
             log.debug('buffer content deleted')
+            self.dump_buffer() # empty sql file too!
         except:
             traceback.print_exc()
 
@@ -300,10 +303,10 @@ class UDPchannel():
     #    return self.last
     
     
-    def unsent(self, maxage=86400):  # dump / delete unsent for too long messages
-        ''' Counts the non-acknowledged messages and removes older than maxage seconds (24h by default) '''
-        if self.ts - self.ts_unsent < self.retrysend_delay / 2: # no need to recheck too early
-            return 0
+    def unsent(self, maxage=86400):   # 24 hours max history to be kept
+        ''' Counts the non-acknowledged messages and removes older than maxage seconds (24h by default). 
+            If no more lines in buffer, dump empty table into sql file to avoid rows de ja vue on next start
+        '''
             
         self.ts = int(round(time.time(),0))
         self.ts_unsent = self.ts
@@ -315,11 +318,11 @@ class UDPchannel():
             Cmd="BEGIN IMMEDIATE TRANSACTION"  # buff2server
             self.conn.execute(Cmd)
             #Cmd="SELECT count(sta_reg),min(ts_created),max(ts_created) from "+self.table+" where ts_created+0+"+str(10*self.retrysend_delay)+"<"+str(self.ts) # yle 3x regular notif
-            Cmd = "SELECT count(sta_reg),min(ts_created),max(ts_created) from "+self.table+" where ts_created+0+"+str(maxage)+"<"+str(self.ts) # yle 3x regular notif
+            Cmd = "SELECT count(sta_reg),min(ts_created),max(ts_created) from "+self.table+" where ts_created+0+"+str(maxage)+"<"+str(self.ts) # too old to keep
             cur = self.conn.cursor()
             cur.execute(Cmd)
             for rida in cur: # only one line for count if any at all
-                delcount = rida[0] # to be removed due to too old
+                delcount = rida[0] # to be removed as too old
                 
             if delcount > 0: # something to be removed
                 Cmd = "delete from "+self.table+" where ts_created+0+"+str(maxage)+"<"+str(self.ts)
@@ -331,12 +334,17 @@ class UDPchannel():
             for rida in cur: # only one line for count if any at all
                 linecount = rida[0] # int
                 
+            msg=''
             if linecount > self.linecount + 10: # dump again while the table keeps increasing
                 msg=str(linecount)+' unsent messages to be dumped from table '+self.table+'!'
-                log.warning(msg)
-                self.dump_buffer()
+            elif linecount == 0 and self.linecount > 0: # dump empty table in to sql file
+                msg='empty buffer to be dumped from table '+self.table+'!'
+            
+            if msg != '':
+                log.info(msg)
+                self.dump_buffer() # dump to add more lines into sql file
                 self.linecount = linecount
-                
+            
             self.conn.commit() # buff2server transaction end
             return linecount # 0
             
@@ -367,12 +375,29 @@ class UDPchannel():
         ts_created = 0 # local
         svc_count = 0 # local
         sendstring = ''
-        timetoretry=int(self.ts-self.retrysend_delay) # send again services older than that
+        
         cur = self.conn.cursor()
         cur2 = self.conn.cursor()
         limit = self.sk.get_state()[0] * 10 + 2  # 1 key:value to try if conn down, more if up 
         #log.info('...trying to select and send max '+str(limit)+' buffer lines')
-                
+        
+        #if self.sk.get_state()[0] == 0: # no conn
+        #    timetoretry = int(self.ts_udpunsent + 3 * self.retrysend_delay) # try less often during conn break
+        #else: # conn ok
+        #    timetoretry = int(self.ts_udpsent + self.retrysend_delay)
+        if self.ts_udpsent > self.ts_udpunsent:
+            timetoretry = int(self.ts_udpsent + self.retrysend_delay)
+        else:
+            timetoretry = int(self.ts_udpunsent + 3 * self.retrysend_delay) # longer retry delay with no conn
+            
+        if self.ts < timetoretry: # too early to send again
+            log.debug('conn state '+str(self.sk.get_state()[0])+'. wait with buff2server until timetoretry '+str(int(timetoretry))) ##
+            return 0 # perhaps next time
+        else:
+            log.debug('buff2server execution due to time '+str(self.ts-timetoretry)+' s past timetoretry '+str(timetoretry))
+        
+        self.unsent()  # delete too old lines, count the rest
+        
         Cmd = "BEGIN IMMEDIATE TRANSACTION" # buff2server
         try:
             self.conn.execute(Cmd)
@@ -382,13 +407,13 @@ class UDPchannel():
             cur.execute(Cmd)
             
             for row in cur: # ts alusel, iga ts jaoks oma in
-                ts_created = int(round(row[0],0)) if srow[0] != '' else 0 # should be int
+                ts_created = int(round(row[0],0)) if row[0] != '' else 0 # should be int
                 log.debug('processing ts_created '+str(ts_created))
                 #if ts_created > 1433000000: # valid ts AGA kui on vale siis mingu serveri aeg
                 self.inum += 1 # increase the message number  for every ts_created
                 sendstr = "in:" + str(self.inum) + ","+str(ts_created)+"\n" # start the new in: block    
                 Cmd = 'SELECT * from '+self.table+' where ts_created='+str(ts_created)
-                #log.info('selecting rows for inum'+str(self.inum)+': '+Cmd) # debug
+                log.debug('selecting rows for inum'+str(self.inum)+': '+Cmd) # debug
                 cur2.execute(Cmd)
                  
                 for srow in cur2:
@@ -402,14 +427,9 @@ class UDPchannel():
                     if sta_reg != '':
                         sendstr += sta_reg+":"+str(status)+"\n"
                 
-                #else: # invalid date
-                #    Cmd = 'delete from '+self.table+' where ts_created='+str(ts_created) # faulty time, delete or fix?
-                #    log.warning('DELETING rows from '+self.table+' with invalid ts_created '+str(ts_created))
-                #    self.conn.execute(Cmd)
-                
                 if len(sendstr) > 0:
                     sendstring += sendstr
-                    log.debug('added to sendstring service row: '+sendstr) ###
+                    log.debug('added to sendstring in related sendstr: '+sendstr.replace('\n',' ')) ###
                     Cmd = "update "+self.table+" set ts_tried="+str(int(self.ts))+",inum="+str(self.inum)+" where ts_created="+str(ts_created)
                     log.debug('buffer update cmd: '+Cmd) # update all rows with this ts_creted together
                     self.conn.execute(Cmd)
@@ -422,7 +442,7 @@ class UDPchannel():
             if svc_count > 0: # there is something to be sent!
                 #sendstring = "in:" + str(self.inum) + ","+str(ts_created)+"\n" + sendstring # in alusel vastuses toimub puhvrist kustutamine
                 sendstring = "id:" + str(self.host_id) + "\n" + sendstring # alustame sellega datagrammi
-                #log.info('sendstring before udpsend(): '+sendstring)
+                log.debug('going to udpsend from buff2server, sendstring : '+sendstring) ##
                 self.udpsend(sendstring) # sending away
             return 0
         
@@ -462,9 +482,10 @@ class UDPchannel():
             self.ts_udpsent = self.ts # last successful udp send
             return sendlen
         except:
-            msg = 'udp send failure for '+str(int(self.ts - self.ts_udpsent))+' s, '+str(self.linecount)+' lines in buffer' # cannot send, problem with connectivity
+            msg = 'udp send failure for '+str(int(self.ts - self.ts_udpsent))+' s, '+str(self.linecount)+' lines in dumped buffer' # cannot send, problem with connectivity
             #syslog(msg)
             log.warning(msg)
+            self.ts_udpunsent = self.ts # last UNsuccessful udp send
             #traceback.print_exc()
 
             if 'led' in dir(self):

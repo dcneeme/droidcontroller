@@ -3,6 +3,7 @@
 
 import subprocess
 import sys
+import socket, struct, fcntl
 
 from droidcontroller.sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
 s=SQLgeneral() 
@@ -19,8 +20,8 @@ class Commands(SQLgeneral): # p
     def __init__(self, OSTYPE):
         ''' PSTYPE not used since 22.6.2015. vpnon and vpnoff must be present in curr dir! '''
         self.todocode = 0 # todo_proc() retries
-        self.vpn_start = 'vpnon' 
-        self.vpn_stop = 'vpnoff'
+        self.vpn_start = '/root/d4c/vpnon' 
+        self.vpn_stop = '/root/d4c/vpnoff'
         
 
 
@@ -354,7 +355,7 @@ class RegularComm(SQLgeneral): # r
         self.ts_regular=self.app_start - interval # for immediate sending on start
         self.ts=self.app_start
         self.uptime=[0,0,0]
-        self.host_ip = 'unknown'
+        self.host_ip = 'unknown' # controller ip
                 
         try:
             self.sync_uptime() # sys apptime to uptime[0]
@@ -365,6 +366,37 @@ class RegularComm(SQLgeneral): # r
             pass
 
 
+
+    def get_host_ip(self, iface = 'auto'):
+        ''' returns the actual ip address in use, usage
+        get_ip('eth0')
+        '10.80.40.234'
+        '''
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sockfd = sock.fileno()
+        SIOCGIFADDR = 0x8915
+        ip = None
+        
+        if iface == 'auto':
+            ifacelist = ['tun0','wlan0','eth0'] # for auto
+        else:
+            ifacelist = [iface] # for NOT auto
+            
+        for iface in ifacelist:
+            ifreq = struct.pack('16sH14s', iface.encode('utf-8'), socket.AF_INET, b'\x00'*14)
+            try:
+                res = fcntl.ioctl(sockfd, SIOCGIFADDR, ifreq)
+                ip = struct.unpack('16sH2x4s8x', res)[2]
+                break
+            except:
+                pass
+            
+        if ip != None:
+            return socket.inet_ntoa(ip)
+        else:
+            return None
+        
+    
     def subexec(self, exec_cmd, submode = 1): # submode 0 - returns exit code only, 1 - waits for output, 2 - forks to background. use []
         ''' shell command execution. if submode 0-, return exit staus.. if 1, exit std output produced.
             exec_cmd is a list of cmd and parameters! use []
@@ -390,18 +422,7 @@ class RegularComm(SQLgeneral): # r
         log.debug('uptimes sys, app, app_start_uptime '+str(self.uptime))
 
 
-    def set_host_ip(self, invar):  ### no need for?
-        self.host_ip=invar
-
-
-    def get_host_ip(self): ### no need for?
-        #self.host_ip=p.subexec('./getnetwork.sh',1).split(' ')[1] # mac and ip from the system
-        #self.host_ip=p.subexec('./getnetwork.sh',1).split(' ')[1] # mac and ip from the system
-        self.host_ip=self.subexec('./getnetwork.sh',1).split(' ')[1] # mac and ip from the system
-        print('get_host_ip:',self.host_ip)
-
-
-    def regular_svc(self, svclist = ['UPW','TCW']): # default are uptime and traffic services
+    def regular_svc(self, svclist = ['UPW','TCW','IPV']): # default are uptime, traffic and ip addr services
         ''' sends regular service messages that are not related to aichannels, dichannels or counters.
             Returns number of bytes sent, None if send queue was not appended at this time.
         '''
@@ -423,31 +444,28 @@ class RegularComm(SQLgeneral): # r
             
             for svc in svclist:
                 if svc == 'UTW' or svc == 'TCW': # traffic
-                    #sendstring += svc+':'+str(udp.traffic[0])+' '+str(udp.traffic[1])+' '+str(tcp.traffic[0])+' '+str(tcp.traffic[1])+'\n'+svc[:-1]+'S:' # adding status
                     valuestring = str(udp.traffic[0])+' '+str(udp.traffic[1])+' '+str(tcp.traffic[0])+' '+str(tcp.traffic[1])
                     if udp.traffic[0]+udp.traffic[1]+tcp.traffic[0]+tcp.traffic[1] < 10000000:
-                    #    sendstring += '0\n' # ok
                         status = 0 # ok
                     else:
-                    #    sendstring += '1\n' # warning about recent restart
                         status = 1
                     
                 elif svc == 'ULW' or svc == 'UPW': # uptime
-                    #sendstring += svc+':'+str(self.uptime[0])+' '+str(self.uptime[1])+'\n'+svc[:-1]+'S:' # diagnostic uptimes, add status!
                     valuestring = str(self.uptime[0])+' '+str(self.uptime[1]) # diagnostic uptimes, add status!
                     if (self.uptime[0] > 1800) and (self.uptime[0] > 1800):
                     #    sendstring += '0\n' # ok
                         status = 0 
                     else:
-                    #    sendstring += '1\n' # warning
                         status = 1
+                elif svc == 'IPV':
+                    valuestring = self.get_host_ip() # ip address in use from a list starting with tun0
                 else:
                     valuestring = ''
                     
                 if len(valuestring) > 0:
                     res += udp.send([svc[:-1]+'S', status, svc, valuestring]) # via buffer. udp.send() adds ts
+                    log.info('added to buffer regular service ' + svc+':'+valuestring)
                 
-            #res = udp.udpsend(sendstring) # loop over, SEND AWAY
             self.ts_regular = self.ts
 
             return res # None if nothing sent
@@ -468,3 +486,7 @@ class RegularComm(SQLgeneral): # r
                 traceback.print_exc()
                 return 1
 
+    def set_host_ip(self, ip): # deprecated, get_host_ip() finds the ip itself dynamically
+        return 0
+    
+    ## END ## 

@@ -15,7 +15,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         Read and send only happen if enough time is passed from previous, chk readperiod, sendperiod!
     '''
 
-    def __init__(self, in_sql = 'aicochannels.sql', out_sql = 'aochannels.sql', readperiod = 3, sendperiod = 30):
+    def __init__(self, in_sql = 'aicochannels.sql', out_sql = 'aochannels.sql', readperiod = 5, sendperiod = 120):
         self.setReadPeriod(readperiod)
         self.setSendPeriod(sendperiod)
         self.in_sql = in_sql.split('.')[0]
@@ -745,8 +745,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 outhi = float(srow[10]) if srow[10] != '' else 0
                 avg = float(srow[11]) if srow[11] != '' else 0  #  averaging strength, values 0 and 1 do not average!
                 block = int(srow[12]) if srow[12] != '' else 0 # off-tout for power related on/off
-                raw = int(srow[13]) if srow[13] != '' else 0 # Nonen teeb jama
-                ovalue = int(srow[14]) if (srow[14] != None and srow[14] != '' ) else 0 # teenuseliikme endine vaartus - MIKS vahel None???
+                raw = int(srow[13]) if srow[13] != '' else None # None on vaja! 0 ei tohi saata kui oige vaartus puudub!
+                ovalue = int(srow[14]) if (srow[14] != '' ) else None # teenuseliikme endine vaartus
                 ostatus = int(srow[15]) if srow[15] != '' else 0 # teenusekomponendi status - ei kasuta / votame kasutusele
                 ots = eval(srow[16]) if srow[16] != '' else 0
                 #desc=srow[17]
@@ -830,8 +830,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                 value = int(((avg - 1) * ovalue+value)/avg) # averaging with the previous value, works like RC low pass filter
                                 log.debug('averaging on, value became '+str(value)) # debug
 
-                            if (cfg&256) and abs(value - ovalue) > value / 5.0: # change more than 20% detected, use num w comma!
-                                log.info('### value change of more than 20% detected for '+val_reg+'.'+str(member)+', need to send')
+                            if (cfg&256) and (abs(value - ovalue) > abs(value / 5.0)): # change more than 20% detected, use num w comma!
+                                log.info('### value change (was '+str(ovalue)+', became '+str(value)+') for '+val_reg+'.'+str(member)+', need to send')
                                 self.chg += 1
 
 
@@ -989,7 +989,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         '''
         res=0
         self.chg = 0
-        self.ts = round(time.time(),2)
+        self.ts = round(time.time(),0)
         if self.ts - self.ts_read > self.readperiod:
             self.ts_read = self.ts
             try:
@@ -1009,8 +1009,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             
             self.ts_send = self.ts
             try:
-                res = res+self.report_all() ### report all services in aicochannels
-                res = res+self.report_all() ### report all services in aicochannels
+                res = res + self.report_all() ### report all services in aicochannels
             except:
                 traceback.print_exc()
         return res

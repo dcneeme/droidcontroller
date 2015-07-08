@@ -1,5 +1,5 @@
 # This Python file uses the following encoding: utf-8
-# last change 5.3.2014
+# last change 5.7.2015
 
 ''' 
 mbys.py - query and process kamstrup, sensus or axis heat meters via Mbus protocol, 2400 8E1
@@ -226,13 +226,20 @@ class Mbus:
         ''' Sends the query, reads the response and checks the content '''
         try:
             self.ser.flushInput() # no garbage or old responses wanted
-            if self.model == 'sensusPE':
-                self.ser.write(b'\x68\x03\x03\x68\x73\xFE\x50\xC1\x16') # answer mode set
-                time.sleep(0.5) # muidu ei tule jargmist vastust
+            #if self.model == 'sensusPE':
+            #    self.ser.write(b'\x68\x03\x03\x68\x73\xFE\x50\xC1\x16') # answer mode set
+            #    time.sleep(0.5) # muidu ei tule jargmist vastust
+            ## addded 5.7.2015
+            self.ser.write(b'\x10\x40\xfe\x3e\x16') # init? from mtool example
+            time.sleep(0.5) # muidu ei tule jargmist vastust
+
+            self.ser.write(b'\x68\x03\x03\x68\x73\xFE\x50\xC1\x16') # answer mode set, from mtool
+            time.sleep(0.5) # muidu ei tule jargmist vastust
+            ## adding end
+            
             self.ser.flushInput() # no garbage or old responses wanted
             self.ser.write(query) # kamstrup and sensus
-            #self.ser.write(b'\x10\x7B\xFE\x79\x16') # sensus - similar!
-
+            
             self.mbm = self.ser.read(253) # kamstrup: should be 254 bytes, but the first byte E5 disappears??
             if len(self.mbm) > 0:
                 #if len(self.mbm) == 253 and str(encode(self.mbm, 'hex_codec'))[2:10] == '68f7f768' and str(encode(self.mbm, 'hex_codec'))[-3:-1] == '16':
