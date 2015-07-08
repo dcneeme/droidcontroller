@@ -6,11 +6,15 @@
 and transported energy
 
 usage:
-    from heatflow import *
-    fr = FlowRate()
-    he = HeatExchange(0.05)
-    fr.output(1,1)
-    he.output(1,40,30)
+from heatflow import *
+pp=PulsePeriod()
+pp.period(0,0)
+
+fr = FlowRate()
+fr.flowrate(0,0)
+
+he = HeatExchange(0.05)
+he.output(1,40,30)
 
     to get COP value use self.energylast in J divided by el en  consum inc since last cycle stop!
 '''
@@ -19,10 +23,64 @@ import time
 import logging
 log = logging.getLogger(__name__)
 
-class FlowRate:
+ 
+class PulsePeriod:
+    ''' Class to calculate flow meter output pulse periods during pump run only. 
+        from flowrate_test import *
+        pp = PulsePeriod()
+        pp.output(0,0)
+    '''
+
+    def __init__(self):
+        self.di_pulse = 0 # previous 
+        self.di_pump = 0 # previous
+        self.ts_last_fr = None # previous ts
+        self.period = [0, 0] # hi lo jaoks eraldi, keskmistada eelmisega
+        self.lastperiod = [0, 0] # used to calculate output
+        log.info('PulsePeriod 1 init')
+
+
+    def output(self, di_pump, di_pulse): # output 0 during no di_pump!
+        ''' Returns LAST KNOWN averaged period in second averaged taking hi and lo input into account
+            Execute this at DI polling speed, not to miss any di changes and to improve precision.
+        '''
+        if di_pump > 1 or di_pulse > 1:
+            log.warning('invalid parameters '+str(di_pump)+' '+str(di_pulse))
+            return None
+            
+        tsnow = time.time()
+        if self.ts_last_fr == None:
+            self.ts_last_fr = tsnow
+        timeinc = tsnow - self.ts_last_fr
+        self.ts_last_fr = tsnow
+        
+        if di_pump == 1: # only calculate during pump running
+            self.period[0] += timeinc # pumping, extend current period[0]
+            self.period[1] += timeinc # pumping, extend current period[1]
+        
+        log.debug('tsnow '+str(int(tsnow))+', period '+str(self.period)+', lastperiod '+str(self.lastperiod))
+        
+        if di_pulse != self.di_pulse: # pulse edge detected, store and reset
+            log.debug('pulse level to '+str(di_pulse)+', storing and clearing period['+str(di_pulse)+']')
+            if self.period[(di_pulse)] > 0: # avoid zero
+                self.lastperiod[(di_pulse)] = self.period[(di_pulse)] # new period result
+            self.period[di_pulse] = 0 # clear one of the period time counters
+            self.di_pulse = di_pulse
+            
+        output = (self.lastperiod[0] + self.lastperiod[1]) / 2
+        
+        if self.lastperiod[0] > 0 and self.lastperiod[1] > 0:
+            return output
+        else:
+            log.warning('waiting for pulses... gathered periods currently '+str(self.period))
+            return None # too early for results
+            
+            
+class FlowRate: # FIXME! not usable as of 7.2015, errors in some cases! 
     ''' Class to calculate values related to heat exchange metering.
     Suitable in cases where flow signal (like pump state) is available
     in addition to relatively rare S0 pulses from flowmeter.
+    It is assumed that flow is stable when the pump works. Calculation is based on averaging.
     '''
     def __init__(self, litres_per_pulse=10):
         self.litres_per_pulse = litres_per_pulse
@@ -36,9 +94,10 @@ class FlowRate:
     def output(self, di_pump, di_pulse):
         ''' Returns flow rate l/s based on pulse count slow increment from
         fluid flow meter, usually with symmetrical (50% active) pulse
-        output.
+        output. Use often not to miss any pulses! time counting stops if di_pump == 0.
+        External on/off signal is also needed in order to know when the rate is 0.
 
-        Flowrate on output is calculated during continuous pumping only,
+        Flowrate output is calculated during continuous pumping only,
         based on flowmeter pulse raising edge (this may be detected faster
         than the counters are read). Not to be used with electric
         meters / fast pulse output.
@@ -49,15 +108,11 @@ class FlowRate:
         '''
         tsnow = time.time()
         flowrate = 0
-        if di_pump == 1:
-            # pumping
-            if di_pulse != self.di_pulse:
-                # pulse input level change
+        if di_pump == 1: # pumping
+            if di_pulse != self.di_pulse: # pulse edge detected
                 self.di_pulse = di_pulse
-                if self.di_pulse == 1:
-                    # this edge active
-                    if self.pstate == 0:
-                        # first pulse during pumping session
+                if self.di_pulse == 1: # this edge active
+                    if self.pstate == 0: # first pulse during pumping session
                         self.ts_last = tsnow
                         self.pstate = 1
                         #self.avg = 1 # average on first pulse interval
