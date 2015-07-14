@@ -54,6 +54,7 @@ class Commands(SQLgeneral): # p
         A dictionary member may also present a service value, in which case the according sql table is updated.
         The dictionary members that are not recognized, are ignored and not returned.
         Returns string TODO or ''
+        
         '''
 
         TODO = ''
@@ -94,7 +95,8 @@ class Commands(SQLgeneral): # p
                         
                 #return immediately the cmd to avoid unnecessary repeated execution
                 sendstring = key+':'+value+'\n' # return exactly the same what we got to clear newstate. must NOT be forwarded to nagios
-                udp.udpsend(sendstring) # cmd ack
+                udp.udpsend(sendstring) # no buffering here
+                
 
 
 
@@ -335,7 +337,7 @@ class Commands(SQLgeneral): # p
                 
             #udp.syslog(msg)
             sendstring += 'ERV:'+msg+'\n' # msh cannot contain colon or newline
-            udp.udpsend(sendstring) # SEND AWAY. no need for server ack so using 0 instead of inumm
+            udp.udpsend(sendstring) # SEND AWAY. this can go directly, omitting buffer
 
             sys.stdout.flush()
             #time.sleep(1)
@@ -394,7 +396,7 @@ class RegularComm(SQLgeneral): # r
         if ip != None:
             return socket.inet_ntoa(ip)
         else:
-            return None
+            return '127.0.0.1' # no other interface up
         
     
     def subexec(self, exec_cmd, submode = 1): # submode 0 - returns exit code only, 1 - waits for output, 2 - forks to background. use []
@@ -437,6 +439,7 @@ class RegularComm(SQLgeneral): # r
             self.sync_uptime()
             sendstring=''
             
+            ## udp.send() jaoks servicetuple
             #sta_reg = str(servicetuple[0])
             #status = int(servicetuple[1])
             #val_reg = str(servicetuple[2])
@@ -457,15 +460,17 @@ class RegularComm(SQLgeneral): # r
                         status = 0 
                     else:
                         status = 1
-                elif svc == 'IPV':
+                elif svc == 'IPV' or svc == 'ip':
                     valuestring = self.get_host_ip() # ip address in use from a list starting with tun0
                 else:
-                    valuestring = ''
+                    valuestring = 'regular service '+svc+' not supported'
                     
-                if len(valuestring) > 0:
+                if valuestring != None and len(valuestring) > 0:
                     res += udp.send([svc[:-1]+'S', status, svc, valuestring]) # via buffer. udp.send() adds ts
                     log.info('added to buffer regular service ' + svc+':'+valuestring)
-                
+                else:
+                    log.warning('regular svc '+svc+' not supported!')
+                    
             self.ts_regular = self.ts
 
             return res # None if nothing sent
