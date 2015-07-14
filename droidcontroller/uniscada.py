@@ -1,7 +1,8 @@
 # This Python file uses the following encoding: utf-8
 
 # send and receive monitoring and control messages to from UniSCADA monitoring system
-# able to use sha256 signature
+# able to restore unsent history from buffer2server.sql when connectivity restored
+
 
 import time, datetime
 import sqlite3
@@ -15,7 +16,6 @@ import requests
 import logging
 log = logging.getLogger(__name__)
 
-
 class UDPchannel():
     ''' Sends away the messages, combining different key:value pairs and adding host id and time. Listens for incoming commands and setup data.
     Several UDPchannel instances can be used in parallel, to talk with different servers.
@@ -24,8 +24,7 @@ class UDPchannel():
 
     '''
 
-    def __init__(self, id = '000000000000', ip = '127.0.0.1', port = 44445, receive_timeout = 0.1, \
-            retrysend_delay = 5, loghost = '0.0.0.0', logport=514, copynotifier=None, secret_key = None): # delays in seconds
+    def __init__(self, id ='000000000000', ip='127.0.0.1', port=44445, receive_timeout=0.1, retrysend_delay=5, loghost='0.0.0.0', logport=514, copynotifier=None): # delays in seconds
         #from droidcontroller.connstate import ConnState
         from droidcontroller.statekeeper import StateKeeper
         self.sk = StateKeeper(off_tout=300, on_tout=0) # conn state with up/down times. 
@@ -39,18 +38,16 @@ class UDPchannel():
             log.warning('GPIOLED not imported')
                         
         self.set_copynotifier(copynotifier) # parallel to uniscada notification in another format
-        self.secret_key = secret_key
-        self.host_id = id
-        self.ip = ip
-        self.port = port
+        self.host_id = id # controller ip as tun0 wlan0 eth0 127.0.0.1
+        self.ip = ip # monitoring server
+        self.port = port # monitoring server
         self.loghost = loghost
         self.logport = logport
         self.logaddr = (self.loghost,self.logport) # tuple
 
         self.traffic = [0,0] # UDP bytes in, out
-        self.receive_timeout = receive_timeout
         self.UDPSock = socket(AF_INET,SOCK_DGRAM)
-        self.UDPSock.settimeout(self.receive_timeout)
+        self.UDPSock.settimeout(receive_timeout)
         self.retrysend_delay = retrysend_delay
         self.inum = 0 # sent message counter
 
@@ -61,24 +58,22 @@ class UDPchannel():
         log.info('init: created uniscada and syslog connections to '+ip+':'+str(port)+' and '+loghost+':'+str(logport))
         self.table = 'buff2server' # can be anything, not accessible to other objects WHY? would be useful to know the queue length...
         self.sent = '' # last servicetuple sent to the buffer
-        
-        try:
-            from droidcontroller.sdp import SDP
-        except:
-            log.warning('sdp not imported!') # pass  # no signing due to no sdp.py available?
-        
         self.Initialize()
 
     def Initialize(self):
         ''' initialize time/related variables and create buffer database with one table in memory '''
-        self.ts = round(time.time(),1)
+        self.ts = int(round(time.time(),0)) # current time?
         #self.ts_inum = self.ts # inum increase time, is it used at all? NO!
         self.ts_unsent = self.ts # last unsent chk
-        self.ts_udpsent=self.ts
-        self.ts_udpgot=self.ts
+        self.ts_udpsent = self.ts
+        self.ts_udpgot = self.ts
+        self.ts_udpunsent = self.ts # failed send timestamp
+        
         self.conn = sqlite3.connect(':memory:')
         #self.cur=self.conn.cursor() # cursors to read data from tables / cursor can be local
-        self.makebuff() # create buffer table for unsent messages
+        self.makebuffer() # create buffer table for unsent messages
+        self.linecount = 0 # lines in buffer
+        self.undumped = 0 # not yet dumped into buff2server.sql 
         #self.setIP(self.ip)
         #self.setLogIP(self.loghost)
 
@@ -96,20 +91,19 @@ class UDPchannel():
         return None
 
     
-    def get_ip(self):
+    def get_ip(self): # obsolete, use r.get_host_id(0
         ''' Returns ONE effective ip address, the selection order is: tun0, eth0, wlan0, eth1 '''
         pass # kuidas jalgida ip adr vms olekut pythonist?
         
     
-    def udpreset(self):
-        ''' Reopen socket  s the first measure to reconnect '''
-        self.UDPSock = socket(AF_INET,SOCK_DGRAM)
-        self.UDPSock.settimeout(self.receive_timeout)
+    def getIP(self): 
+        ''' returns server ip for this instance '''
+        return self.ip
         
     
     def set_copynotifier(self, copynotifier):
         self.copynotifier = copynotifier
-    
+        
     
     def setIP(self, invar):
         ''' Set the monitoring server ip address '''
@@ -127,21 +121,12 @@ class UDPchannel():
         self.port = invar
         self.saddr = (self.ip,self.port) # refresh needed
 
-    def getPort(self):
-        ''' Return the monitoring UDP port '''
-        return self.port
-        
+
     def setID(self, invar):
         ''' Set the host id '''
         self.host_id = invar
 
 
-    def set_secret_key(self, secret_key): # used by sdp
-        ''' Set secret key for HMAC '''
-        self.secret_key = secret_key
-        log.info('secret_key for signature set')
-
-        
     def setRetryDelay(self, invar):
         ''' Set the monitoring server UDP port '''
         self.retrysend_delay = invar
@@ -155,9 +140,7 @@ class UDPchannel():
         ''' returns host id for this instance '''
         return self.host_id
 
-    def getIP(self):
-        ''' returns server ip for this instance '''
-        return self.ip
+
 
     def getLogIP(self):
         ''' returns syslog server ip for this instance '''
@@ -195,51 +178,104 @@ class UDPchannel():
         return self.ts_udpgot
 
 
-    def makebuff(self): # drops buffer table and creates
-        ''' Dumped buffer to read and send first if not empty '''
-        Cmd = 'drop table if exists '+self.table
-        sql = "CREATE TABLE "+self.table+"(sta_reg,status NUMERIC,val_reg,value,ts_created NUMERIC,inum NUMERIC,ts_tried NUMERIC);" # semicolon needed for NPE for some reason!
+    def sqlread(self, table): # drops table and reads from file <table>.sql that must exist
+        ''' restore buffer from dump. basically the same as in sqlgeneral.py '''
+        sql = ''
+        filename=table+'.sql' # the file to read from
+        try:
+            sql = open(filename).read()
+            msg = 'found '+filename
+            log.info(msg)
+        except:
+            return 1 # no dump
+
+        Cmd = 'drop table if exists '+table
         try:
             self.conn.execute(Cmd) # drop the table if it exists
+            self.conn.commit()
             self.conn.executescript(sql) # read table into database
             self.conn.commit()
-            msg='sqlread: successfully (re)created table '+self.table
+            msg = 'successfully recreated table '+table
+            log.info(msg)
             return 0
+
         except:
-            msg='sqlread: '+str(sys.exc_info()[1])
-            print(msg)
-            #syslog(msg)
+            msg = 'sqlread() problem for '+table+': '+str(sys.exc_info()[1])
+            log.warning(msg)
             traceback.print_exc()
             time.sleep(1)
             return 1
+            
+            
+    def makebuffer(self): # rereads buffer dump or creates new empty one if dump does not exist
+        ''' Old dumped rows in buffer will be sent first if not empty '''
+        
+        if self.sqlread(self.table) == 0: # dump read
+            log.info('reusing buffer dump to fill the possible gaps')
+            return 0
+            
+        else: # create new table
+            Cmd='drop table if exists '+self.table
+            self.conn.execute(Cmd) # drop the table if it exists
+            sql="CREATE TABLE "+self.table+"(sta_reg,status NUMERIC,val_reg,value,ts_created NUMERIC,inum NUMERIC,ts_tried NUMERIC);" # semicolon needed for NPE for some reason!
+            try:
+                self.conn.executescript(sql) # read table into database
+                self.conn.commit()
+                msg='no dump to restore, (re)created table '+self.table
+                log.info(msg)
+                return 0
+            except:
+                msg='failed to reread and create buffer table, '+str(sys.exc_info()[1])
+                log.warning(msg)
+                #syslog(msg)
+                #traceback.print_exc()
+                time.sleep(1)
+                return 1
 
 
     def delete_buffer(self): # empty buffer
-        Cmd='delete from '+self.table
+        Cmd = 'delete from '+self.table
         try:
             self.conn.execute(Cmd)
             self.conn.commit()
             log.debug('buffer content deleted')
+            self.dump_buffer() # empty sql file too!
         except:
             traceback.print_exc()
 
+    def dump_buffer(self):
+        ''' Writes the buffer table into a SQL-file to keep unsent data '''
+        msg=self.table+' dump into '+self.table+'.sql'
+        log.info(msg)
+        try:
+            with open(self.table+'.sql', 'w') as f:
+                for line in self.conn.iterdump(): # see dumbib koik kokku!
+                    if self.table in line: # needed for one table only! without that dumps all!
+                        f.write('%s\n' % line)
+            return 0
+        except:
+            msg = 'FAILURE dumping '+self.table+'! '+str(sys.exc_info()[1])
+            log.warning(msg)
+            #syslog(msg)
+            traceback.print_exc()
+            return 1
 
+            
 
     def send(self, servicetuple): # store service components to buffer for send and resend
-        ''' Invar is actually list. 
-            Adds service components into buffer table to be sent as a string message
+        ''' Adds service components into buffer table to be sent as a string message
             the components are sta_reg = '', status = 0, val_reg = '', value = ''
         '''
-        if servicetuple == None or servicetuple == []:
-            log.warning('ignored empty servicetuple')
+        if servicetuple == None:
+            log.warning('ignored servicetuple with value None')
             return 2
             
         try:
-            sta_reg=str(servicetuple[0])
-            status=int(servicetuple[1])
-            val_reg=str(servicetuple[2])
-            value=str(servicetuple[3])
-            self.ts = round(time.time(),1)
+            sta_reg = str(servicetuple[0])
+            status = int(servicetuple[1])
+            val_reg = str(servicetuple[2])
+            value = str(servicetuple[3])
+            self.ts = int(round(time.time(),0)) # no decimals
             Cmd = "INSERT into "+self.table+" values('"+sta_reg+"',"+str(status)+",'"+val_reg+"','"+value+"',"+str(self.ts)+",0,0)" # inum and ts_tried left initially empty
             #print(Cmd) # debug
             self.conn.execute(Cmd)
@@ -260,173 +296,194 @@ class UDPchannel():
     #    return self.last
     
     
-    def unsent(self):  # delete unsent for too long messages - otherwise the udp messages will contain older key:value duplicates!
-        ''' Counts the non-acknowledged messages and removes older than 3 times retrysend_delay '''
-        if self.ts - self.ts_unsent < self.retrysend_delay / 2: # no need to recheck too early
-            return 0
-        self.ts = round(time.time(),1)
+    def unsent(self, maxage=86400):   # 24 hours max history to be kept
+        ''' Counts the non-acknowledged messages and removes older than maxage seconds (24h by default). 
+            If no more lines in buffer, dump empty table into sql file to avoid rows de ja vue on next start
+        '''
+            
+        self.ts = int(round(time.time(),0))
         self.ts_unsent = self.ts
         mintscreated = 0
         maxtscreated = 0
+        delcount = 0
+        
         try:
             Cmd="BEGIN IMMEDIATE TRANSACTION"  # buff2server
             self.conn.execute(Cmd)
-            Cmd = "SELECT count(sta_reg),min(ts_created),max(ts_created) from "+self.table+" where ts_created+0+"+str(10*self.retrysend_delay)+"<"+str(self.ts) # yle 3x regular notif
+            #Cmd="SELECT count(sta_reg),min(ts_created),max(ts_created) from "+self.table+" where ts_created+0+"+str(10*self.retrysend_delay)+"<"+str(self.ts) # yle 3x regular notif
+            Cmd = "SELECT count(sta_reg),min(ts_created),max(ts_created) from "+self.table+" where ts_created+0+"+str(maxage)+"<"+str(self.ts) # too old to keep
             cur = self.conn.cursor()
             cur.execute(Cmd)
             for rida in cur: # only one line for count if any at all
-                delcount = rida[0] # int
-                if delcount > 0: # stalled services found
-                    #print repr(rida) # debug
-                    mintscreated = rida[1]
-                    maxtscreated = rida[2]
-                    log.warning(str(delcount)+' service lines waiting for ack more than '+str(10 * self.retrysend_delay)+' s will be deleted')
-                    Cmd = "select * from "+self.table+" where ts_created+0+"+str(10*self.retrysend_delay)+"<"+str(self.ts) # 
-                    cur.execute(Cmd)
-                    for rida in cur:
-                        log.warning(str(repr(rida))) # debug
-                    Cmd = "delete from "+self.table+" where ts_created+0+"+str(10*self.retrysend_delay)+"<"+str(self.ts) # +" limit 10" # limit lisatud 23.03.2014 aga miks?
-                    self.conn.execute(Cmd)
+                delcount = rida[0] # to be removed as too old
+                
+            if delcount > 0: # something to be removed
+                Cmd = "delete from "+self.table+" where ts_created+0+"+str(maxage)+"<"+str(self.ts)
+                self.conn.execute(Cmd)
+                log.warning('deleted '+str(delcount)+' too old lines from buffer')
 
             Cmd="SELECT count(sta_reg),min(ts_created),max(ts_created) from "+self.table
             cur.execute(Cmd)
             for rida in cur: # only one line for count if any at all
-                delcount = rida[0] # int
-            if delcount > 50: # delete all!
-                Cmd = "delete from "+self.table
-                self.conn.execute(Cmd)
-                msg = 'deleted '+str(delcount)+' unsent messages from '+self.table+'!'
-                log.warning(msg)
-                #syslog(msg)
+                linecount = rida[0] # int
+                
+            msg=''
+            #if self.sk.get_state()[0] == 0: # no conn
+            if linecount > self.linecount + 100: # dump again while the table keeps increasing
+                msg=str(linecount)+' messages to be dumped from table '+self.table+'!'
+            elif linecount == 0 and self.linecount > 0: # dump empty table into sql file
+                msg='empty buffer to be dumped from table '+self.table+'!'
+            
+            if msg != '':
+                log.info(msg)
+                self.dump_buffer() # dump to add more lines into sql file
+                self.linecount = linecount # dumped rows
+            
+            self.undumped = linecount - self.linecount
             self.conn.commit() # buff2server transaction end
-            return delcount # 0
-            #time.sleep(1) # prooviks
+            return linecount # 0
+            
         except:
-            msg = 'problem with unsent, '+str(sys.exc_info()[1])
+            msg='problem with unsent, '+str(sys.exc_info()[1])
             log.warning(msg)
-            #syslog(msg)
             traceback.print_exc()
             #sys.stdout.flush()
-            time.sleep(1)
+            #time.sleep(1)
             return 1
 
         #unsent() end
+        
 
-
+    def udpreset(self):
+        ''' Reopen socket  s the first measure to reconnect '''
+        self.UDPSock = socket(AF_INET,SOCK_DGRAM)
+        self.UDPSock.settimeout(self.receive_timeout)
+     
 
     def buff2server(self): # send the buffer content
-        ''' UDP monitoring message creation and sending (using udpsend)
-            based on already existing buff2server data, does the retransmits too if needed.
-            buff2server rows successfully send will be deleted by udpread() based on in: contained in the received  message
+        ''' ONE UDP monitoring message creation and sending (using self.udpsend).
+            Happens based on already existing buff2server data. Only the oldest rows will be sent!
+            buff2server rows successfully sent will be later deleted by udpread()
+            (based on one or more in: contained in the received  message).
         '''
         timetoretry = 0 # local
         ts_created = 0 # local
         svc_count = 0 # local
         sendstring = ''
-        timetoretry=int(self.ts-self.retrysend_delay) # send again services older than that
+        age = 0 # how far from history
+        cur = self.conn.cursor()
+        cur2 = self.conn.cursor()
+        limit = self.sk.get_state()[0] * 4 + 1  # 1 key:value to try if conn down, 5 if up. 100 is too much, above 1 kB
+        #log.info('...trying to select and send max '+str(limit)+' buffer lines')
+        
+        #if self.sk.get_state()[0] == 0: # no conn
+        #    timetoretry = int(self.ts_udpunsent + 3 * self.retrysend_delay) # try less often during conn break
+        #else: # conn ok
+        #    timetoretry = int(self.ts_udpsent + self.retrysend_delay)
+        if self.ts_udpsent > self.ts_udpunsent:
+            timetoretry = int(self.ts_udpsent + self.retrysend_delay)
+        else:
+            timetoretry = int(self.ts_udpunsent + 3 * self.retrysend_delay) # longer retry delay with no conn
+            
+        if self.ts < timetoretry: # too early to send again
+            log.debug('conn state '+str(self.sk.get_state()[0])+'. wait with buff2server until timetoretry '+str(int(timetoretry))) ##
+            return 0 # perhaps next time
+        else:
+            log.debug('buff2server execution due to time '+str(self.ts-timetoretry)+' s past timetoretry '+str(timetoretry))
+        
+        self.unsent()  # delete too old lines, count the rest
+        
         Cmd = "BEGIN IMMEDIATE TRANSACTION" # buff2server
         try:
             self.conn.execute(Cmd)
-        except:
-            log.warning('could not start transaction on self.conn, '+self.table)
-            traceback.print_exc()
-
-        Cmd = "SELECT * from "+self.table+" where ts_tried=0 or (ts_tried+0>1358756016 and ts_tried+0<"+str(self.ts)+"+0-"+str(timetoretry)+") AND status+0 != 3 order by ts_created asc limit 30"
-        try:
-            cur = self.conn.cursor()
+            #Cmd = 'select min(ts_created+0) from '+self.table # the oldest timestamp
+            Cmd = 'select ts_created+0 from '+self.table+' group by ts_created limit '+str(limit) # find the oldest creation timestamp(s)
+            #log.info(Cmd) ##
             cur.execute(Cmd)
-            for srow in cur:
-                #print(repr(srow)) # debug, what will be sent
-                if svc_count == 0: # on first row only increase the inum!
-                    self.inum=self.inum+1 # increase the message number / WHY HERE? ACK WILL NOT DELETE THE ROWS!
-                    if self.inum > 65535:
-                        self.inum = 1 # avoid zero for sending
-                        #self.ts_inum=self.ts # time to set new inum value
-
-                svc_count=svc_count+1
-                sta_reg=srow[0]
-                status=srow[1]
-                val_reg=srow[2]
-                value=srow[3]
-                ts_created=srow[4]
-
-                if val_reg != '':
-                    sendstring += val_reg+":"+str(value)+"\n"
-                if sta_reg != '':
-                    sendstring += sta_reg+":"+str(status)+"\n"
-
-                Cmd="update "+self.table+" set ts_tried="+str(int(self.ts))+",inum="+str(self.inum)+" where sta_reg='"+sta_reg+"' and status="+str(status)+" and ts_created="+str(ts_created)
-                #print "update Cmd=",Cmd # debug
-                self.conn.execute(Cmd)
-
-            if svc_count>0: # there is something (changed services) to be sent!
-                #print(svc_count,"services to send using inum",self.inum) # debug
-                self.udpsend(sendstring) # sending away
-
-            Cmd="SELECT count(inum) from "+self.table  # unsent service count in buffer
-            cur.execute(Cmd) #
-            for srow in cur:
-                svc_count2=int(srow[0]) # total number of unsent messages
-
-            if svc_count2>30: # do not complain below 30
-                print(svc_count2,"SERVICES IN BUFFER waiting for ack from monitoring server")
-
-        except: # buff2server read unsuccessful. unlikely...
-            msg='problem with '+self.table+' read '+str(sys.exc_info()[1])
-            print(msg)
-            #syslog(msg)
+            
+            for row in cur: # ts alusel, iga ts jaoks oma in
+                ts_created = int(round(row[0],0)) if row[0] != '' else 0 # should be int
+                if age == 0:
+                    age = int(self.ts - ts_created)
+                log.debug('processing ts_created '+str(ts_created))
+                #if ts_created > 1433000000: # valid ts AGA kui on vale siis mingu serveri aeg
+                self.inum += 1 # increase the message number  for every ts_created
+                sendstr = "in:" + str(self.inum) + ","+str(ts_created)+"\n" # start the new in: block    
+                Cmd = 'SELECT * from '+self.table+' where ts_created='+str(ts_created)
+                log.debug('selecting rows for inum'+str(self.inum)+': '+Cmd) # debug
+                cur2.execute(Cmd)
+                 
+                for srow in cur2:
+                    svc_count += 1
+                    sta_reg = srow[0]
+                    status = srow[1] if srow[1] != '' else 0
+                    val_reg = srow[2]
+                    value = srow[3]
+                    if val_reg != '':
+                        sendstr += val_reg+":"+str(value)+"\n"
+                    if sta_reg != '':
+                        sendstr += sta_reg+":"+str(status)+"\n"
+                
+                if len(sendstr) > 0:
+                    sendstring += sendstr
+                    log.debug('added to sendstring in related sendstr: '+sendstr.replace('\n',' ')) ###
+                    Cmd = "update "+self.table+" set ts_tried="+str(int(self.ts))+",inum="+str(self.inum)+" where ts_created="+str(ts_created)
+                    log.debug('buffer update cmd: '+Cmd) # update all rows with this ts_creted together
+                    self.conn.execute(Cmd)
+                else:
+                    log.warning('!! NO svc data for ts selection with limit'+str(limit))
+                    
+            # ts loop end
+            self.conn.commit() # buff2server transaction end
+        
+            if svc_count > 0: # there is something to be sent!
+                #sendstring = "in:" + str(self.inum) + ","+str(ts_created)+"\n" + sendstring # in alusel vastuses toimub puhvrist kustutamine
+                sendstring = "id:" + str(self.host_id) + "\n" + sendstring # alustame sellega datagrammi
+                log.debug('going to udpsend from buff2server, sendstring : '+sendstring) ##
+                self.udpsend(sendstring, age) # sending away
+            return 0
+        
+            
+        except:
+            log.warning('PROBLEM with creating message to be sent based on '+self.table)
             traceback.print_exc()
-            #sys.stdout.flush()
-            time.sleep(1)
             return 1
 
-        self.conn.commit() # buff2server transaction end
-        return 0
-    # udpmessage() end
-    # #################
 
 
-
-    def udpsend(self, sendstring = '', ask_ack = True): # actual udp sending, no resend. give message as parameter. used by buff2server too.
-        ''' Sends UDP data immediately, adding self.inum if >0. ask_ack not yet in use '''
+    def udpsend(self, sendstring = '', age = 0): # actual udp sending, no resend. give message as parameter. used by buff2server too.
+        ''' Sends UDP data immediately, without buffer, adding self.inum if ask_ack == True. DO NOT MISUSE, prevents gap filling! 
+            Only the key:value pairs with similar timestamp are combined into one message!
+            Common for all included keyvalue pairs (ts) should be included in the string to send.
+        '''
         if sendstring == '': # nothing to send
-            print('udpsend(): nothing to send!')
+            log.warning('nothing to send!')
             return 1
-
-        self.ts = round(time.time(),1)
-        sendstring += "id:"+str(self.host_id)+"\n" # loodame, et ts_created on enam-vahem yhine neil teenustel...
-        if self.inum > 0: # "in:inum" to be added
-            sendstring += "in:"+str(self.inum)+","+str(int(round(self.ts)))+"\n"
-
+        
+        if not 'id:' in sendstring: # probably response to command not via buffer
+            sendstring = 'id:'+str(self.host_id)+'\n'+sendstring
+            log.warning('added id to sendstring: '+sendstring)
+        
         self.traffic[1] = self.traffic[1] + len(sendstring) # adding to the outgoing UDP byte counter
 
         if 'led' in dir(self):
             self.led.commLED(0) # off, blinking shows sending and time to ack
         
         try:
-            ''' SDP ei ole kattesaadav, sdp sisu tryhjendaa aga ei saa '''
-            #try:
-                #sdp = SDP(self.secret_key)
-                #sdp.decode(sendstring)
-                #sendstring = sdp.encode() # hash added as the last key:value pair
-            #except:
-                #log.warning('no signature added') # pass
-                #traceback.print_exc()
-                
             sendlen = self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr) # tagastab saadetud baitide arvu
             self.traffic[1] = self.traffic[1]+sendlen # traffic counter udp out
-            msg = '==>> sent ' +str(sendlen)+' bytes to '+str(repr(self.saddr))+' '+sendstring.replace('\n',' ')   # show as one line
-            ##msg='==>> sent ' +str(sendlen)+' bytes to '+str(repr(self.saddr))+' with host_id '+self.host_id   # show as one line
+            msg = '==>> sent ' +str(sendlen)+' bytes with age '+str(age)+' to '+str(repr(self.saddr))+' '+sendstring.replace('\n',' ')   # show as one line
             log.info(msg)
             #syslog(msg)
             sendstring = ''
             self.ts_udpsent = self.ts # last successful udp send
             return sendlen
         except:
-            msg = 'udp send failure in udpsend() to saddr '+repr(self.saddr)+', lasting s '+str(int(self.ts - self.ts_udpsent)) # cannot send, this means problem with connectivity
+            msg = 'udp send failure for '+str(int(self.ts - self.ts_udpsent))+' s, '+str(self.linecount)+' rows dumped, '+str(self.undumped)+' undumped' # cannot send, problem with connectivity
             #syslog(msg)
             log.warning(msg)
-            traceback.print_exc()
+            self.ts_udpunsent = self.ts # last UNsuccessful udp send
+            #traceback.print_exc()
 
             if 'led' in dir(self):
                 self.led.alarmLED(1) # send failure
@@ -451,48 +508,71 @@ class UDPchannel():
                 return row[0],row[1],row[2] # print(repr(row))
 
 
+    def datasplit(self, data):
+        ''' tykeldab in keyvaluega datagrammi, igas jupois kordab id vaartust '''
+        dataout = []
+        if "id:" in data:
+            lines = data[data.find("id:")+3:].splitlines() 
+            id = lines[0] 
+            incount = len(data.split('in:')) - 1 # 0 if n is missing
+            if incount > 1:
+                for i in range(incount):
+                    inpos = data.find('in:')
+                    inn = data[inpos + 3:].splitlines()[0]
+                    appdata = 'id:'+id+'\nin:'+data.split('in:')[1]
+                    dataout.append(appdata)
+                    data = data[inpos+4+len(inn):]
+            else:
+                dataout.append(data)
+            return dataout # list
+        else:
+            log.info('invalid data from server, missing id')
+        return dataout
+
+    
     def udpread(self):
-        ''' Checks received data for monitoring server to see if the data contains key "in",
+        ''' Checks received data for monitoring server to see if the data contains key(s) "in:",
             then deletes the rows with this inum in the sql table.
             If the received datagram contains more data, these key:value pairs are
             returned as dictionary.
         '''
-        data=''
-        data_dict={} # possible setup and commands
+        datagram = ''
+        indata =[]
+        data = ''
+        data_dict = {} # possible setup and commands
         sendstring = ''
-        instr = ''
 
         try: # if anything is comes into udp buffer before timepout
             buf = 1024
-            rdata,raddr = self.UDPSock.recvfrom(buf)
-            data = rdata.decode("utf-8") # python3 related need due to mac in hex
+            rdata, raddr = self.UDPSock.recvfrom(buf)
+            datagram = rdata.decode("utf-8") # python3 related need due to mac in hex
         except:
             #print('no new udp data received') # debug
             #traceback.print_exc()
             return None
 
-        if len(data) > 0: # something arrived
-            #log.info('>>> got from receiver '+str(repr(raddr))+' '+str(repr(data)))
-            self.traffic[0] = self.traffic[0] + len(data) # adding top the incoming UDP byte counter
-            log.info('<<<< got from server ' + str(data.replace('\n', ' ')))
+        if len(datagram) > 0: # something arrived
+            #log.info('>>> got from receiver '+str(repr(data)))
+            self.traffic[0] = self.traffic[0]+len(datagram) # adding top the incoming UDP byte counter
+            log.info('<<<< got from server '+str(datagram.replace('\n', ' ')))
 
             if (int(raddr[1]) < 1 or int(raddr[1]) > 65536):
-                msg = 'illegal remote port ' + str(raddr[1])+' in the message received from '+raddr[0]
+                msg='illegal remote port '+str(raddr[1])+' in the message received from '+raddr[0]
                 log.warning(msg)
                 #syslog(msg)
 
             if raddr[0] != self.ip:
-                msg = 'illegal sender '+str(raddr[0])+' of message: '+data+' at '+str(int(self.ts))  # ignore the data received!
+                msg = 'illegal sender '+str(raddr[0])+' of message: '+str(repr(data))+' at '+str(int(self.ts))  # ignore the data received!
                 log.warning(msg)
                 #syslog(msg)
-                data = '' # data destroy
+                data='' # data destroy
 
-            if "id:" in data: # first check based on host id existence in the received message, must exist to be valid message!
-                in_id = data[data.find("id:")+3:].splitlines()[0]
+            if "id:" in datagram: # first check based on host id existence in the received message, must exist to be valid message!
+                in_id = datagram[datagram.find("id:")+3:].splitlines()[0]
                 if in_id != self.host_id:
                     log.warning("invalid id "+in_id+" in server message from "+str(raddr[0])) # this is not for us!
-                    data = ''
-                    return data # error condition, traffic counter was still increased
+                    datagram = ''
+                    return {} # error condition, traffic counter was still increased
                 else:
                     #log.info('got ack or cmd from server '+str(raddr[0])) #### 
                     self.sk.up()
@@ -500,58 +580,54 @@ class UDPchannel():
                     if 'led' in dir(self):
                         self.led.commLED(1) # data from server, comm OK
                     
-                lines = data.splitlines() # split message into key:value lines
-                for i in range(len(lines)): # looking into every member of incoming message
-                    if ":" in lines[i]:
-                        #print "   "+lines[i]
-                        line = lines[i].split(':')
-                        line = lines[i].split(':')
-                        sregister = line[0] # setup reg name
-                        svalue = line[1] # setup reg value
-                        log.debug('processing key:value '+sregister+':'+svalue)
-                        if sregister != 'in' and sregister != 'id': # may be setup or command (cmd:)
-                            msg='got setup/cmd reg:val '+sregister+':'+svalue  # need to reply in order to avoid retransmits of the command(s)
-                            log.info(msg)
-                            data_dict.update({ sregister : svalue }) # in and id are not included in dict
-                            #udp.syslog(msg) # cannot use udp here
-                            #sendstring += sregister+":"+svalue+"\n"  # add to the answer - better to answer with real values immediately after change
+                indata = self.datasplit(datagram)  # into pieces with separate id and in if exists
+                for data in indata:
+                    lines=data.splitlines() # split message into key:value lines
+                    for i in range(len(lines)): # looking into every member of incoming message
+                        if ":" in lines[i]:
+                            line = lines[i].split(':')
+                            sregister = line[0] # setup reg name
+                            svalue = line[1] # setup reg value
+                            log.debug('processing key:value '+sregister+':'+svalue)
+                            if sregister != 'in' and sregister != 'id': # may be setup or command (cmd:)
+                                msg='got setup/cmd reg:val '+sregister+':'+svalue  # need to reply in order to avoid retransmits of the command(s)
+                                log.info(msg)
+                                data_dict.update({ sregister : svalue }) # in and id are not included in dict
+                            
+                            else:
+                                if sregister == "in": # one such a key in message
+                                    instr = data[data.find("in:")+3:].splitlines()[0].split(',')[0]
+                                    inumm = int(instr) # loodaks integerit
+                                    if inumm > 0:   # valid inum
+                                        msg='got ack '+str(inumm)+' in message: '+data.replace('\n',' ')
+                                        log.debug(msg)
+                                        if inumm > self.inum:
+                                            self.inum = inumm
+                                            log.info('synced self.inum to '+str(self.inum))
 
-                        else:
-                            if sregister == "in": # one such a key in message
-                                instr = data[data.find("in:")+3:].splitlines()[0].split(',')[0] 
-                                try:
-                                    inumm=eval(instr)# loodaks integerit
-                                except:
-                                    inumm = 0
-                                    
-                                if inumm >= 0:  # valid inum, response to message sent if 1...65535. datagram including "in:0" is a server initiated "fast communication" message
-                                    #print "found valid inum",inum,"in the incoming message " # temporary
-                                    msg='got ack '+str(inumm)+' in message: '+data.replace('\n',' ')
-                                    log.debug(msg)
-                                    #syslog(msg)
+                                        Cmd="BEGIN IMMEDIATE TRANSACTION" # buff2server, to delete acknowledged rows from the buffer
+                                        self.conn.execute(Cmd) # buff2server ack transactioni algus, loeme ja kustutame saadetud read
+                                        Cmd="DELETE from "+self.table+" WHERE inum='"+str(inumm)+"'"  # deleting all rows where inum matches server ack
+                                        log.debug(Cmd)
+                                        try:
+                                            self.conn.execute(Cmd) # deleted
+                                        except:
+                                            msg='problem with '+Cmd+'\n'+str(sys.exc_info()[1])
+                                            log.warning(msg)
+                                            #syslog(msg)
+                                            time.sleep(1)
+                                        self.conn.commit() # buff2server transaction end
 
-                                    Cmd="BEGIN IMMEDIATE TRANSACTION" # buff2server, to delete acknowledged rows from the buffer
-                                    self.conn.execute(Cmd) # buff2server ack transactioni algus, loeme ja kustutame saadetud read
-                                    Cmd="DELETE from "+self.table+" WHERE inum='"+str(inumm)+"'"  # deleting all rows where inum matches server ack
-                                    try:
-                                        log.debug('deleting from buffer: '+Cmd)
-                                        self.conn.execute(Cmd) # deleted
-                                    except:
-                                        msg='problem with '+Cmd+'\n'+str(sys.exc_info()[1])
-                                        log.warning(msg)
-                                        #syslog(msg)
-                                        time.sleep(1)
-                                    self.conn.commit() # buff2server transaction end
-
-                return data_dict # possible key:value pairs here for setup change or commands. returns {} for just ack with no cmd
+                return data_dict # possible key:value pairs here for setup change or commands. 
+                # returns {} in case of ack with no cmd. datadict does not contain id or in values.
         else:
             return None
 
 
     def syslog(self, msg,logaddr=()): # sending out syslog message to self.logaddr
-        msg=msg+"\n" # add newline to the end
+        msg = msg+"\n" # add newline to the end
         #print('syslog send to',self.logaddr) # debug
-        dnsize=0
+        dnsize = 0
         if self.logaddr == None and logaddr != ():
             self.logaddr = logaddr
 
@@ -570,10 +646,9 @@ class UDPchannel():
 
     def comm(self): # do this regularly, blocks for the time of socket timeout!
         ''' Communicates with monitoring server, listens to return cmd and setup key:value and sends waiting data. '''
-        self.ts = round(time.time(),1) # timestamp
-        self.unsent() # delete old records
-        udpgot = self.udpread() # check for incoming udp data
-        # parse_udp()
+        self.ts = int(round(time.time(),0)) # current time
+        #self.unsent() # delete old records NOT ANY MORE!
+        udpgot = self.udpread() # check for incoming udp data. FIXME: direct ack around buffer??
         self.buff2server() # send away. the ack for this is available on next comm() hopefully
         return udpgot
 
@@ -584,12 +659,12 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
 
     def __init__(self, id = '000000000000', supporthost = 'www.itvilla.ee', directory = '/support/pyapp/', uploader='/upload.php', base64string='cHlhcHA6QkVMYXVwb2E='):
         self.supporthost = supporthost
-        self.uploader=uploader
-        self.base64string=base64string
+        self.uploader = uploader
+        self.base64string = base64string
         self.traffic = [0,0] # TCP bytes in, out
         self.setID(id)
-        self.directory=directory
-        self.ts_cal=time.time()
+        self.directory = directory
+        self.ts_cal = time.time()
         self.conn = sqlite3.connect(':memory:') # for calendar table
         self.makecalendar()
 
@@ -920,4 +995,3 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
             traceback.print_exc()
             return None
 
-    ## END ##
