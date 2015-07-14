@@ -3,11 +3,11 @@
 
 ''' 
 mbys.py - query and process kamstrup, sensus or axis heat meters via Mbus protocol, 2400 8E1
-# usage:
-# from mbus import *
-# m=Mbus()
-# m.read()
-# m.get_temperatures()
+ usage:
+ from mbus import *
+ m=Mbus()
+ m.read()
+ m.get_temperatures(), m.get_energy, m.get_flow, m.get(volume), m.get-all()
 '''
 
 from codecs import encode # for encode to work in py3
@@ -62,7 +62,7 @@ class Mbus:
             log.info('Mbus connection for model '+self.model+' successful on port '+self.port)
         except:
             log.error('Mbus connection FAILED on port '+self.port)
-
+    
     def close(self):
         self.__del__()
 
@@ -79,7 +79,7 @@ class Mbus:
         if self.model == 'sensusPE':
             self.ser.write(b'\x68\x03\x03\x68\x73\xFE\x50\xC1\x16') # answer mode set
             time.sleep(0.5)
-        self.read() # dummy, contains zeroes, some buffer??
+        self.read() 
 
     def set_model(self, invar):
         self.model = invar
@@ -94,7 +94,7 @@ class Mbus:
         return self.errors
 
     def mb_decode(self, start, key='', coeff = 1.0, desc = 'unknown', length = None, hex = None): 
-        # len and hex will be autodetected if hex not given
+        # len and hex will be autodetected if hex is not given
         ''' Returns decoded value from Mbus binary string self.mbm or None if no valid self.mbm.
             Decoded part of length bytes in mbm starts from invar.
             If key (2 bytes as hex string before data start) is given,
@@ -222,7 +222,7 @@ class Mbus:
                     return 1
 
 
-    def rd_chk(self, query=b'\x10\x7B\xFE\x79\x16'): # proovi ka muid
+    def rd_chk(self, query=b'\x10\x7B\xFE\x79\x16'): 
         ''' Sends the query, reads the response and checks the content '''
         try:
             self.ser.flushInput() # no garbage or old responses wanted
