@@ -1,5 +1,5 @@
 # This Python file uses the following encoding: utf-8
-# last change 5.7.2015
+# last change  5.7.2015
 
 ''' 
 mbys.py - query and process kamstrup, sensus or axis heat meters via Mbus protocol, 2400 8E1
