@@ -805,7 +805,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         elif (cfg&2048): # 1wire filter. should have cfg bit 4096 as well!
                             if raw == 1360 or raw == 4096:
                                 log.warning('invalid raw value '+str(raw)+' for temp sensor (cfg=2048) in svc '+val_reg+'.'+str(member)+', replacing with None')
-                                raw = None
+                                raw = None # there should be no change for value
 
                         ## SCALING #############
                         if raw != None:
@@ -821,7 +821,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                             else:
                                 #log.debug('val_reg '+val_reg+' member '+str(member)+', raw '+str(raw)+' ai2scale conversion NOT DONE! using value = raw ='+str(raw))
                                 #log.warning('val_reg '+val_reg+' member '+str(member)+', raw '+str(raw)+' ai2scale conversion NOT DONE!')
-                                value = None
+                                ##value = None # do not change previous data until stalled
                                 rowproblem = 1 # this service will not be used in notification
                                 ## binary services defined in aicochannels must have x1 x2 y1 y2! 0 1 0 1    
 
