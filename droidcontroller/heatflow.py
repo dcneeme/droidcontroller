@@ -43,6 +43,7 @@ class PulsePeriod:
     def output(self, di_pump, di_pulse): # output 0 during no di_pump!
         ''' Returns LAST KNOWN averaged period in second averaged taking hi and lo input into account
             Execute this at DI polling speed, not to miss any di changes and to improve precision.
+            precision improves with longer pumping cycles. Assuming stable period.
         '''
         if di_pump > 1 or di_pulse > 1:
             log.warning('invalid parameters '+str(di_pump)+' '+str(di_pulse))
@@ -249,7 +250,7 @@ class HeatExchange:
         tsnow = time.time()
         ts_diff = tsnow - self.ts_last
         Tdiff = Ton - Tret
-        ##print('timediff', ts_diff, 'tempdiff', Tdiff)
+        log.debug('timediff', ts_diff, 'tempdiff', Tdiff) 
         # interpolated specific energy for heat agent based on
         # average temperature for agent, has effect on specific heat
         self.cp = self.interpolate((Ton + Tret)/2.0, self.tp1, self.cp1,
