@@ -2,7 +2,7 @@
 
 # send and receive monitoring and control messages to from UniSCADA monitoring system
 # able to restore unsent history from buffer2server.sql when connectivity restored
-
+# FIXME - some services should be sent out of general queue! IPV,UPW,cmd,ERV - use udpsend()!
 
 import time, datetime
 import sqlite3
@@ -24,7 +24,7 @@ class UDPchannel():
 
     '''
 
-    def __init__(self, id ='000000000000', ip='127.0.0.1', port=44445, receive_timeout=0.1, retrysend_delay=5, loghost='0.0.0.0', logport=514, copynotifier=None): # delays in seconds
+    def __init__(self, id ='000000000000', ip='127.0.0.1', port=44445, receive_timeout=0.1, retrysend_delay=3, loghost='0.0.0.0', logport=514, copynotifier=None): # delays in seconds
         #from droidcontroller.connstate import ConnState
         from droidcontroller.statekeeper import StateKeeper
         self.sk = StateKeeper(off_tout=300, on_tout=0) # conn state with up/down times. 
@@ -381,12 +381,14 @@ class UDPchannel():
         #else: # conn ok
         #    timetoretry = int(self.ts_udpsent + self.retrysend_delay)
         if self.ts_udpsent > self.ts_udpunsent:
+            log.debug('using shorter retrysend_delay, conn ok') ##
             timetoretry = int(self.ts_udpsent + self.retrysend_delay)
         else:
+            log.debug('using longer retrysend_delay, conn NOT ok') ##
             timetoretry = int(self.ts_udpunsent + 3 * self.retrysend_delay) # longer retry delay with no conn
             
         if self.ts < timetoretry: # too early to send again
-            log.debug('conn state '+str(self.sk.get_state()[0])+'. wait with buff2server until timetoretry '+str(int(timetoretry))) ##
+            log.info('conn state '+str(self.sk.get_state()[0])+'. wait with buff2server until timetoretry '+str(int(timetoretry))) ##
             return 0 # perhaps next time
         else:
             log.debug('buff2server execution due to time '+str(self.ts-timetoretry)+' s past timetoretry '+str(timetoretry))
