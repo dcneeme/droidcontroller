@@ -1,9 +1,11 @@
 # process commands received from uniscada server. to be imported by uniscada.py
 #instance udp should be created.
+# FIXME + regular svc and cmd ERV send out of historical queue!
 
 import subprocess
 import sys
 import socket, struct, fcntl
+import psutil
 
 from droidcontroller.sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
 s=SQLgeneral() 
@@ -358,7 +360,8 @@ class RegularComm(SQLgeneral): # r
         self.ts=self.app_start
         self.uptime=[0,0,0]
         self.host_ip = 'unknown' # controller ip
-                
+        self.cpV # cpu load
+        
         try:
             self.sync_uptime() # sys apptime to uptime[0]
             #uptime[0]=int(self.subexec('cut -f1 -d. /proc/uptime',1)) # should be avoided on npe, use only once
@@ -424,7 +427,7 @@ class RegularComm(SQLgeneral): # r
         log.debug('uptimes sys, app, app_start_uptime '+str(self.uptime))
 
 
-    def regular_svc(self, svclist = ['UPW','TCW','IPV']): # default are uptime, traffic and ip addr services
+    def regular_svc(self, svclist = ['UPW','TCW','ipV','cpV', 'mfV', 'd2W']): # baV (buffer age) is always sent, omitting buffer!
         ''' sends regular service messages that are not related to aichannels, dichannels or counters.
             Returns number of bytes sent, None if send queue was not appended at this time.
         '''
@@ -432,6 +435,9 @@ class RegularComm(SQLgeneral): # r
         res = 0
         status = 0
         valuestring = ''
+        sendstring = ''
+        age = 0
+        agestatus = 0
         
         if self.ts > self.ts_regular + self.interval: # time to send again
 
@@ -460,18 +466,34 @@ class RegularComm(SQLgeneral): # r
                         status = 0 
                     else:
                         status = 1
-                elif svc == 'IPV' or svc == 'ip':
+                
+                elif svc == 'IPV' or svc == 'ip' or svc == 'ipV': # ip address currently in use
                     valuestring = self.get_host_ip() # ip address in use from a list starting with tun0
+                
+                elif svc == 'mfV': # free memory
+                    valuestring = str(psutil.phymem_usage()[2]) # free memory in bytes
+                
+                elif svc == 'cpV': # free memory
+                    self.cpV = (self.cpV + psutil.cpu_percent())/2.0
+                    valuestring = str(int(round(self.cpV,0))) # cpu load %
+                    
                 else:
-                    valuestring = 'regular service '+svc+' not supported'
+                    valuestring = 'regular service '+svc+' not yet supported'
                     
                 if valuestring != None and len(valuestring) > 0:
                     res += udp.send([svc[:-1]+'S', status, svc, valuestring]) # via buffer. udp.send() adds ts
                     log.info('added to buffer regular service ' + svc+':'+valuestring)
+                    ## NB! cmd or ERV responses passing the buffer, see udp.udpsend() uses above and also below.
                 else:
                     log.warning('regular svc '+svc+' not supported!')
                     
             self.ts_regular = self.ts
+            age = udp.get_age() # send buffer age from uniscada 
+            agestatus = 1
+            if age < 10 and age >= 0:
+                agestatus = 0
+            sendstring = 'baV:'+str(age)+'\nbaS:'+str(agestatus)+'\n' # msh cannot contain colon or newline
+            udp.udpsend(sendstring) # SEND AWAY directly, omitting buffer
 
             return res # None if nothing sent
 
@@ -480,7 +502,7 @@ class RegularComm(SQLgeneral): # r
             the script name is descriptive and the content is sleep
         '''
         if interval == 0:
-            interval = 2*self.interval  # regular communication will keep about 2 processes alive
+            interval = 2 * self.interval  # regular communication will keep about 2 processes alive
         tbs = alivecmd+' '+str(interval) # +' &' # & not needed
         print('alive_fork',tbs) # debug
         if alivecmd != '':
