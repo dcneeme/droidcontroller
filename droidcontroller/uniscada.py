@@ -41,6 +41,8 @@ class UDPchannel():
         self.host_id = id # controller ip as tun0 wlan0 eth0 127.0.0.1
         self.ip = ip # monitoring server
         self.port = port # monitoring server
+        self.saddr = (self.ip,self.port)
+        
         self.loghost = loghost
         self.logport = logport
         self.logaddr = (self.loghost,self.logport) # tuple
@@ -58,6 +60,7 @@ class UDPchannel():
         log.info('init: created uniscada and syslog connections to '+ip+':'+str(port)+' and '+loghost+':'+str(logport))
         self.table = 'buff2server' # can be anything, not accessible to other objects WHY? would be useful to know the queue length...
         self.sent = '' # last servicetuple sent to the buffer
+        self.age = 0 # unsent history age, also to be queried
         self.Initialize()
 
     def Initialize(self):
@@ -101,6 +104,11 @@ class UDPchannel():
         return self.ip
         
     
+    def get_age(self):
+        ''' age of oldest unsent message in buffer ''' 
+        return self.age
+        
+        
     def set_copynotifier(self, copynotifier):
         self.copynotifier = copynotifier
         
@@ -370,10 +378,10 @@ class UDPchannel():
         ts_created = 0 # local
         svc_count = 0 # local
         sendstring = ''
-        age = 0 # how far from history
         cur = self.conn.cursor()
         cur2 = self.conn.cursor()
         limit = self.sk.get_state()[0] * 4 + 1  # 1 key:value to try if conn down, 5 if up. 100 is too much, above 1 kB
+        age = 0 # the oldest, will be self.age later
         #log.info('...trying to select and send max '+str(limit)+' buffer lines')
         
         #if self.sk.get_state()[0] == 0: # no conn
@@ -388,7 +396,7 @@ class UDPchannel():
             timetoretry = int(self.ts_udpunsent + 3 * self.retrysend_delay) # longer retry delay with no conn
             
         if self.ts < timetoretry: # too early to send again
-            log.info('conn state '+str(self.sk.get_state()[0])+'. wait with buff2server until timetoretry '+str(int(timetoretry))) ##
+            log.debug('conn state '+str(self.sk.get_state()[0])+'. wait with buff2server until timetoretry '+str(int(timetoretry))) ##
             return 0 # perhaps next time
         else:
             log.debug('buff2server execution due to time '+str(self.ts-timetoretry)+' s past timetoretry '+str(timetoretry))
@@ -405,8 +413,9 @@ class UDPchannel():
             
             for row in cur: # ts alusel, iga ts jaoks oma in
                 ts_created = int(round(row[0],0)) if row[0] != '' else 0 # should be int
-                if age == 0:
+                if age == 0: # vanim, vaid esimesel lugemisel
                     age = int(self.ts - ts_created)
+                    self.age = age # the oldest in these rows
                 log.debug('processing ts_created '+str(ts_created))
                 #if ts_created > 1433000000: # valid ts AGA kui on vale siis mingu serveri aeg
                 self.inum += 1 # increase the message number  for every ts_created
@@ -442,7 +451,7 @@ class UDPchannel():
                 #sendstring = "in:" + str(self.inum) + ","+str(ts_created)+"\n" + sendstring # in alusel vastuses toimub puhvrist kustutamine
                 sendstring = "id:" + str(self.host_id) + "\n" + sendstring # alustame sellega datagrammi
                 log.debug('going to udpsend from buff2server, sendstring : '+sendstring) ##
-                self.udpsend(sendstring, age) # sending away
+                self.udpsend(sendstring, self.age) # sending away
             return 0
         
             
@@ -481,8 +490,9 @@ class UDPchannel():
             self.ts_udpsent = self.ts # last successful udp send
             return sendlen
         except:
-            msg = 'udp send failure for '+str(int(self.ts - self.ts_udpsent))+' s, '+str(self.linecount)+' rows dumped, '+str(self.undumped)+' undumped' # cannot send, problem with connectivity
+            #msg = 'udp send failure to '+str(repr(self.saddr))+' for '+str(int(self.ts - self.ts_udpsent))+' s, '+str(self.linecount)+' rows dumped, '+str(self.undumped)+' undumped' # cannot send, problem with connectivity
             #syslog(msg)
+            msg = 'send FAILURE' # FIXME
             log.warning(msg)
             self.ts_udpunsent = self.ts # last UNsuccessful udp send
             #traceback.print_exc()

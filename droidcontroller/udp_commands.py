@@ -132,16 +132,7 @@ class Commands(SQLgeneral): # p
                     print(TODO,'execution success')
                     #TODO='' # do not do it here! see the if end
 
-            if TODO == 'REBOOT': # stop the application, not the system
-                #todocode=0
-                msg = 'stopping, for possible script autorestart via appd.sh' # chk if appd.sh is alive?
-                print(msg)
-                udp.syslog(msg)
-                sys.stdout.flush()
-                time.sleep(1)
-                sys.exit()  # STOPPING THE APPLICATION.
-
-            if TODO == 'GSMBREAK': # external router power break do8
+            elif TODO == 'GSMBREAK': # external router power break do8
                 msg = 'power cut for communication device due to command'
                 print(msg)
                 udp.syslog(msg) # log message to file
@@ -150,8 +141,7 @@ class Commands(SQLgeneral): # p
                 gsmbreak = 1
                 todocode = 0
 
-
-            if TODO.split(',')[0] == 'free': # finding the free MB and % of current or stated path, return values in ERV
+            elif TODO.split(',')[0] == 'free': # finding the free MB and % of current or stated path, return values in ERV
                 free = []
                 msg = 'checking free space due to command'
                 print(msg)
@@ -162,8 +152,16 @@ class Commands(SQLgeneral): # p
                 except:
                     todocode = 1
 
+            elif TODO == 'REBOOT': # stop the application, not the system
+                #todocode=0
+                msg = 'stopping, for possible script autorestart via appd.sh' # chk if appd.sh is alive?
+                print(msg)
+                udp.syslog(msg)
+                sys.stdout.flush()
+                time.sleep(1)
+                sys.exit()  # STOPPING THE APPLICATION.
 
-            if TODO == 'FULLREBOOT': # full reboot, NOT just the application but the system!
+            elif TODO == 'FULLREBOOT': # full reboot, NOT just the application but the system!
                 #stop=1 # cmd:FULLREBOOT
                 try:
                     msg = 'started full reboot due to command' #
@@ -179,19 +177,19 @@ class Commands(SQLgeneral): # p
                 print(msg)
                 udp.syslog(msg) # log message to file
 
-            if TODO == 'CONFIG': #
+            elif TODO == 'CONFIG': #
                 todocode=s.channelconfig() # configure modbus registers according to W... data in setup
 
 
-            if TODO == 'VPNON': # ovpn start
+            elif TODO == 'VPNON': # ovpn start
                 todocode=self.subexec(self.vpn_start,2) # start vpn
 
 
-            if TODO == 'VPNOFF': # ovpn stop
+            elif TODO == 'VPNOFF': # ovpn stop
                 todocode=self.subexec(self.vpn_stop,2) # stop vpn
 
 
-            if TODO.split(',')[0] == 'pull':
+            elif TODO.split(',')[0] == 'pull':
                 print('going to pull') # debug
                 if len(TODO.split(',')) == 3: # download a file (with name and size given)
                     filename = TODO.split(',')[1]
@@ -230,7 +228,7 @@ class Commands(SQLgeneral): # p
                     todocode = 1
                     print('wrong number of parameters for pull')
 
-            if TODO.split(',')[0] == 'push': # upload a file (with name and passcode given)
+            elif TODO.split(',')[0] == 'push': # upload a file (with name and passcode given)
                 try:
                     filename = TODO.split(',')[1]
                     log.info('starting push with '+filename)
@@ -241,7 +239,7 @@ class Commands(SQLgeneral): # p
                     #udp.syslog(msg)
                     todocode=99
 
-            if TODO.split(',')[0] == 'sqlread':
+            elif TODO.split(',')[0] == 'sqlread':
                 if len(TODO.split(',')) == 2: # cmd:sqlread,aichannels (no extension for sql file!)
                     tablename = TODO.split(',')[1]
                     if '.sql' in tablename:
@@ -250,14 +248,14 @@ class Commands(SQLgeneral): # p
                         #udp.syslog(msg)
                         pulltry = 88 # need to skip all tries below
                     else:
-                        todocode=s.sqlread(tablename) # hopefully correct parameter (existing table, not sql filename)
+                        todocode = s.sqlread(tablename) # hopefully correct parameter (existing table, not sql filename)
                         if tablename == 'setup' and todocode == 0: # table refreshed, let's use the new setup
                             s.channelconfig() # possibly changed setup data to modbus registers
                             s.report_setup() # let the server know about new setup
                 else: # wrong number of parameters
                     todocode = 1
 
-            if TODO.split(',')[0] == 'RMLOG': # delete log files in working directory (d4c)
+            elif TODO.split(',')[0] == 'RMLOG': # delete log files in working directory (d4c)
                 files = glob.glob('*.log')
                 try:
                     for filee in files:
@@ -266,11 +264,19 @@ class Commands(SQLgeneral): # p
                 except:
                     todocode = 1 # failure to delete *.log
 
-
-
+            elif TODO.split(',')[0] == 'pic_update': # update pic fw
+                if len(TODO.split(',')) == 3: # cmd:pic_update,1,IOplaat.hex
+                    try:
+                        todocode = s.pic_update(TODO.split(',')[1:3])
+                    except:
+                        todocode = 1 # failure to update
+                else:
+                    log.warning('INVALID parameter count for cmd '+TODO)
+                    todocode = 2
+                    
             # start scripts in parallel (with 10s pause in this channelmonitor). cmd:run,nimi,0 # 0 or 1 means bg or fore
             # use background normally, the foreground process will open a window and keep it open until closed manually
-            if TODO.split(',')[0] == 'run': # FIXME! below is for android only
+            elif TODO.split(',')[0] == 'run': # FIXME! below is for android only
                 if len(TODO.split(',')) == 3: # run any script in the d4c directory as foreground or background subprocess
                     script = TODO.split(',')[1]
                     if script in os.listdir('/sdcard/sl4a/scripts/d4c'): # file exists
@@ -308,7 +314,7 @@ class Commands(SQLgeneral): # p
                 else:
                     todocode = 1 # wrong number of parameters
 
-            if TODO.split(',')[0] == 'size': # get the size of filename (cmd:size,setup.sql)
+            elif TODO.split(',')[0] == 'size': # get the size of filename (cmd:size,setup.sql)
                 script = TODO.split(',')[1]
                 try:
                     dnsize = os.stat(script)[6]
@@ -316,7 +322,11 @@ class Commands(SQLgeneral): # p
                 except:
                     todocode = 1
 
-
+            else:
+                log.warning('UNIMPLEMENTED cmd '+cmd)
+                
+                
+                
             # common part for all commands
             if todocode == 0: # success with TODO execution
                 msg = 'remote command '+TODO+' successfully executed'
@@ -346,7 +356,7 @@ class Commands(SQLgeneral): # p
         else:
             pulltry = 0 # next time like first time
 
-
+           
 
 class RegularComm(SQLgeneral): # r
     ''' Checks the incoming datagram members (key,value) for commands and setup variables.
@@ -360,7 +370,7 @@ class RegularComm(SQLgeneral): # r
         self.ts=self.app_start
         self.uptime=[0,0,0]
         self.host_ip = 'unknown' # controller ip
-        self.cpV # cpu load
+        self.cpV = 0 # cpu load
         
         try:
             self.sync_uptime() # sys apptime to uptime[0]

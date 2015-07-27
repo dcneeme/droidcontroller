@@ -242,6 +242,7 @@ class HeatExchange:
         since last execution.
         
         To get value in Wh divide value in J by 3600.
+        Output 0 if di_pump == 0, or flowrate == 0.
         
         To enable COP calculation externally the energy produced during last cycle is kept up too. 
         '''

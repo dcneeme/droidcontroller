@@ -36,13 +36,14 @@ class PicUpdate(object): # using the existing mb instance
 
     def __init__(self, mb, mbi=0, regadd=998, keepconf=1, simu=0, log=None): # **kwargs): # mba later
         self.mb = mb # modbus communication instance / object
-        self.log = log or logging.getLogger(__name__) 
+        #self.log = log or logging.getLogger(__name__) 
         self.skipsend = 0 # this becomes 1 for data eeprom
         self.set_params(mbi, regadd, keepconf, simu)
         self.sum = -1 # valid control sum 0..255
         self.filename = ''
         #self.pic_id = 0 # means unknown, will be replaced with actual before entering the bootloader mode
-        self.log.info('PicUpdate() instance created.')
+        #self.log.info('PicUpdate() instance created.')
+        log.info('PicUpdate() instance created.')
         
     def set_params(self, mbi, regadd, keepconf, simu):
         ''' Change the modbus address of the io-board to update. During simu only crc calculation will be done '''
@@ -52,7 +53,8 @@ class PicUpdate(object): # using the existing mb instance
         
         self.keepconf = keepconf # overwriting data eeprom if 0. may change modbus address and device serno!
         self.simu = simu
-        self.log.info('target modbus channel '+str(self.mbi)+', upload register address  '+str(self.regadd))
+        #self.log.info('target modbus channel '+str(self.mbi)+', upload register address  '+str(self.regadd))
+        log.info('target modbus channel '+str(self.mbi)+', upload register address  '+str(self.regadd))
             
     def get_params(self):
         ''' Returns effective parameters '''
@@ -115,18 +117,22 @@ class PicUpdate(object): # using the existing mb instance
             if self.skipsend == 0: # line to be sent and included into crc calculation
                 if self.simu == 1: # crc calc
                     self.add_sum(regword) # adding the line bytes xor to self.sum
-                    self.log.debug('crc after processing line '+str(self.linenum)+' with content '+reghex+' became '+str(self.sum))
+                    #self.log.debug('crc after processing line '+str(self.linenum)+' with content '+reghex+' became '+str(self.sum))
+                    log.debug('crc after processing line '+str(self.linenum)+' with content '+reghex+' became '+str(self.sum))
                     sys.stdout.write('.') # dot without newline for main loop
                     sys.stdout.flush()
                     
                 else: # send, no simulation or skipping
-                    self.log.debug('sending to reg '+str(self.regadd)+': ' + reghex)
+                    #self.log.debug('sending to reg '+str(self.regadd)+': ' + reghex)
+                    log.debug('sending to reg '+str(self.regadd)+': ' + reghex)
+                    
                     while i < linetrymax: # retry once
                         i += 1
                         res = self.mb[self.mbi].write(self.mba, self.regadd, values=regword) # sending to pic   ############ SEND ###########
                         ##time.sleep(0.01) # not needed
                         if res == 0: # ok
-                            self.log.debug('line '+reghex+' written')
+                            #self.log.debug('line '+reghex+' written')
+                            log.debug('line '+reghex+' written')
                             if i > 1:
                                 sys.stdout.write(':') # retry
                             else:
@@ -136,24 +142,28 @@ class PicUpdate(object): # using the existing mb instance
                         else:
                             time.sleep(1)
                     else:
-                        self.log.warning('line upload FAILED after '+str(i)+' tries, res '+str(res))
+                        #self.log.warning('line upload FAILED after '+str(i)+' tries, res '+str(res))
+                        log.warning('line upload FAILED after '+str(i)+' tries, res '+str(res))
 
                     if res > 0: # write not ok
-                        self.log.warning('upload_hex FAILED, res '+str(res)+', pls retry')
+                        #self.log.warning('upload_hex FAILED, res '+str(res)+', pls retry')
+                        log.warning('upload_hex FAILED, res '+str(res)+', pls retry')
                         time.sleep(5) 
                         return 2 # break
 
                 #time.sleep(0.05) # give some time to save portion of flash? no need, pic response means ready for next
                 
             else:
-                self.log.debug('skipping line: '+reghex+' due to skipsend '+str(self.skipsend)+', simu '+str(self.simu)) ###
+                #self.log.debug('skipping line: '+reghex+' due to skipsend '+str(self.skipsend)+', simu '+str(self.simu)) ###
+                log.debug('skipping line: '+reghex+' due to skipsend '+str(self.skipsend)+', simu '+str(self.simu)) ###
                 #sys.stdout.write('-') # skipping a line
                 #sys.stdout.flush()
 
             ##############################
 
         if self.simu != 0: 
-            self.log.info('file '+self.filename+' checksum '+str(self.sum))
+            #self.log.info('file '+self.filename+' checksum '+str(self.sum))
+            log.info('file '+self.filename+' checksum '+str(self.sum))
 
         return res # 0 if ok
 
@@ -169,13 +179,16 @@ class PicUpdate(object): # using the existing mb instance
             pic_id = ((0xff & id_list[0]) << 8) + (0xff & id_list[1]) # only used for entering the bootloader mode, irrelevant lster
             
             if devtype == 241:
-                self.log.info('going to update the device on mba '+str(self.mba)+' with type 214 (0xF1) and id '+str(pic_id))
+                #self.log.info('going to update the device on mba '+str(self.mba)+' with type 214 (0xF1) and id '+str(pic_id))
+                log.info('going to update the device on mba '+str(self.mba)+' with type 214 (0xF1) and id '+str(pic_id))
             else:
-                self.log.warning('device on modbus address '+str(self.mba)+' NOT 241 (0xF1), not io-board IT5888?')
+                #self.log.warning('device on modbus address '+str(self.mba)+' NOT 241 (0xF1), not io-board IT5888?')
+                log.warning('device on modbus address '+str(self.mba)+' NOT 241 (0xF1), not io-board IT5888?')
                 return 2 # cancel update
                 
             if oldver < 0x024F:
-                self.log.warning('updating impossible, too old fw '+str(hex(oldver))+' (should be >= 0x24F)')
+                #self.log.warning('updating impossible, too old fw '+str(hex(oldver))+' (should be >= 0x24F)')
+                log.warning('updating impossible, too old fw '+str(hex(oldver))+' (should be >= 0x24F)')
                 return 1
             #else:
             #    self.log.info('checked the existing fw version '+str(hex(oldver))+' >=  0x24F, updating possible')
@@ -188,12 +201,15 @@ class PicUpdate(object): # using the existing mb instance
             try:
                 res = self.mb[self.mbi].write(self.mba, self.regadd, values=[pic_id, 0x3F3F]) # test for bootloader mode, write success in this case
                 if res == 0:
-                    self.log.info('tested with 0x3F3F to regadd 998 - device on mba '+str(self.mba)+' already in bootloader mode!')
+                    #self.log.info('tested with 0x3F3F to regadd 998 - device on mba '+str(self.mba)+' already in bootloader mode!')
+                    log.info('tested with 0x3F3F to regadd 998 - device on mba '+str(self.mba)+' already in bootloader mode!')
                 else:
-                    self.log.warning('device on modbus address '+str(self.mba)+' not in normal neither in bootloader mode, FATAL FAILURE!')
+                    #self.log.warning('device on modbus address '+str(self.mba)+' not in normal neither in bootloader mode, FATAL FAILURE!')
+                    log.warning('device on modbus address '+str(self.mba)+' not in normal neither in bootloader mode, FATAL FAILURE!')
                     return 2
             except:
-                self.log.warning('device on modbus address '+str(self.mba)+' not in normal neither in bootloader mode, FATAL FAILURE! chk mba!')
+                #self.log.warning('device on modbus address '+str(self.mba)+' not in normal neither in bootloader mode, FATAL FAILURE! chk mba!')
+                log.warning('device on modbus address '+str(self.mba)+' not in normal neither in bootloader mode, FATAL FAILURE! chk mba!')
                 #traceback.print_exc()
                 time.sleep(2)
                 return 2
@@ -202,10 +218,12 @@ class PicUpdate(object): # using the existing mb instance
         # only to continue if verified being in bootloader mode
         
         if os.path.isfile(filename):
-            self.log.info('hex file '+filename+' found, going to calculate crc')
+            #self.log.info('hex file '+filename+' found, going to calculate crc')
+            log.info('hex file '+filename+' found, going to calculate crc')
             self.filename = filename
         else:
-            self.log.warning('hex file '+filename+' NOT found')
+            #self.log.warning('hex file '+filename+' NOT found')
+            log.warning('hex file '+filename+' NOT found, stopped')
             return 1
 
         res = 0 # return code, 0 = ok
@@ -213,65 +231,86 @@ class PicUpdate(object): # using the existing mb instance
         self.sum = 0xFF
         #self.upload_hex(mb) ############
         self.upload_hex() 
-        self.log.info('CRC calculation for '+str(self.linenum)+' lines done, value '+str(self.sum))
+        #self.log.info('CRC calculation for '+str(self.linenum)+' lines done, value '+str(self.sum))
+        log.info('CRC calculation for '+str(self.linenum)+' lines done, value '+str(self.sum))
         time.sleep(2)
         
         self.simu = 0 ## actual upload starts #############################################################
         try:
             values = [pic_id, (0xdd00 + (self.sum & 0x00ff))]
-            self.log.info('going to write mba '+str(self.mba)+', regadd '+str(self.regadd)+', values '+str(values))
+            #self.log.info('going to write mba '+str(self.mba)+', regadd '+str(self.regadd)+', values '+str(values))
+            log.info('going to write mba '+str(self.mba)+', regadd '+str(self.regadd)+', values '+str(values))
             res = self.mb[self.mbi].write(self.mba, self.regadd, values=values)  ##### into bootloader mode
             if res == 0: # ok
-                self.log.debug('bootloader ready to receive')
+                #self.log.debug('bootloader ready to receive')
+                log.debug('bootloader ready to receive')
             else:
                 time.sleep(12) # viimase versiooni viga
                 res = self.mb[self.mbi].write(self.mba, self.regadd, values=[pic_id, 0x3F3F])
                 if res == 0:
-                    self.log.info('pic with id '+str(pic_id)+' in bootloader mode after delay...')
+                    #self.log.info('pic with id '+str(pic_id)+' in bootloader mode after delay...')
+                    log.info('pic with id '+str(pic_id)+' in bootloader mode after delay...')
                     res = self.mb[self.mbi].write(self.mba, self.regadd, values=values)
                     if res == 0: # ok
-                        self.log.debug('bootloader ready to receive')
+                        #self.log.debug('bootloader ready to receive')
+                        log.debug('bootloader ready to receive')
                     else:
-                        self.log.warning('bootloader PROBLEM for pic with id '+str(pic_id))
+                        #self.log.warning('bootloader PROBLEM for pic with id '+str(pic_id))
+                        log.warning('bootloader PROBLEM for pic with id '+str(pic_id))
                         return 2
                 else:
-                    self.log.info('device to be updated invalid state, not responding!')
+                    #self.log.info('device to be updated invalid state, not responding!')
+                    log.info('device to be updated invalid state, not responding!')
                     return 2
                
         except:
-            self.log.warning('mode switching with values '+str(values)+' to regadd 998 FAILED, response '+str(res))
+            #self.log.warning('mode switching with values '+str(values)+' to regadd 998 FAILED, response '+str(res))
+            log.warning('mode switching with values '+str(values)+' to regadd 998 FAILED, response '+str(res))
             traceback.print_exc()
             return 99 # sys.exit()
 
-        self.log.info('bootloader mode detected, going to upload new hex file, pls wait...')
+        #self.log.info('bootloader mode detected, going to upload new hex file, pls wait...')
+        log.info('bootloader mode detected, going to upload new hex file, pls wait...')
         time.sleep(5) # delay needed for flash erasing
 
         start = time.time()
         res = self.upload_hex() # send file self.filename (line by line)
         if res == 0:
-            self.log.info('upload done in '+str(int(time.time() - start))+' s, waiting for pic restart...')
+            #self.log.info('upload done in '+str(int(time.time() - start))+' s, waiting for pic restart...')
+            log.info('upload done in '+str(int(time.time() - start))+' s, waiting for pic restart...')
             time.sleep(10) # 4 on liiga vahe!
             try:
                 self.mb[self.mbi].read(self.mba,498,2)[1] # read 32 bit always, use LSB
             except:
-                self.log.debug('first modbus read after upload FAILED')
+                #self.log.debug('first modbus read after upload FAILED')
+                log.debug('first modbus read after upload FAILED')
                 time.sleep(1)
                 
             try:
                 uptime = self.mb[self.mbi].read(self.mba,498,2)[1] # read 32 bit always, use LSB
                 if uptime < 20 and uptime > 0:
-                    self.log.debug('upload done, pic autorestarted and responsive')
+                    #self.log.debug('upload done, pic autorestarted and responsive')
+                    log.debug('upload done, pic autorestarted and responsive')
                     ver = self.mb[self.mbi].read(self.mba,257,1)[0]
-                    self.log.info('successfully updated pic fw from '+format("%04x" % oldver)+'h ('+str(oldver)+') to '+format("%04x" % ver)+'h ('+str(ver)+')')
+                    #self.log.info('successfully updated pic fw from '+format("%04x" % oldver)+'h ('+str(oldver)+') to '+format("%04x" % ver)+'h ('+str(ver)+')')
+                    log.info('successfully updated pic fw from '+format("%04x" % oldver)+'h ('+str(oldver)+') to '+format("%04x" % ver)+'h ('+str(ver)+')')
                     return 0
                 else:
-                    self.log.warning('pic uptime incorrect: ' + str(uptime))
+                    #self.log.warning('pic uptime incorrect: ' + str(uptime))
+                    log.warning('pic uptime incorrect: ' + str(uptime))
                     return 1
             except:
-                self.log.warning('upload FAILED, pic still in bootloader mode')
+                #self.log.warning('upload FAILED, pic still in bootloader mode')
+                log.warning('upload FAILED, pic still in bootloader mode')
                 #traceback.print_exc()
                 return 2
         else:
-            self.log.warning('upload FAILED, pic still in bootloader mode')
+            #self.log.warning('upload FAILED, pic still in bootloader mode')
+            log.warning('upload FAILED, pic still in bootloader mode')
             return 3
 
+    def __del__(self):
+        ''' Destroy after usage with '''
+        class_name = self.__class__.__name__
+        log.info(class_name, 'destroyed')
+        

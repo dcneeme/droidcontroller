@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 try:
     if udp:
-        print('uniscada connection already existing to',host,port)
+        log.info('uniscada connection already existing to '+host+':'+str(port))
 except:
     udp = UDPchannel()
     log.info('created uniscada UDP connection instance')
@@ -32,7 +32,7 @@ try:
         print('sqlite connection already existing')
 except:
     conn = sqlite3.connect(':memory:')
-    print('created sqlite connection')
+    log.info('created sqlite connection')
 
 
 try:
@@ -236,8 +236,8 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
                     else:
                         loghost=value
                     msg='syslog server address will be updated to 255.255.255.255'
-                    print(msg)
-                    udp.syslog(msg)
+                    log.info(msg)
+                    #udp.syslog(msg)
                     if self.OSTYPE == 'archlinux':  # change the archlinux syslog destination address
                         if p.subexec(['/etc/syslog-ng/changedest.sh',loghost],0) == 0:
                             msg='linux syslog redirected to '+loghost
@@ -246,11 +246,11 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
                         udp.syslog(msg)
                         print(msg)
 
-                sta_reg='' # configuration data
-                status=-1 # configuration data
-                sendtuple=[sta_reg,status,val_reg,value] # sending service to buffer
+                sta_reg = '' # configuration data
+                status = -1 # configuration data
+                sendtuple = [sta_reg,status,val_reg,value] # sending service to buffer
                 # print('ai svc - going to report',sendtuple)  # debug
-                udp.send(sendtuple) # to uniscada instance
+                udp.send(sendtuple) # to uniscada instance. avoid buffer?
 
 
             conn.commit() # buff2server trans lopp
@@ -463,7 +463,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
         try:
             value=str(int(round(float(value),0)))
         except:
-            log.warning('no '+table+' update due to '+valraw[raw]+' = '+str(value)+' instead of expected num for '+svc+'.'+str(member))
+            log.warning('NO '+table+' update due to '+valraw[raw]+' = '+str(value)+' instead of expected num for '+svc+'.'+str(member))
             return 2
 
         Cmd="BEGIN IMMEDIATE TRANSACTION" 
@@ -473,13 +473,11 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
         try:
             conn.execute(Cmd)
             conn.commit()
-            log.debug(table + ' updated with '+valraw[raw]+' = '+str(value)+' for '+svc+'.'+str(member))
+            log.info(table + ' updated with '+valraw[raw]+' = '+str(value)+' for '+svc+'.'+str(member)) ##
             return 0
         except:
             msg='set_membervalue failure: '+str(sys.exc_info()[1])
-            print(msg)
-            log.warning(table+' update failure!')
-            #udp.syslog(msg)
+            log.warning(msg)
             return 1  # update failure
 
             
@@ -616,3 +614,11 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
                 bad=2
                 print('channel mbi '+str(row[0])+' in '+table+' NOT found in devices!')
         return bad
+        
+        
+    def pic_update(self, mba = 1, filename = ''):
+        ''' Updates pic firmware via modbus writes of hex lines into reg 698 '''
+        from droidcontroller.pic_update import PicUpdate
+        pic = PicUpdate(mb)
+        mba = int(float(mba)) # igaks juhuks, kui ei ole int
+        return pic.update(mba, filename)

@@ -555,7 +555,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         cur=conn.cursor()
         Cmd="BEGIN IMMEDIATE TRANSACTION" # conn3, et ei saaks muutuda lugemise ajal
         conn.execute(Cmd)
-        Cmd="select value,outlo,outhi,status from "+self.in_sql+" where val_reg='"+svc+"' and member='"+str(member)+"'"
+        Cmd="select value,outlo,outhi,status,ts from "+self.in_sql+" where val_reg='"+svc+"' and member='"+str(member)+"'"
         #print(Cmd) # debug
         cur.execute(Cmd)
         raw = 0
@@ -564,6 +564,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         outhi = 0
         status = 0
         found = 0
+        ts_created = 0
         for row in cur: # should be one row only
             #print(repr(row)) # debug
             found=1
@@ -571,13 +572,14 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             outlo=int(eval(row[1])) if row[1] != '' and row[1] != None else 0
             outhi=int(eval(row[2])) if row[2] != '' and row[2] != None else 0
             status=int(eval(row[3])) if row[3] != '' and row[3] != None else 0
+            ts_created = int(eval(row[4])) if row[4] != '' and row[4] != None else 0 # will be stalled
         if found == 0:
             msg='get_aivalue failure, no member '+str(member)+' for '+svc+' found!'
             log.warning(msg)
             
         conn.commit()
-        log.debug('svc '+svc+' member '+str(member)+' value '+str(value)) # debug
-        return value,outlo,outhi,status
+        log.debug('svc '+svc+' member '+str(member)+' value '+str(value)+' ts_created '+str(ts_created)) # debug
+        return value, outlo, outhi, status, ts_created # ts added 26.7.2015
 
 
     def set_aivalue(self,svc,member,value): # sets variables like setpoints or limits to be reported within services, based on service name and member number
@@ -657,7 +659,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 val_reg=row[0] # teenuse nimi
                 #sta_reg=val_reg[:-1]+"S" # nimi ilma viimase symbolita ja S - statuse teenuse nimi, analoogsuuruste ja temp kohta
 
-                sendtuple = self.make_svc(val_reg)
+                sendtuple = self.make_svc(val_reg) # returns like ['T1S', 0, 'T1W', '170 218 164']
                 if sendtuple != None and sendtuple != []: #
                     udp.send(sendtuple) # can send to buffer double if make_svc found change. no dbl sending if ts is the same.
                     log.info('buffered for reporting: '+str(sendtuple)) ##
@@ -692,7 +694,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         cur = conn.cursor()
         lisa = ''
         value = None
-        if sta_reg == '' and val_reg[-1] == 'W':
+        if sta_reg == '' and (val_reg[-1] == 'W' or val_reg[-1] == 'V'):
             sta_reg = val_reg[0:-1]+'S' # assuming S in the end
             
         Cmd="select mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,regtype,grp,mbi,wcount from "+self.in_sql \
@@ -707,23 +709,23 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         for srow in cur: # go through service members
             log.debug(repr(srow))
 
-            mba=-1 #
-            regadd=-1
-            member=0
-            cfg=0
-            x1=0
-            x2=0
-            y1=0
-            y2=0
-            outlo=0
-            outhi=0
-            ostatus=0 # previous member status
+            mba = -1 #
+            regadd = -1
+            member = 0
+            cfg = 0
+            x1 = 0
+            x2 = 0
+            y1 = 0
+            y2 = 0
+            outlo = 0
+            outhi = 0
+            ostatus = 0 # previous member status
             #tvalue=0 # test, vordlus
-            oraw=0
-            ovalue=0 # previous (possibly averaged) value
-            ots=0 # eelmine ts value ja status ja raw oma
-            avg=0 # keskmistamistegur, mojub alates 2
-            block=0 # power off_tout for counters
+            oraw = 0
+            ovalue = 0 # previous (possibly averaged) value
+            ots = 0 # eelmine ts value ja status ja raw oma
+            avg = 0 # keskmistamistegur, mojub alates 2
+            block = 0 # power off_tout for counters
             hyst = 0
             result=None
             #desc=''
@@ -754,7 +756,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 mbi = srow[20] # int
                 wcount = int(srow[21]) if srow[21] != '' else 1  # word count
                 ##chg = 0 # member status change flag
-                log.debug('val_reg '+val_reg+' member '+str(member)+', cfg='+str(cfg)+', raw='+str(raw)+', ovalue='+str(ovalue)+', outlo='+str(outlo)+', outhi='+str(outhi))
+                log.debug('val_reg '+val_reg+' member '+str(member)+', cfg='+str(cfg)+', raw='+str(raw)+', ovalue='+str(ovalue)+', outlo='+str(outlo)+', outhi='+str(outhi)) ##
                 #print('val_reg '+val_reg+' member '+str(member)+', cfg='+str(cfg)+', raw='+str(raw)+', ovalue='+str(ovalue)+', outlo='+str(outlo)+', outhi='+str(outhi)) # debug
                 
             except:
@@ -861,8 +863,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
                     ############# h, c, r or i processing done #######
                 
-                else: # raw = None !!!!
-                    value = None
+                else: # raw == None !!!!
+                    pass # value = None
+                    log.warning('SKIPPED svc '+val_reg+'.'+str(member)+' value update due to raw None')
                     
             elif 's' in regtype: # setup value
                 value = ovalue # use the value in table without conversion or influence on status
@@ -876,11 +879,11 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             try: # what if None? exception?
                 lisa += str(int(round(value))) # adding member values into one string
             except:
-                log.debug('invalid value to use for service '+val_reg+'.'+str(member)) # do not refer value here, may be missing from another mba!
+                log.warning('invalid value '+str(value)+' found for service '+val_reg+'.'+str(member)) # do not refer value here, may be missing from another mba!
                 rowproblem = 1
 
             if mstatus > status:
-                    status=mstatus
+                    status = mstatus # max status will prevail
 
             rowproblemcount += rowproblem
 
@@ -892,7 +895,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             sendtuple = [sta_reg,status,val_reg,lisa] # sending service to buffer
             return sendtuple # for regular send or status check
         else:
-            log.debug(val_reg+' had '+str(rowproblemcount)+' problematic members, sendtuple NOT created!')
+            log.warning(val_reg+' had '+str(rowproblemcount)+' problematic members, sendtuple NOT created! status '+str(status)+', lisa: '+lisa)
             return None
 
 

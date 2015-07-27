@@ -670,7 +670,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             log.warning(msg)
             
         conn.commit()
-        return value
+        return value # also state and value should be important! like ac.get_aivalue does...
     
     
     def doall(self): # do this regularly, blocks for the time of socket timeout!

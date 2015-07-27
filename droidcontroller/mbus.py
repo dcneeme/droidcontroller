@@ -68,7 +68,7 @@ class Mbus:
 
     def __del__(self):
         class_name = self.__class__.__name__
-        print(class_name, 'destroyed')
+        log.info(class_name, 'destroyed')
 
     def reopen(self): # try to restore serial channel
         ''' Attempt to restore failing USB port by closing and reopening '''
