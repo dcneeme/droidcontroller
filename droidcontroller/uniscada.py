@@ -473,7 +473,7 @@ class UDPchannel():
         
         if not 'id:' in sendstring: # probably response to command not via buffer
             sendstring = 'id:'+str(self.host_id)+'\n'+sendstring
-            log.warning('added id to sendstring: '+sendstring)
+            log.warning('added id to the sendstring to '+str(self.saddr)+': '+sendstring)
         
         self.traffic[1] = self.traffic[1] + len(sendstring) # adding to the outgoing UDP byte counter
 
@@ -492,10 +492,10 @@ class UDPchannel():
         except:
             #msg = 'udp send failure to '+str(repr(self.saddr))+' for '+str(int(self.ts - self.ts_udpsent))+' s, '+str(self.linecount)+' rows dumped, '+str(self.undumped)+' undumped' # cannot send, problem with connectivity
             #syslog(msg)
-            msg = 'send FAILURE' # FIXME
+            msg = 'send FAILURE to'+str(self.saddr)
             log.warning(msg)
             self.ts_udpunsent = self.ts # last UNsuccessful udp send
-            #traceback.print_exc()
+            traceback.print_exc()
 
             if 'led' in dir(self):
                 self.led.alarmLED(1) # send failure
