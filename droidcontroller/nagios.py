@@ -132,8 +132,8 @@ class NagiosMessage(object):
             try: #
                 self.UDPnagSock.sendto(msg.encode('utf-8'),self.nagaddr)
                 dnsize=len(msg) # udp out increase, payload only
-                #print('sent nagios message to '+repr(self.nagaddr)+': '+msg)
-                log.debug('sent nagios message to '+repr(self.nagaddr))
+                log.info('sent nagios message to '+repr(self.nagaddr)+': '+msg)
+                #log.debug('sent nagios message to '+repr(self.nagaddr))
                 return dnsize
             except:
                 print('could NOT send nagios message to '+repr(self.nagaddr))
