@@ -1,5 +1,5 @@
 # This Python file uses the following encoding: utf-8
-# last change  5.7.2015
+# last change  6.8.2015, added cyble watermeter
 
 ''' 
 mbys.py - query and process kamstrup, sensus or axis heat meters via Mbus protocol, 2400 8E1
@@ -318,7 +318,7 @@ class Mbus:
         return res
             
             
-    def get_volume(self):
+    def get_volume(self): # one value
         ''' Return volume in l from the last read result. Chk the datetime in self.mbm as well! '''
         key = ''
         coeff = 1.0
@@ -347,6 +347,12 @@ class Mbus:
             key = '4015'
             length = 4
             hex = 2
+        elif self.model == 'cyble_v2': # itron cyble v2, 32bit var
+            start = 69
+            key = '0413'
+            coeff = 1.0 # L unit
+            hex = 0
+            
         else:
             log.warning('unknown model '+self.model)
             return None
@@ -432,8 +438,44 @@ class Mbus:
         return res
         
 
+    def get_volumes(self): # cyble only so far, multiple (3) volumes, 
+        ''' Return water volume readings. 
+            testing
+            m.mb_decode(69,'0413',1.0,'vol',length=4,hex=0)
+        '''
+        temp = None
+        key = ['','','']
+        coeff = [1.0, 1.0, 1.0]
+        length = [4, 4, 4] # bytes
+        hex = 1
+        if self.model == 'cyble_v2': # itron cyble v2, 32bit var, the first is the normal reading
+            ''' 69  0413   00000000
+                75  0493   7F000000 
+                82  4413   00000000
+            '''
+            start = [69, 75, 82]
+            key = ['0413', '0493', '4413'] # inlet outlet diff
+            #coeff = [1.0, 1.0, 1.0] # L unit
+            hex = 0
+        else:
+            log.warning('unknown model '+self.model)
+            return None, None, None
+
+        out = []
+        #try:
+        for i in range(3):
+            try:
+                temp = round(self.mb_decode(start[i], key[i], coeff[i], 'volumes', length=length[i], hex=hex),3)
+                out.append(temp)
+            except:
+                log.warning('failed to mb_decode volumes output, start '+str(start[i])+', key '+key[i]+', coeff '+str(coeff[i]))
+                traceback.print_exc()
+
+        return out
+        
+    
     def get_temperatures(self):
-        ''' Return temperature readings out, return diff extracted from the last read result. Chk the datetime in self.mbm as well! '''
+        ''' Return temperature readings out, return, diff extracted from the last read result.   '''
         temp = None
         key = ['','','']
         coeff = [1.0, 1.0, 1.0]
