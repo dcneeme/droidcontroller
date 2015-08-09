@@ -196,7 +196,30 @@ class HeatExchange:
         else:
             log.warning('energy not set due to unknown unit '+str(unit))
 
-    def set_el_energy(self, invar, unit = 'J'):
+    def set_energypos(self, invar, unit = 'J'):
+        ''' Restores produced positive heat '''
+        if unit == 'Wh':
+            self.energypos = 3600 * invar
+        elif unit == 'kWh':
+            self.energypos = 3600000 * invar
+        elif unit == 'J':
+            self.energypos = invar # J
+        else:
+            log.warning('energypos not set due to unknown unit '+str(unit))
+                    
+    def set_energyneg(self, invar, unit = 'J'):
+        ''' Restores produced melting heat energy '''
+        if unit == 'Wh':
+            self.energyneg = 3600 * invar
+        elif unit == 'kWh':
+            self.energyneg = 3600000 * invar
+        elif unit == 'J':
+            self.energyneg = invar # J
+        else:
+            log.warning('energyneg not set due to unknown unit '+str(unit))
+                    
+ 
+    def set_el_energy(self, invar, unit = 'J'): # NOT USED, missing COP calc! FIXME?
         ''' Sets cumulative CONSUMED ELECTRIC ENERGY, update before cop reading! '''
         if unit == 'Wh':
             self.el_energy = 3600 * invar
@@ -213,7 +236,7 @@ class HeatExchange:
 
         
     def get_el_energy(self):
-        ''' Returns flow rate for pump based on actual flowmeter pulse processing '''
+        ''' Returns WHAT? '''
         return self.el_energy # consumed J
 
         
@@ -311,17 +334,7 @@ class HeatExchange:
         return self.energylast # J
 
     
-    def set_energypos(self, invar):
-        ''' Restores produced positive heat '''
-        if invar != None:
-            self.energypos = invar # produced useful heat, excluding melting energy
-                    
-    def set_energyneg(self, invar):
-        ''' Restores produced melting heat energy '''
-        if invar != None:
-            self.energyneg = invar # produced useful heat, excluding melting energy
-                    
-    
+   
     def interpolate(self, x, x1=0, y1=0, x2=0, y2=0):
         ''' Returns linearly interpolated value y based on x and
         two known points defined by x1,y1 and x2,y2

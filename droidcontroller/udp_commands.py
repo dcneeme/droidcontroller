@@ -3,7 +3,7 @@
 # FIXME + regular svc and cmd ERV send out of historical queue!
 
 import subprocess
-import sys
+import os, sys
 import socket, struct, fcntl
 import psutil
 
@@ -275,12 +275,12 @@ class Commands(SQLgeneral): # p
                     todocode = 2
                     
             # start scripts in parallel (with 10s pause in this channelmonitor). cmd:run,nimi,0 # 0 or 1 means bg or fore
-            # use background normally, the foreground process will open a window and keep it open until closed manually
+            # use background normally, the foreground process will open a window and keep it open until closed manually (in android)
             elif TODO.split(',')[0] == 'run': # FIXME! below is for android only
-                if len(TODO.split(',')) == 3: # run any script in the d4c directory as foreground or background subprocess
+                if len(TODO.split(',')) == 3: # run a script in the d4c directory, no parameters allowed
                     script = TODO.split(',')[1]
-                    if script in os.listdir('/sdcard/sl4a/scripts/d4c'): # file exists
-                        fore = TODO.split(',')[2] # 0 background, 1 foreground
+                    fore = TODO.split(',')[2] # 0 background, 1 foreground
+                    if os.path.exists('/sdcard/sl4a/scripts/d4c'+script): # file exists, android
                         extras = {"com.googlecode.android_scripting.extra.SCRIPT_PATH":"/sdcard/sl4a/scripts/d4c/%s" % script}
                         joru1 = "com.googlecode.android_scripting"
                         joru2 = "com.googlecode.android_scripting.activity.ScriptingLayerServiceLauncher"
@@ -305,13 +305,20 @@ class Commands(SQLgeneral): # p
                             #traceback.print_exc()
                             todocode=1
                         time.sleep(10) # take a break while subprocess is active just in case...
+                    elif os.path.exists('/root/d4c/'+script): # linux, file exists
+                        try:
+                            self.subexec('/root/d4c/'+script, submode = fore)
+                            todocode = 0
+                        except:
+                            pass
                     else:
                         msg='file not found: '+script
                         log.warning(msg)
                         todocode = 1
-                        time.sleep(2)
+                        #time.sleep(2)
 
                 else:
+                    log.warning('wrong number of parameters for cmd '+TODO)
                     todocode = 1 # wrong number of parameters
 
             elif TODO.split(',')[0] == 'size': # get the size of filename (cmd:size,setup.sql)

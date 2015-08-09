@@ -48,7 +48,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
     def Initialize(self): # before using this create s=SQLgeneral()
         ''' initialize delta t variables, create tables and modbus connection '''
-        self.ts = round(time.time(),1)
+        self.ts = int(round(time.time(),0))
         self.ts_read = self.ts # time of last read
         self.ts_send = self.ts-10 # allow counters restoring
         self.sqlread(self.in_sql) # read counters table
@@ -282,7 +282,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             Delay in the end attempts to increase reliability of reading on mba change. INVESTIGATE, is it possibly a slave (ioboard) related problem?
             FIMXME:  do not attempt to access counters that are not defined in devices.sql! this should be an easy way to add/remove devices.
         '''
-        self.ts = round(time.time(),2) # refresh timestamp for raw, common for grp members
+        self.ts = int(round(time.time(),0)) # refresh timestamp for raw, common for grp members
         step = int(abs(wcount))
         cur = conn.cursor()
         oraw = 0
@@ -581,7 +581,58 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         log.debug('svc '+svc+' member '+str(member)+' value '+str(value)+' ts_created '+str(ts_created)) # debug
         return value, outlo, outhi, status, ts_created # ts added 26.7.2015
 
+    def get_aivalues(self, svc, maxage = None): # age in s
+        ''' Returns al list of all member values. Returns [] if nothing found. Stalled values are replaced with None. '''
+        cur=conn.cursor()
+        Cmd="BEGIN IMMEDIATE TRANSACTION" # conn3, et ei saaks muutuda lugemise ajal
+        conn.execute(Cmd)
+        Cmd="select value, ts from "+self.in_sql+" where val_reg='"+svc+"' order by member"
+        log.debug(Cmd) ##
+        cur.execute(Cmd)
+        values = [] # None
+        found = 0
+        ts_created = 0
+        if maxage == None:
+            maxage = self.ts # no filtering based on age
+        
+        for row in cur: # should be one row only
+            ts_created = int(eval(row[1])) if row[1] != '' and row[1] != None else 0 # will be stalled
+            found = 1
+            if self.ts - ts_created < maxage and row[1] != '' and row[1] != None:
+                values.append(int(row[0]))
+            else:
+                values.append(None)
+                
+        if found == 0:
+            msg='get_aivalue() FAILURE, no values for '+svc+' found!'
+            log.warning(msg)
+            
+        conn.commit()
+        return values # ts added 26.7.2015
 
+        
+    def set_aivalues(self, svc, values = []): # member count must match the svc member count!
+        ''' Returns al list of all member values. Returns [] if nothing found. Stalled values are replaced with None. '''
+        if isinstance(svc, str):
+            pass
+        else:
+            return 2
+            
+        Cmd="BEGIN IMMEDIATE TRANSACTION" # conn3
+        conn.execute(Cmd)
+        try:
+            for i in range(len(values)):
+                Cmd="update "+self.in_sql+" set value='"+str(values[i])+"', ts='"+str(self.ts)+"' where val_reg='"+svc+"' and member = '"+str(i+1)+"'"
+                log.debug(Cmd) ##
+                conn.execute(Cmd)
+            conn.commit()
+            return 0
+        except:
+            log.warning('FAILED to update svc '+svc+' with values '+str(values))
+            traceback.print_exc()
+            return 1
+        
+        
     def set_aivalue(self,svc,member,value): # sets variables like setpoints or limits to be reported within services, based on service name and member number
         ''' Setting member value using sqlgeneral set_membervalue. adding sql table below for that '''
         return s.set_membervalue(svc,member,value,self.in_sql,raw=False) # set value

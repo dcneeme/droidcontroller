@@ -64,11 +64,13 @@ class Mbus:
             log.error('Mbus connection FAILED on port '+self.port)
     
     def close(self):
+        ''' Use this to get rid of the instance if not required '''
         self.__del__()
 
     def __del__(self):
+        ''' Destroyer for close() '''
         class_name = self.__class__.__name__
-        log.info(class_name, 'destroyed')
+        log.info(class_name+' destroyed')
 
     def reopen(self): # try to restore serial channel
         ''' Attempt to restore failing USB port by closing and reopening '''

@@ -13,6 +13,7 @@ import sys # to return sys.exc_info()[1])
 import time # had no effect in init for type 'u' only
 
 import logging
+logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 log = logging.getLogger(__name__)
 
 # USE FAST VERSION OF PYMODBUS! 0.5 s timepout for RTU
@@ -92,7 +93,7 @@ class CommModbus(Comm):
                 
                 from pymodbus.client.sync import ModbusTcpClient as ModbusClient
                 
-                if self.port > 10000 and self.port<10003: # xport, rtu over tcp. use port 10001 or 10002
+                if self.port == 23 or (self.port > 10000 and self.port<10003): # xport, rtu over tcp, port 23 for esp8266
                     try:
                         self.client = ModbusClient(
                             host = self.host,
@@ -102,6 +103,7 @@ class CommModbus(Comm):
                         print('CommModbus() init3: created CommModbus instance for ModbusRTU over TCP using params '+str(kwargs))
                     except:
                         log.warning('failed to create CommModbus instance for ModbusRTU over TCP using params '+str(kwargs))
+                        traceback.print_exc()
                         #print('failed to create CommModbus instance for ModbusRTU over TCP using params '+str(kwargs))
                         
                 else: # normal modbustcp
@@ -120,6 +122,7 @@ class CommModbus(Comm):
                 log.info('CommModbus() init5: created CommModbus instance for ModbusRTU over RS485 using using params '+str(kwargs))
             except:
                 log.warning('failed to create CommModbus instance for ModbusRTU over RS485using params '+str(kwargs))
+                traceback.print_exc()
                 #print('failed to create CommModbus instance for ModbusRTU over RS485using params '+str(kwargs))
 
     def get_errorcount(self):

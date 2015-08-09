@@ -380,7 +380,7 @@ class UDPchannel():
         sendstring = ''
         cur = self.conn.cursor()
         cur2 = self.conn.cursor()
-        limit = self.sk.get_state()[0] * 4 + 1  # 1 key:value to try if conn down, 5 if up. 100 is too much, above 1 kB
+        limit = self.sk.get_state()[0] * 49 + 1  ## 1 key:value to try if conn down, 5 if up. 100 is too much, above 1 kB ## 
         age = 0 # the oldest, will be self.age later
         #log.info('...trying to select and send max '+str(limit)+' buffer lines')
         
@@ -413,17 +413,20 @@ class UDPchannel():
             
             for row in cur: # ts alusel, iga ts jaoks oma in
                 ts_created = int(round(row[0],0)) if row[0] != '' else 0 # should be int
-                if age == 0: # vanim, vaid esimesel lugemisel
-                    age = int(self.ts - ts_created)
-                    self.age = age # the oldest in these rows
-                log.debug('processing ts_created '+str(ts_created))
+                
+                #if age == 0: # vanim, vaid esimesel lugemisel
+                if (self.ts - ts_created) > age:
+                    age = int(self.ts - ts_created) # find the oldest in the group
+                    
+                log.debug('processing ts_created '+str(ts_created)+', age '+str(self.ts - ts_created)+', the oldest age '+str(age))
                 #if ts_created > 1433000000: # valid ts AGA kui on vale siis mingu serveri aeg
                 self.inum += 1 # increase the message number  for every ts_created
                 sendstr = "in:" + str(self.inum) + ","+str(ts_created)+"\n" # start the new in: block    
                 Cmd = 'SELECT * from '+self.table+' where ts_created='+str(ts_created)
                 log.debug('selecting rows for inum'+str(self.inum)+': '+Cmd) # debug
                 cur2.execute(Cmd)
-                 
+                self.age = age # the oldest in these grouped timestamps
+                
                 for srow in cur2:
                     svc_count += 1
                     sta_reg = srow[0]
