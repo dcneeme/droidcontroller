@@ -1,5 +1,5 @@
 # This Python file uses the following encoding: utf-8
-# last change  6.8.2015, added cyble watermeter
+# last change  11.8.2015, added itron_mb+m watermeter
 
 ''' 
 mbys.py - query and process kamstrup, sensus or axis heat meters via Mbus protocol, 2400 8E1
@@ -33,7 +33,7 @@ class Mbus:
         With both sensus and kamstrup, data bytes for readings contain numbers 0..9.
         With sensus, this is called BCD 4, 6 or 8 encoding.
         Key block is then starting with 0A, 0B or 0C respectively.
-        Decoding is different, see decode().
+        Decoding is different, see mb_decode().
     '''
 
     def __init__(self, port='auto', autokey='FTDI', tout=3, speed=2400, model='sensusPE'):  # tout 1 too small! win port like 'COM27'
@@ -349,8 +349,13 @@ class Mbus:
             key = '4015'
             length = 4
             hex = 2
-        elif self.model == 'cyble_v2': # itron cyble v2, 32bit var
+        elif self.model == 'cyble_v2': # itron cyble v2, 32bit var, magnetic target reader
             start = 69
+            key = '0413'
+            coeff = 1.0 # L unit
+            hex = 0
+        elif self.model == 'itron_mb+m': # itron optical, 32 bit var
+            start = 27
             key = '0413'
             coeff = 1.0 # L unit
             hex = 0
@@ -359,7 +364,7 @@ class Mbus:
             log.warning('unknown model '+self.model)
             return None
 
-        res = self.mb_decode(start, key, coeff, 'energy', length = length, hex = hex) # len always 4 = default
+        res = self.mb_decode(start, key, coeff, 'volume', length = length, hex = hex) # len always 4 = default
         if res == 0: # double protection
             log.warning('invalid mb_decode output '+str(res))
             return None
@@ -456,16 +461,25 @@ class Mbus:
                 82  4413   00000000
             '''
             start = [69, 75, 82]
-            key = ['0413', '0493', '4413'] # inlet outlet diff
+            key = ['0413', '0493', '4413'] # three volumes, dunno why so many
             #coeff = [1.0, 1.0, 1.0] # L unit
             hex = 0
+        elif self.model == 'itron_mb+m': # itron opto, 32bit var, the first is the normal reading
+            ''' 27  0413   00000000
+                37  4413   00000000
+            '''
+            start = [27, 37]
+            key = ['0413', '4413'] # volumes, dunno why 2 of them
+            coeff = [1.0, 1.0] # L unit
+            hex = 0
+        
         else:
             log.warning('unknown model '+self.model)
-            return None, None, None
+            return None
 
         out = []
         #try:
-        for i in range(3):
+        for i in range(len(start)):
             try:
                 temp = round(self.mb_decode(start[i], key[i], coeff[i], 'volumes', length=length[i], hex=hex),3)
                 out.append(temp)
@@ -508,11 +522,11 @@ class Mbus:
             hex = 2
         else:
             log.warning('unknown model '+self.model)
-            return None, None, None
+            return None
 
         out = []
         try:
-            for i in range(3):
+            for i in range(len(start)):
                 temp = round(self.mb_decode(start[i], key[i], coeff[i], 'temperatures', length=length[i], hex=hex),3)
                 if temp != 0:
                     out.append(temp) # converted to degC
@@ -526,26 +540,48 @@ class Mbus:
 
 
     def get_datetime(self):
-        ''' Returns some 23 bit number of minutes(?) in unknown format '''
-        key= ''
-        coeff = 1
+        ''' Returns some 23 bit number of minutes(?) in unknown format 
+            http://www.aquametro.com/downloads/docs/3166a_e_calec-mb_m-bus-protokoll.pdf
+            4.2.1 Definition of the G format (coding the date)
+            first byte               second byte
+            a2 a1 a0 j4 j3 j2 j1 j0  a6 a5 a4 a3 M3 M2 M1 M0
+             j4..j0 code the day (1..31), M3..M0 code the month (1..12), a6..a0 code the year (0..99)
+             
+            4.2.2 Definition of the F format (coding the date and time).
+            first byte             second byte          third byte      fourth byte
+            0 0 n5 n4 n3 n2 n1 n0  0 0 0 h4 h3 h2 h1 h0 =byte1 format G = byte2 format G
+             h4..h0 code the hour (0..23), n5..n0 code the minute (0..59)
+         '''
+        key = '046d' # the same for every meter
         if self.model == 'kamstrup602' or self.model == 'kamstrup602':
             start = 124
-            key = '046d' # use lower or upper case, no difference
-            coeff = 1
-        elif self.model == 'sensusPE':
+        elif self.model == 'sensusPE': #FIXME
+            key = '046d' # seda koodi ei ole / FIXME
             start = 124
-            key = '046d' # UNTESTED
-            coeff = 1
+        elif self.model == 'axisSKS3': # katlamaja
+            start = 21
+        elif self.model == 'cyble_v2': 
+            start = 43 #FIXME
+        elif self.model == 'itron_mb+m': # OK
+            start = 43
+            
         else:
-            log.warning('unknown model '+self.model)
+            log.warning('datetime not implemented for '+self.model)
             return None
 
-        return self.mb_decode(start, key, coeff, 'datetime')
+        #output seconds from 1.1.1970 in minute step 
+        # 2309EB18 = 15, 08, 11, 09, 35
+        minute = (int(str(self.mbm[start]), 10) & 0x3F)
+        hour = (int(str(self.mbm[start + 1]), 10) & 0x1F)
+        year = ((int(str(self.mbm[start + 3]), 10) & 0xF0) >> 1) + ((int(str(self.mbm[start + 2]), 10) & 0xE0) >> 5)
+        month = (int(str(self.mbm[start + 3]), 10) & 0x0F)
+        day = (int(str(self.mbm[start + 2]), 10) & 0x1F)
+        
+        return year, month, day, hour, minute
 
 
     def get_all(self):
-        '''Returns all or most measured values '''
+        '''Returns all or most measured values fot heat meters '''
         res = {}
         res.update({ 'model' : self.get_model() })
         res.update({ 'power W' : self.get_power() })
@@ -561,6 +597,6 @@ class Mbus:
 if __name__ == '__main__':
     m=Mbus()
     m.read()
-    print('result',m.mb_decode(45))
+    print('result', m.mb_decode(45))
     m.debug(45)
 
