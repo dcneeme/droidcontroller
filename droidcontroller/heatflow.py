@@ -11,7 +11,9 @@ pp=PulsePeriod()
 pp.period(0,0)
 
 fr = FlowRate()
-fr.flowrate(0,0)
+fr.update(0,0)
+fr.get_flow()
+voi molemad korraga fr.output(0,0)
 
 he = HeatExchange(0.05)
 he.output(1,40,30)
@@ -19,8 +21,9 @@ he.output(1,40,30)
     to get COP value use self.energylast in J divided by el en  consum inc since last cycle stop!
 '''
 
-import time
+import time, sys
 import logging
+logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 log = logging.getLogger(__name__)
 
  
@@ -59,7 +62,7 @@ class PulsePeriod:
             self.period[0] += timeinc # pumping, extend current period[0]
             self.period[1] += timeinc # pumping, extend current period[1]
         
-        log.debug('tsnow '+str(int(tsnow))+', period '+str(self.period)+', lastperiod '+str(self.lastperiod))
+        log.info('tsnow '+str(int(tsnow))+', period '+str(self.period)+', lastperiod '+str(self.lastperiod))
         
         if di_pulse != self.di_pulse: # pulse edge detected, store and reset
             log.debug('pulse level to '+str(di_pulse)+', storing and clearing period['+str(di_pulse)+']')
@@ -77,27 +80,26 @@ class PulsePeriod:
             return None # too early for results
             
             
-class FlowRate: # FIXME! not usable as of 7.2015, errors in some cases! 
+class FlowRate: 
     ''' Class to calculate values related to heat exchange metering.
     Suitable in cases where flow signal (like pump state) is available
     in addition to relatively rare S0 pulses from flowmeter.
     It is assumed that flow is stable when the pump works. Calculation is based on averaging.
+    Volume counter (if present) is used to check and correct thee flowrate result.
     '''
-    def __init__(self, litres_per_pulse=10):
+    def __init__(self, litres_per_pulse = 10):
         self.litres_per_pulse = litres_per_pulse
-        self.flowrate = None
+        self.flowrate = [0, 0]
         self.di_pulse = 0
         self.di_pump = 0
-        self.pstate = 0
-        self.ts_last = 0
+        self.pstate = [0, 0] # separate for raising and falling edge calculations
+        self.ts_last = [0, 0]
+        self.pulsecount = [0, 0] # separate for both edges
+        self.volume = [None, None]
         log.info('FlowRate init')
 
-    def output(self, di_pump, di_pulse):
-        ''' Returns flow rate l/s based on pulse count slow increment from
-        fluid flow meter, usually with symmetrical (50% active) pulse
-        output. Use often not to miss any pulses! time counting stops if di_pump == 0.
-        External on/off signal is also needed in order to know when the rate is 0.
-
+    def update(self, di_pump, di_pulse, volume = None): # execute often not to lose pulses!
+        ''' 
         Flowrate output is calculated during continuous pumping only,
         based on flowmeter pulse raising edge (this may be detected faster
         than the counters are read). Not to be used with electric
@@ -106,36 +108,59 @@ class FlowRate: # FIXME! not usable as of 7.2015, errors in some cases!
         Averages the flow rate with the last calculated result. Result is
         likely to vary depending on the temperature of the pumped fluid.
         Execute this at DI polling speed, will skip unnecessary execs.
+        
+        Pumping sessions should be longer than the di_pulse intervals. Otherwise no result.
         '''
+        if di_pulse > 1 or di_pulse < 0:
+            log.warning('invalid di_pulse level '+str(di_pulse)) 
+            return None
+        
         tsnow = time.time()
-        flowrate = 0
         if di_pump == 1: # pumping
             if di_pulse != self.di_pulse: # pulse edge detected
-                self.di_pulse = di_pulse
-                if self.di_pulse == 1: # this edge active
-                    if self.pstate == 0: # first pulse during pumping session
-                        self.ts_last = tsnow
-                        self.pstate = 1
-                        #self.avg = 1 # average on first pulse interval
+                if self.pstate[di_pulse] == 0: # first pulse level change during pumping session
+                    self.ts_last[di_pulse] = tsnow
+                    self.pulsecount[di_pulse] = 0
+                    self.volume[di_pulse] = volume
+                    self.pstate[di_pulse] = 1
+                    log.info('pumping session start for pulse level '+str(di_pulse)+', volume '+str(volume))
+                else: # not the first. only calculates for one edge!
+                    if volume != None and self.volume[di_pulse] != None:
+                        self.pulsecount[di_pulse] = volume - self.volume[di_pulse] # fixes the count even if some edges skpipped
                     else:
-                        if tsnow > self.ts_last and self.ts_last != 0:
-                            # update on every pulse
-                            flowrate = self.litres_per_pulse / (tsnow - self.ts_last)
-                            # count again for each pulse
-                            self.ts_last = tsnow
-                        else:
-                            log.warning('invalid flowrate timing')
-
-                    if self.flowrate != None and flowrate != 0:
-                        # first pulse during pumping session
-                        self.flowrate = (self.flowrate + flowrate)/2
-                        #self.avg = 0
-                    else:
-                        self.flowrate = flowrate
+                        self.pulsecount[di_pulse] += 1 # assuming no edges are skipped...
+                    
+                    if tsnow > self.ts_last[di_pulse] and self.ts_last[di_pulse] != 0:
+                        # update on every pulse
+                        self.flowrate[di_pulse] = (self.litres_per_pulse * self.pulsecount[di_pulse]) / (tsnow - self.ts_last[di_pulse])
+                        log.info('flowrate for pulse level '+str(di_pulse)+'  updated to '+str(self.flowrate[di_pulse])+', pulsecount '+str(self.pulsecount[di_pulse]))
         else:
-            self.pstate = 0
-
-        return self.flowrate
+            if self.pstate[0] == 1 or self.pstate[1] == 1:
+                self.pstate[0] = 0
+                self.pstate[1] = 0
+                log.info('pumping sessions end for both pulse levels, volume '+str(volume))
+        self.di_pulse = di_pulse # remember the pulse level
+        
+ 
+    def get_flow(self):
+        if self.flowrate[0] > 0 and self.flowrate[1] > 0:
+            return (self.flowrate[0] + self.flowrate[1]) / 2
+        elif self.flowrate[0] > 0 and self.flowrate[1] == 0:
+            return self.flowrate[0]
+        elif self.flowrate[1] > 0 and self.flowrate[0] == 0:
+            return self.flowrate[1]    
+        else:
+            return 0
+    
+        
+    def output(self, di_pump, di_pulse, volume = None): # execute often not to lose pulses!
+        ''' Returns flow rate l/s based on pulse count slow increment from
+            fluid flow meter, usually with symmetrical (50% active) pulse
+            output. Use often not to miss any pulses! time counting stops if di_pump == 0.
+            External on/off signal is also needed in order to know when the rate is 0.
+        '''
+        self.update(di_pump, di_pulse, volume)
+        return self.get_flow()
 
 
 class HeatExchange:
@@ -277,7 +302,7 @@ class HeatExchange:
         log.debug('timediff', ts_diff, 'tempdiff', Tdiff) 
         # interpolated specific energy for heat agent based on
         # average temperature for agent, has effect on specific heat
-        self.cp = self.interpolate((Ton + Tret)/2.0, self.tp1, self.cp1,
+        self.cp = self.interpolate((Ton + Tret) / 2.0, self.tp1, self.cp1,
                                                    self.tp2, self.cp2)
         #cycle start (or end if no new start coming) must be detected
         if di_pump != self.di_pump: # pump state changed
@@ -330,7 +355,7 @@ class HeatExchange:
 
 
     def get_energylast(self):
-        ''' Returns summary energy from last cycle generatred by output(), use for COP calc '''
+        ''' Returns summary energy from last cycle generated by output(), use for COP calc '''
         return self.energylast # J
 
     
