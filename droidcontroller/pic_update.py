@@ -14,6 +14,7 @@
 import traceback, os, sys
 import time
 import logging
+logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 log = logging.getLogger(__name__)
 
 
@@ -34,16 +35,14 @@ class PicUpdate(object): # using the existing mb instance
         and saved to self.sum. Nothing gets sent without self.sum from range 0...255.
     '''
 
-    def __init__(self, mb, mbi=0, regadd=998, keepconf=1, simu=0, log=None): # **kwargs): # mba later
+    def __init__(self, mb, mbi=0, regadd=998, keepconf=1, simu=0): # **kwargs): # mba later
         self.mb = mb # modbus communication instance / object
         #self.log = log or logging.getLogger(__name__) 
         self.skipsend = 0 # this becomes 1 for data eeprom
         self.set_params(mbi, regadd, keepconf, simu)
         self.sum = -1 # valid control sum 0..255
         self.filename = ''
-        #self.pic_id = 0 # means unknown, will be replaced with actual before entering the bootloader mode
-        #self.log.info('PicUpdate() instance created.')
-        log.info('PicUpdate() instance created.')
+        ##log.info('PicUpdate instance created.')
         
     def set_params(self, mbi, regadd, keepconf, simu):
         ''' Change the modbus address of the io-board to update. During simu only crc calculation will be done '''
@@ -312,5 +311,5 @@ class PicUpdate(object): # using the existing mb instance
     def __del__(self):
         ''' Destroy after usage with '''
         class_name = self.__class__.__name__
-        log.info(class_name, 'destroyed')
+        log.info(class_name+' destroyed')
         

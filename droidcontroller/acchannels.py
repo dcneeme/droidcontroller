@@ -857,8 +857,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
                         elif (cfg&2048): # 1wire filter. should have cfg bit 4096 as well!
                             if raw == 1360 or raw == 4096:
-                                log.warning('invalid raw value '+str(raw)+' for temp sensor (cfg=2048) in svc '+val_reg+'.'+str(member)+', replacing with None')
+                                log.warning('invalid raw value '+str(raw)+' for temp sensor in svc '+val_reg+'.'+str(member)+', replacing with None')
                                 raw = None # there should be no change for value
+                                value = None
 
                         ## SCALING #############
                         if raw != None:
