@@ -173,7 +173,7 @@ class HeatExchange:
     for water use cp1=4200, tp1=20, cp2=4200, tp2=50
     '''
     def __init__(self, flowrate, cp1=3776, tp1=26.7,
-                                 cp2=3919, tp2=93.3, interval=10):
+                                 cp2=3919, tp2=93.3, interval=10, unit='J'): # J = Ws, Wh, kWh
         #flowrate unit l/s
         self.di_pump = 0 # pump off initally
         self.cp1 = cp1
@@ -192,8 +192,22 @@ class HeatExchange:
         self.energycycle = 0 # sum energy during ongoing cycle
         self.energylast = 0 # sum energy from last cycle, use for cop calc
         self.flow_threshold = None # if not None, then used or cycle syncing
-        log.info('HeatExchange init')
+        self.unit = unit
+        self.__set_divisor()
+        log.info('HeatExchange init, energy unit '+self.unit+', power unit W')
 
+    def __set_divisor(self):
+        ''' Sets divisor to calc energy in needed units '''
+        if self.unit == 'Ws' or self.unit == 'J':
+            self.divisor = 1.0
+        elif self.unit == 'Wh':
+            self.divisor = 3600.0
+        elif self.unit == 'kWh':
+            self.divisor = 3600000.0
+        else:
+            self.divisor = 1.0
+            log.warning('divisor 1 due to UNKNOWN unit '+self.unit)
+            
     def set_flowrate(self, flowrate):
         '''Updates flow rate l/s for pump based on actual flowmeter pulse
         processing.
@@ -210,59 +224,36 @@ class HeatExchange:
         self.flowthreshold = invar
         
 
-    def set_energy(self, invar, unit = 'J'):
+    def set_energy(self, invar):
         ''' Sets cumulative PRODUCED HEAT energy if needed to be restored '''
-        if unit == 'Wh':
-            self.energy = 3600 * invar
-        elif unit == 'kWh':
-            self.energy = 3600000 * invar
-        elif unit == 'J':
-            self.energy = invar # J
-        else:
-            log.warning('energy not set due to unknown unit '+str(unit))
+        self.energy = invar / self.divisor
+        log.info('cumulative energy set to '+str(self.energy)+self.unit)
 
-    def set_energypos(self, invar, unit = 'J'):
+    def set_energypos(self, invar):
         ''' Restores produced positive heat '''
-        if unit == 'Wh':
-            self.energypos = 3600 * invar
-        elif unit == 'kWh':
-            self.energypos = 3600000 * invar
-        elif unit == 'J':
-            self.energypos = invar # J
-        else:
-            log.warning('energypos not set due to unknown unit '+str(unit))
+        self.energypos = invar
+        log.debug('energypos et to '+str(self.energypos)+self.unit)
                     
-    def set_energyneg(self, invar, unit = 'J'):
+    def set_energyneg(self, invar):
         ''' Restores produced melting heat energy '''
-        if unit == 'Wh':
-            self.energyneg = 3600 * invar
-        elif unit == 'kWh':
-            self.energyneg = 3600000 * invar
-        elif unit == 'J':
-            self.energyneg = invar # J
-        else:
-            log.warning('energyneg not set due to unknown unit '+str(unit))
+        self.energyneg = invar
+        log.debug('energyneg set to '+str(self.energyneg)+self.unit)
                     
  
-    def set_el_energy(self, invar, unit = 'J'): # NOT USED, missing COP calc! FIXME?
+    def set_el_energy(self, invar): # NOT USED, missing COP calc! FIXME?
         ''' Sets cumulative CONSUMED ELECTRIC ENERGY, update before cop reading! '''
-        if unit == 'Wh':
-            self.el_energy = 3600 * invar
-        elif unit == 'kWh':
-            self.el_energy = 3600000 * invar
-        elif unit == 'J':
-            self.el_energy = invar # J
-        else:
-            log.warning('el_energy not set due to unknown unit '+str(unit))
+        self.el_energy = invar
+        log.debug('el_energyneg set to '+str(self.el_energy)+self.unit)
+
 
     def get_energy(self):
         ''' Returns flow rate for pump based on actual flowmeter pulse processing '''
         return self.energy # produced J
 
-        
+
     def get_el_energy(self):
         ''' Returns WHAT? '''
-        return self.el_energy # consumed J
+        return self.el_energy # consumed
 
         
     def get_flowrate(self):
@@ -315,7 +306,7 @@ class HeatExchange:
                 log.info('heat pump cycle started')
                 
             else: # stop
-                energydelta = ts_diff * Tdiff * self.flowrate * self.cp
+                energydelta = ts_diff * Tdiff * self.flowrate * self.cp  / self.divisor
                 self.energy += energydelta
                 self.energycycle += energydelta # last pumping cycle
                 self.energylast = self.energycycle
@@ -325,7 +316,7 @@ class HeatExchange:
                     self.energypos += energydelta
                 elif Tdiff < 0:
                     self.energyneg -= energydelta # value positive, meaning negative
-                log.info('heat pump cycle stopped, produced energy during cycle J '+str(round(self.energylast)))
+                log.info('heat pump cycle stopped, produced energy during cycle '+str(round(self.energylast))+self.unit)
                 
 
             ##self.Tdiff = Tdiff
@@ -350,13 +341,13 @@ class HeatExchange:
 
         log.debug('flowrate = %d, Ton = %d, Tret = %d',
                   self.flowrate, Ton, Tret)
-        return self.power, self.energy, self.ptime, self.energypos, self.energyneg # W J s J J 
+        return self.power, self.energy, self.ptime, self.energypos, self.energyneg, self.unit # W u s u u 
         # last two are for separating the produced heat (energypos) from the production loss for heat pump melting (energyneg)
 
 
     def get_energylast(self):
         ''' Returns summary energy from last cycle generated by output(), use for COP calc '''
-        return self.energylast # J
+        return self.energylast # in self.units
 
     
    
