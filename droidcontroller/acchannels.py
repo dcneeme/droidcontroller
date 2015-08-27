@@ -158,7 +158,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                     #udp.syslog(msg)
                                     res += 1
                         else: # skip
-                            log.debug('parse_udp: write for key '+key+' SKIPPED due to sqlvalue '+str(sqlvalue)+', value '+str(value)+', regtype '+regtype)
+                            log.warning('SKIPPED restore for key '+key+' due to regtype '+regtype+', sqlvalue '+str(sqlvalue)+', value '+str(value))
 
             if found > 0:  # process status too
                 self.make_svc(key,'') ### processing svc and notify about new counter value
@@ -559,9 +559,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         #print(Cmd) # debug
         cur.execute(Cmd)
         raw = 0
-        value = 0 # None
-        outlo = 0
-        outhi = 0
+        value = None # None
+        outlo = None
+        outhi = None
         status = 0
         found = 0
         ts_created = 0
@@ -569,8 +569,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             #print(repr(row)) # debug
             found=1
             value=int(eval(row[0])) if row[0] != '' and row[0] != None else None ## 9.7.2015
-            outlo=int(eval(row[1])) if row[1] != '' and row[1] != None else 0
-            outhi=int(eval(row[2])) if row[2] != '' and row[2] != None else 0
+            outlo=int(eval(row[1])) if row[1] != '' and row[1] != None else None
+            outhi=int(eval(row[2])) if row[2] != '' and row[2] != None else None
             status=int(eval(row[3])) if row[3] != '' and row[3] != None else 0
             ts_created = int(eval(row[4])) if row[4] != '' and row[4] != None else 0 # will be stalled
         if found == 0:
@@ -745,6 +745,10 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         cur = conn.cursor()
         lisa = ''
         value = None
+        hilim = None
+        lolim = None
+        nolim = 0
+        
         if sta_reg == '' and (val_reg[-1] == 'W' or val_reg[-1] == 'V'):
             sta_reg = val_reg[0:-1]+'S' # assuming S in the end
             
@@ -768,8 +772,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             x2 = 0
             y1 = 0
             y2 = 0
-            outlo = 0
-            outhi = 0
+            outlo = None
+            outhi = None
             ostatus = 0 # previous member status
             #tvalue=0 # test, vordlus
             oraw = 0
@@ -794,8 +798,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 x2 = float(srow[6]) if srow[6] != '' else 0
                 y1 = float(srow[7]) if srow[7] != '' else 0
                 y2 = float(srow[8]) if srow[8] != '' else 0
-                outlo = float(srow[9]) if srow[9] != '' else 0
-                outhi = float(srow[10]) if srow[10] != '' else 0
+                outlo = float(srow[9]) if srow[9] != '' else None
+                outhi = float(srow[10]) if srow[10] != '' else None
                 avg = float(srow[11]) if srow[11] != '' else 0  #  averaging strength, values 0 and 1 do not average!
                 block = int(srow[12]) if srow[12] != '' else 0 # off-tout for power related on/off
                 raw = int(srow[13]) if srow[13] != '' else None # None on vaja! 0 ei tohi saata kui oige vaartus puudub!
@@ -879,6 +883,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                 rowproblem = 1 # this service will not be used in notification
                                 ## binary services defined in aicochannels must have x1 x2 y1 y2! 0 1 0 1    
 
+                        
                         if value != None and avg != None and ovalue != None:
                             if avg > 1 and abs(value - ovalue) < value / 2:  # averaging the readings. big jumps (more than 50% change) are not averaged.
                                 value = int(((avg - 1) * ovalue+value)/avg) # averaging with the previous value, works like RC low pass filter
@@ -902,15 +907,35 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         
                         
                         if value != None:
-                            if (outhi > 0 and value < 5 * outhi) or outhi == 0: # update status and value
+                            #limiting out the values outside  5 times hi-lo band
+                            #if (outhi > 0 and value < 5 * outhi) or outhi == 0: # update status and value
+                            nolim = 0  # initial value, 3 if both limits missing
+                            if outlo != None and outhi != None:
+                                nolim = 0
+                                hilim = outhi + 2 * (outhi - outlo)
+                                lolim = outlo - 2 * (outhi - outlo)
+                            elif outlo == None and outhi != None:
+                                nolim = 1
+                                hilim = outhi + 2 * abs(outhi)
+                                lolim = outhi - 2 * abs(outhi)
+                            elif outhi == None and outlo != None:
+                                nolim = 2
+                                lolim = outlo - 2 * abs(outlo)
+                                hilim = outlo + 2 * abs(outlo)
+                            else: # both outhi, outlo none
+                                nolim = 3
+                                log.debug('both lolim, hilim None for '+val_reg)
+                                
+                            if (nolim < 3 and value > lolim and value < hilim) or nolim == 3 or lolim == hilim: # the latter is somewhat illegal 
+                                # but workaround to 0.0 instead of None for outlo outhi koskla2 Z6W FIXME
                                 Cmd="update "+self.in_sql+" set status='"+str(mstatus)+"', value='"+str(value)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
                                 # limit possible value spikes after restart due to counter reset
                                 conn.execute(Cmd) # who commits? the calling method, read_all()!!!
                                 log.debug(Cmd) # status and value update based on raw
                             else:
-                                log.warning('skipped updating '+self.in_sql+' with too large value '+str(value)+' for val_reg '+val_reg+' member '+str(member)+' while outhi '+str(outhi))
+                                log.warning('skipped updating '+self.in_sql+' due to '+val_reg+' member '+str(member)+' value '+str(value)+' out of allowed band from '+str(lolim)+' to '+str(hilim)+', based on outhlo '+str(outlo)+', outhi '+str(outhi)+', nolim '+str(nolim))
                         else:
-                            log.warning(self.in_sql+' NOT updated due to '+val_reg+' member '+str(member)+' value None! chk regadd '+str(regadd))
+                            log.warning('skipped updating '+self.in_sql+' due to '+val_reg+' member '+str(member)+' value None! chk regadd '+str(regadd))
                             rowproblem = 1
 
                     ############# h, c, r or i processing done #######
