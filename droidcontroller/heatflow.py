@@ -173,7 +173,7 @@ class HeatExchange:
     for water use cp1=4200, tp1=20, cp2=4200, tp2=50
     '''
     def __init__(self, flowrate, cp1=3776, tp1=26.7,
-                                 cp2=3919, tp2=93.3, interval=10, unit='J'): # J = Ws, Wh, kWh
+                                 cp2=3919, tp2=93.3, interval=10, unit='J'): # J = Ws, Wh, hWh, kWh, MWh
         #flowrate unit l/s
         self.di_pump = 0 # pump off initally
         self.cp1 = cp1
@@ -202,8 +202,12 @@ class HeatExchange:
             self.divisor = 1.0
         elif self.unit == 'Wh':
             self.divisor = 3600.0
+        elif self.unit == 'hWh':
+            self.divisor = 360000.0
         elif self.unit == 'kWh':
             self.divisor = 3600000.0
+        elif self.unit == 'MWh':
+            self.divisor = 3600000000.0
         else:
             self.divisor = 1.0
             log.warning('divisor 1 due to UNKNOWN unit '+self.unit)
@@ -222,28 +226,28 @@ class HeatExchange:
     def set_flow_threshold(self, invar): # l/s
         ''' Sets the level to detect on off states for heat pump for cycle syncing   '''
         self.flowthreshold = invar
-        
+        log.info('flowthreshold set to '+str(self.flowthreshold))
 
     def set_energy(self, invar):
         ''' Sets cumulative PRODUCED HEAT energy if needed to be restored '''
-        self.energy = invar / self.divisor
+        self.energy = invar
         log.info('cumulative energy set to '+str(self.energy)+self.unit)
 
     def set_energypos(self, invar):
         ''' Restores produced positive heat '''
         self.energypos = invar
-        log.debug('energypos et to '+str(self.energypos)+self.unit)
+        log.info('energypos set to '+str(self.energypos)+self.unit)
                     
     def set_energyneg(self, invar):
         ''' Restores produced melting heat energy '''
         self.energyneg = invar
-        log.debug('energyneg set to '+str(self.energyneg)+self.unit)
+        log.info('energyneg set to '+str(self.energyneg)+self.unit)
                     
  
     def set_el_energy(self, invar): # NOT USED, missing COP calc! FIXME?
         ''' Sets cumulative CONSUMED ELECTRIC ENERGY, update before cop reading! '''
         self.el_energy = invar
-        log.debug('el_energyneg set to '+str(self.el_energy)+self.unit)
+        log.info('el_energyneg set to '+str(self.el_energy)+self.unit)
 
 
     def get_energy(self):
