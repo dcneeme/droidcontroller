@@ -18,7 +18,7 @@ voi molemad korraga fr.output(0,0)
 he = HeatExchange(0.05)
 he.output(1,40,30)
 
-    to get COP value use self.energylast in J divided by el en  consum inc since last cycle stop!
+    to get COP value use self.energylast divided by el en  consum inc since last cycle stop!
 '''
 
 import time, sys
@@ -310,7 +310,7 @@ class HeatExchange:
                 log.info('heat pump cycle started')
                 
             else: # stop
-                energydelta = ts_diff * Tdiff * self.flowrate * self.cp  / self.divisor
+                energydelta = ts_diff * Tdiff * self.flowrate * self.cp / self.divisor
                 self.energy += energydelta
                 self.energycycle += energydelta # last pumping cycle
                 self.energylast = self.energycycle
@@ -330,7 +330,7 @@ class HeatExchange:
                 #        Tdiff > 1.5 * self.Tdiff or
                 #        Tdiff < 0.5 * self.Tdiff):
                 self.power = self.flowrate * Tdiff * self.cp
-                energydelta = ts_diff * self.power
+                energydelta = ts_diff * self.power / self.divisor
                 if self.power > 0: # energypos increase
                     self.energypos += energydelta
                 elif self.power < 0:
