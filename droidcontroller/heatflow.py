@@ -87,8 +87,9 @@ class FlowRate:
     It is assumed that flow is stable when the pump works. Calculation is based on averaging.
     Volume counter (if present) is used to check and correct thee flowrate result.
     '''
-    def __init__(self, litres_per_pulse = 10):
-        self.litres_per_pulse = litres_per_pulse
+    def __init__(self, litres_per_pulse = 10, maxpulsecount = 5):
+        self.litres_per_pulse = litres_per_pulse # 
+        self.maxpulsecount = maxpulsecount # mac increase in volume between 2 counter readings
         self.flowrate = [0, 0]
         self.di_pulse = 0
         self.di_pump = 0
@@ -110,7 +111,10 @@ class FlowRate:
         Execute this at DI polling speed, will skip unnecessary execs.
         
         Pumping sessions should be longer than the di_pulse intervals. Otherwise no result.
+        
+        FIXME do not update self.flowrate if just started the pumping session 
         '''
+        
         if di_pulse > 1 or di_pulse < 0:
             log.warning('invalid di_pulse level '+str(di_pulse)) 
             return None
@@ -125,7 +129,8 @@ class FlowRate:
                     self.pstate[di_pulse] = 1
                     log.info('pumping session start for pulse level '+str(di_pulse)+', volume '+str(volume))
                 else: # not the first. only calculates for one edge!
-                    if volume != None and self.volume[di_pulse] != None:
+                    if volume != None and self.volume[di_pulse] != None and \
+                        volume - self.volume[di_pulse] > 0 and volume - self.volume[di_pulse] < self.maxpulsecount:
                         self.pulsecount[di_pulse] = volume - self.volume[di_pulse] # fixes the count even if some edges skpipped
                     else:
                         self.pulsecount[di_pulse] += 1 # assuming no edges are skipped...
@@ -133,7 +138,7 @@ class FlowRate:
                     if tsnow > self.ts_last[di_pulse] and self.ts_last[di_pulse] != 0:
                         # update on every pulse
                         self.flowrate[di_pulse] = (self.litres_per_pulse * self.pulsecount[di_pulse]) / (tsnow - self.ts_last[di_pulse])
-                        log.info('flowrate for pulse level '+str(di_pulse)+'  updated to '+str(self.flowrate[di_pulse])+', pulsecount '+str(self.pulsecount[di_pulse]))
+                        log.info('flowrate level '+str(di_pulse)+'  updated to '+str(self.flowrate[di_pulse])+', pulsecount since pump start '+str(self.pulsecount[di_pulse]))
         else:
             if self.pstate[0] == 1 or self.pstate[1] == 1:
                 self.pstate[0] = 0
