@@ -94,7 +94,7 @@ class UDPchannel():
         return None
 
     
-    def get_ip(self): # obsolete, use r.get_host_id(0
+    def get_ip(self): # obsolete, use r.get_host_ip()
         ''' Returns ONE effective ip address, the selection order is: tun0, eth0, wlan0, eth1 '''
         pass # kuidas jalgida ip adr vms olekut pythonist?
         
