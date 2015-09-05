@@ -87,16 +87,18 @@ class FlowRate:
     It is assumed that flow is stable when the pump works. Calculation is based on averaging.
     Volume counter (if present) is used to check and correct thee flowrate result.
     '''
-    def __init__(self, litres_per_pulse = 10, maxpulsecount = 5):
-        self.litres_per_pulse = litres_per_pulse # 
-        self.maxpulsecount = maxpulsecount # mac increase in volume between 2 counter readings
+    def __init__(self, litres_per_pulse = 10, maxpulseinc = 5, maxflowrate = 3): # maxflowrate l/s
+        self.litres_per_pulse = litres_per_pulse #
         self.flowrate = [0, 0]
+        self.maxflowrate = maxflowrate
         self.di_pulse = 0
         self.di_pump = 0
         self.pstate = [0, 0] # separate for raising and falling edge calculations
         self.ts_last = [0, 0]
         self.pulsecount = [0, 0] # separate for both edges
-        self.volume = [None, None]
+        self.startvolume = [ None, None ]
+        self.lastvolume = [ None, None ]
+        self.maxpulseinc = maxpulseinc
         log.info('FlowRate init')
 
     def update(self, di_pump, di_pulse, volume = None): # execute often not to lose pulses!
@@ -124,27 +126,38 @@ class FlowRate:
             if di_pulse != self.di_pulse: # pulse edge detected
                 if self.pstate[di_pulse] == 0: # first pulse level change during pumping session
                     self.ts_last[di_pulse] = tsnow
-                    self.pulsecount[di_pulse] = 0
-                    self.volume[di_pulse] = volume
+                    self.pulsecount[di_pulse] = 0 # save the pulsecount at session start
+                    self.startvolume[di_pulse] = volume # save the volume at the session start
                     self.pstate[di_pulse] = 1
-                    log.info('pumping session start for pulse level '+str(di_pulse)+', volume '+str(volume))
-                else: # not the first. only calculates for one edge!
-                    if volume != None and self.volume[di_pulse] != None and \
-                        volume - self.volume[di_pulse] > 0 and volume - self.volume[di_pulse] < self.maxpulsecount:
-                        self.pulsecount[di_pulse] = volume - self.volume[di_pulse] # fixes the count even if some edges skpipped
+                    log.info('pumping session start for pulse level '+str(di_pulse)+', startvolume '+str(self.startvolume))
+                else: # not the first.  calculates for one edge, depending on di_level!
+                    if volume != None and self.lastvolume[di_pulse] != None:
+                        pulseinc = volume - self.lastvolume[di_pulse]
+                        if pulseinc > 0 and pulseinc <= self.maxpulseinc:
+                            self.pulsecount[di_pulse] = volume - self.startvolume[di_pulse] # fixes the count even if some edges skpipped
+                        else:
+                            log.warning('flowrate pulseinc '+str(pulseinc)+' for level '+str(di_pulse)+' above maxpulseinc '+str(self.maxpulseinc)+', replaced with 1!')
+                            self.pulsecount[di_pulse] += 1 # assuming no edges are skipped...
                     else:
+                        log.debug('volume not used for flowrate, pulseinc 1 for level '+str(di_pulse))
                         self.pulsecount[di_pulse] += 1 # assuming no edges are skipped...
 
                     if tsnow > self.ts_last[di_pulse] and self.ts_last[di_pulse] != 0:
-                        # update on every pulse
-                        self.flowrate[di_pulse] = (self.litres_per_pulse * self.pulsecount[di_pulse]) / (tsnow - self.ts_last[di_pulse])
-                        log.info('flowrate level '+str(di_pulse)+'  updated to '+str(self.flowrate[di_pulse])+', pulsecount since pump start '+str(self.pulsecount[di_pulse]))
+                        # flowrate update on every pulse, based on pulsecount since pumping session start
+                        flowrate = (self.litres_per_pulse * self.pulsecount[di_pulse]) / (tsnow - self.ts_last[di_pulse])
+                        if flowrate <= self.maxflowrate:
+                            self.flowrate[di_pulse] = flowrate
+                            log.info('flowrate level '+str(di_pulse)+'  updated to '+str(self.flowrate[di_pulse])+', pulsecount since pump start '+str(self.pulsecount[di_pulse]))
+                        else:
+                            log.warning('SKIPPED self.flowrate update for level '+str(di_pulse)+' due to flowrate '+str(flowrate)+' > maxflowrate '+str(self.maxflowrate)+', pulsecount '+str(self.pulsecount[di_pulse]))
+
         else:
             if self.pstate[0] == 1 or self.pstate[1] == 1:
                 self.pstate[0] = 0
                 self.pstate[1] = 0
                 log.info('pumping sessions end for both pulse levels, volume '+str(volume))
         self.di_pulse = di_pulse # remember the pulse level
+        self.lastvolume[di_pulse] = volume
 
 
     def get_flow(self):
@@ -372,4 +385,4 @@ class HeatExchange:
             return y1+(y2-y1)*(x-x1)/(x2-x1)
 
 
-            
+
