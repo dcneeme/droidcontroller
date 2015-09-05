@@ -26,16 +26,16 @@ import logging
 logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 log = logging.getLogger(__name__)
 
- 
+
 class PulsePeriod:
-    ''' Class to calculate flow meter output pulse periods during pump run only. 
+    ''' Class to calculate flow meter output pulse periods during pump run only.
         from flowrate_test import *
         pp = PulsePeriod()
         pp.output(0,0)
     '''
 
     def __init__(self):
-        self.di_pulse = 0 # previous 
+        self.di_pulse = 0 # previous
         self.di_pump = 0 # previous
         self.ts_last_fr = None # previous ts
         self.period = [0, 0] # hi lo jaoks eraldi, keskmistada eelmisega
@@ -51,36 +51,36 @@ class PulsePeriod:
         if di_pump > 1 or di_pulse > 1:
             log.warning('invalid parameters '+str(di_pump)+' '+str(di_pulse))
             return None
-            
+
         tsnow = time.time()
         if self.ts_last_fr == None:
             self.ts_last_fr = tsnow
         timeinc = tsnow - self.ts_last_fr
         self.ts_last_fr = tsnow
-        
+
         if di_pump == 1: # only calculate during pump running
             self.period[0] += timeinc # pumping, extend current period[0]
             self.period[1] += timeinc # pumping, extend current period[1]
-        
+
         log.info('tsnow '+str(int(tsnow))+', period '+str(self.period)+', lastperiod '+str(self.lastperiod))
-        
+
         if di_pulse != self.di_pulse: # pulse edge detected, store and reset
             log.debug('pulse level to '+str(di_pulse)+', storing and clearing period['+str(di_pulse)+']')
             if self.period[(di_pulse)] > 0: # avoid zero
                 self.lastperiod[(di_pulse)] = self.period[(di_pulse)] # new period result
             self.period[di_pulse] = 0 # clear one of the period time counters
             self.di_pulse = di_pulse
-            
+
         output = (self.lastperiod[0] + self.lastperiod[1]) / 2
-        
+
         if self.lastperiod[0] > 0 and self.lastperiod[1] > 0:
             return output
         else:
             log.warning('waiting for pulses... gathered periods currently '+str(self.period))
             return None # too early for results
-            
-            
-class FlowRate: 
+
+
+class FlowRate:
     ''' Class to calculate values related to heat exchange metering.
     Suitable in cases where flow signal (like pump state) is available
     in addition to relatively rare S0 pulses from flowmeter.
@@ -100,7 +100,7 @@ class FlowRate:
         log.info('FlowRate init')
 
     def update(self, di_pump, di_pulse, volume = None): # execute often not to lose pulses!
-        ''' 
+        '''
         Flowrate output is calculated during continuous pumping only,
         based on flowmeter pulse raising edge (this may be detected faster
         than the counters are read). Not to be used with electric
@@ -109,16 +109,16 @@ class FlowRate:
         Averages the flow rate with the last calculated result. Result is
         likely to vary depending on the temperature of the pumped fluid.
         Execute this at DI polling speed, will skip unnecessary execs.
-        
+
         Pumping sessions should be longer than the di_pulse intervals. Otherwise no result.
-        
-        FIXME do not update self.flowrate if just started the pumping session 
+
+        FIXME do not update self.flowrate if just started the pumping session
         '''
-        
+
         if di_pulse > 1 or di_pulse < 0:
-            log.warning('invalid di_pulse level '+str(di_pulse)) 
+            log.warning('invalid di_pulse level '+str(di_pulse))
             return None
-        
+
         tsnow = time.time()
         if di_pump == 1: # pumping
             if di_pulse != self.di_pulse: # pulse edge detected
@@ -134,7 +134,7 @@ class FlowRate:
                         self.pulsecount[di_pulse] = volume - self.volume[di_pulse] # fixes the count even if some edges skpipped
                     else:
                         self.pulsecount[di_pulse] += 1 # assuming no edges are skipped...
-                    
+
                     if tsnow > self.ts_last[di_pulse] and self.ts_last[di_pulse] != 0:
                         # update on every pulse
                         self.flowrate[di_pulse] = (self.litres_per_pulse * self.pulsecount[di_pulse]) / (tsnow - self.ts_last[di_pulse])
@@ -145,19 +145,19 @@ class FlowRate:
                 self.pstate[1] = 0
                 log.info('pumping sessions end for both pulse levels, volume '+str(volume))
         self.di_pulse = di_pulse # remember the pulse level
-        
- 
+
+
     def get_flow(self):
         if self.flowrate[0] > 0 and self.flowrate[1] > 0:
             return (self.flowrate[0] + self.flowrate[1]) / 2
         elif self.flowrate[0] > 0 and self.flowrate[1] == 0:
             return self.flowrate[0]
         elif self.flowrate[1] > 0 and self.flowrate[0] == 0:
-            return self.flowrate[1]    
+            return self.flowrate[1]
         else:
             return 0
-    
-        
+
+
     def output(self, di_pump, di_pulse, volume = None): # execute often not to lose pulses!
         ''' Returns flow rate l/s based on pulse count slow increment from
             fluid flow meter, usually with symmetrical (50% active) pulse
@@ -216,18 +216,18 @@ class HeatExchange:
         else:
             self.divisor = 1.0
             log.warning('divisor 1 due to UNKNOWN unit '+self.unit)
-            
+
     def set_flowrate(self, flowrate):
         '''Updates flow rate l/s for pump based on actual flowmeter pulse
         processing.
 
         Use FlowRate class to find the flowrate value based on flowmeter
         pulses.
-        
+
         Flowrate changes are used for cycle start/end detection, if di_
         '''
         self.flowrate = flowrate
-        
+
     def set_flow_threshold(self, invar): # l/s
         ''' Sets the level to detect on off states for heat pump for cycle syncing   '''
         self.flowthreshold = invar
@@ -242,13 +242,13 @@ class HeatExchange:
         ''' Restores produced positive heat '''
         self.energypos = invar
         log.info('energypos set to '+str(self.energypos)+self.unit)
-                    
+
     def set_energyneg(self, invar):
         ''' Restores produced melting heat energy '''
         self.energyneg = invar
         log.info('energyneg set to '+str(self.energyneg)+self.unit)
-                    
- 
+
+
     def set_el_energy(self, invar): # NOT USED, missing COP calc! FIXME?
         ''' Sets cumulative CONSUMED ELECTRIC ENERGY, update before cop reading! '''
         self.el_energy = invar
@@ -264,7 +264,7 @@ class HeatExchange:
         ''' Returns WHAT? '''
         return self.el_energy # consumed
 
-        
+
     def get_flowrate(self):
         ''' Returns flow rate for pump based on actual flowmeter pulse processing '''
         return self.flowrate
@@ -275,31 +275,31 @@ class HeatExchange:
         '''
         return self.cp
 
-    
+
     def output(self, di_pump, Ton, Tret):
-        '''Returns tuple of current power W, 
+        '''Returns tuple of current power W,
         cumulative energy J (updated at the next cycle start!)
-        and cumulative active time s 
-        based on pump state di_pump (0 or 1, where 1 means both compressor and flow active). 
+        and cumulative active time s
+        based on pump state di_pump (0 or 1, where 1 means both compressor and flow active).
         temperatures Ton, Treturn (temperatures of heat exchange agent),
         flowrate and specific heat of the agent (may depend on temperature!).
-        
+
         Result also depends on changing flowrate (update often).
         Execute this at DI polling speed, will skip unnecessary
         recalculatsions during pumping session if interval is not passed
         since last execution.
-        
+
         To get value in Wh divide value in J by 3600.
         Output 0 if di_pump == 0, or flowrate == 0.
-        
-        To enable COP calculation externally the energy produced during last cycle is kept up too. 
+
+        To enable COP calculation externally the energy produced during last cycle is kept up too.
         '''
-            
+
         # average specific heat based on onflow and return temperatures
         tsnow = time.time()
         ts_diff = tsnow - self.ts_last
         Tdiff = Ton - Tret
-        log.debug('timediff', ts_diff, 'tempdiff', Tdiff) 
+        log.debug('timediff', ts_diff, 'tempdiff', Tdiff)
         # interpolated specific energy for heat agent based on
         # average temperature for agent, has effect on specific heat
         self.cp = self.interpolate((Ton + Tret) / 2.0, self.tp1, self.cp1,
@@ -311,9 +311,9 @@ class HeatExchange:
                 self.power = self.flowrate * Tdiff * self.cp
                 self.energycycle = 0 # new cycle started, use this value for cop calculation
                 self.ts_last = tsnow
-                ts_diff = 0 
+                ts_diff = 0
                 log.info('heat pump cycle started')
-                
+
             else: # stop
                 energydelta = ts_diff * Tdiff * self.flowrate * self.cp / self.divisor
                 self.energy += energydelta
@@ -326,7 +326,7 @@ class HeatExchange:
                 elif Tdiff < 0:
                     self.energyneg -= energydelta # value positive, meaning negative
                 log.info('heat pump cycle stopped, produced energy during cycle '+str(round(self.energylast))+self.unit)
-                
+
 
             ##self.Tdiff = Tdiff
         else: # no chg in pump state
@@ -350,7 +350,7 @@ class HeatExchange:
 
         log.debug('flowrate = %d, Ton = %d, Tret = %d',
                   self.flowrate, Ton, Tret)
-        return self.power, self.energy, self.ptime, self.energypos, self.energyneg, self.unit # W u s u u 
+        return self.power, self.energy, self.ptime, self.energypos, self.energyneg, self.unit # W u s u u
         # last two are for separating the produced heat (energypos) from the production loss for heat pump melting (energyneg)
 
 
@@ -358,8 +358,8 @@ class HeatExchange:
         ''' Returns summary energy from last cycle generated by output(), use for COP calc '''
         return self.energylast # in self.units
 
-    
-   
+
+
     def interpolate(self, x, x1=0, y1=0, x2=0, y2=0):
         ''' Returns linearly interpolated value y based on x and
         two known points defined by x1,y1 and x2,y2
