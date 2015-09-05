@@ -921,7 +921,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                             elif outhi == None and outlo != None:
                                 nolim = 2
                                 lolim = outlo - 2 * abs(outlo)
-                                hilim = outlo + 2 * abs(outlo)
+                                hilim = 2 ** 31 - 1
                             else: # both outhi, outlo none
                                 nolim = 3
                                 log.debug('both lolim, hilim None for '+val_reg)
