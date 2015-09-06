@@ -1,13 +1,30 @@
 # This Python file uses the following encoding: utf-8
-# last change  11.8.2015, added itron_mb+m watermeter
+# last change  6.9.2015, added crc chk
 
 ''' 
 mbys.py - query and process kamstrup, sensus or axis heat meters via Mbus protocol, 2400 8E1
  usage:
  from mbus import *
  m=Mbus()
- m.read()
+ m.read() # tekitab m.mbm (bytes)
+ m.debug()
  m.get_temperatures(), m.get_energy, m.get_flow, m.get(volume), m.get-all()
+
+mbm uurimiseks (anna m.mbm=b' .... ' ette kui lugejat pole kyljes. peta ftdi kaabliga)
+>>> import codecs
+>>> codecs.encode(m.mbm, 'hex')
+b'6842426808007299007642184e6004861000000c06859545000c13651457550c3b000000000c2b000000000a5a72010a5e73010b600000000c78990076420cfd10990076421fda16'
+>>> len(m.mbm)
+72
+
+data='99007642184e6004861000000c06859545000c13651457550c3b000000000c2b000000000a5a72010a5e73010b600000000c78990076420cfd10990076421f'
+
+length=4
+hex=0
+start=21
+key='0c'
+m.mb_decode(start, key=key, coeff = 1.0, desc = 'test', length = length, hex = hex)
+
 '''
 
 from codecs import encode # for encode to work in py3
@@ -83,6 +100,18 @@ class Mbus:
             time.sleep(0.5)
         self.read() 
 
+    def chk_crc(self): # works against m.mbm
+        if self.mbm != None and len(self.mbm) > 10:
+            chk = ord(self.mbm[-2:-1]) # chksum as int
+            sum = 0
+            for bait in range(4,len(self.mbm)-2):
+                sum += (self.mbm[bait] & 0xFF)
+            
+            if sum == chk:
+                return True
+            else:
+                return False
+    
     def set_model(self, invar):
         self.model = invar
 
@@ -145,11 +174,19 @@ class Mbus:
                     log.debug('decoding HEX value step '+str(i)+', res='+str(res))
                 elif hex == 0: # MSB == F then it signals negative number! A...E are invalid!
                     # UNTESTED WITH NEGATIVE NUMBERS!!!
-                    res += int(str(self.mbm[start + i]), 10) * (10 ** (2*i))
+                    res += int(str(encode(self.mbm[(start + i):(start +i +1)], 'hex_codec'))[-3:-1],10)  * (10 ** (2*i)) # 6.9.2015 
+                    # testitud str(encode(m.mbm[23:24], 'hex_codec'))[-3:-1]
                     log.debug('decoding BCD value step '+str(i)+', res='+str(res))
+                    ##print('decoding hex=0 value step '+str(i)+', res='+str(res)) ##
                     #if i == length - 1: # last (MSB), possible sign data
                     #    if (int(str(self.mbm[len - 1]), 10) & 0xF0) == 0xF0: # the result is negative
                     #        res= -res
+                elif hex == 4: # int 16
+                    # UNTESTED WITH NEGATIVE NUMBERS!!!
+                    res += int(str(encode(self.mbm[(start + i):(start +i +1)], 'hex_codec'))[-3:-1],16)  * (10 ** (2*i)) # 6.9.2015 
+                    # testitud str(encode(m.mbm[23:24], 'hex_codec'))[-3:-1]
+                    log.debug('decoding BCD value step '+str(i)+', res='+str(res))
+                    ##print('decoding hex=4 value step '+str(i)+', res='+str(res)) ##
                 elif hex == 2: # axis energy
                     res += int(str(self.mbm[start + i]), 10) << (i * 8)
                 elif hex == 3:
@@ -168,33 +205,46 @@ class Mbus:
                     ' '+str(encode(self.mbm[start:start+4], 'hex_codec')))
                 self.errors += 1
                 return None
-            else:
+            else: # key exists and matches, fix coeff if needed
                 self.errors = 0
-                if desc == 'flow' and '2d' in str(encode(self.mbm[start-1:start], 'hex_codec')):
+                keyext = str(encode(self.mbm[start-1:start], 'hex_codec'))
+                if desc == 'flow' and '2d' in keyext:
                     coeff = 1.0
                     log.debug('2d coeff chg to '+str(coeff))
-                elif desc == 'power' and '2d' in str(encode(self.mbm[start-1:start], 'hex_codec')):
+                elif desc == 'energy' and '06' in keyext:
+                    coeff = 1.0 # rahvamaja, sensusPE
+                    log.debug('07 coeff chg to '+str(coeff))
+                elif desc == 'energy' and '07' in keyext:
+                    coeff = 10.0 # pargi3, sensusPE
+                    log.debug('07 coeff chg to '+str(coeff))
+                elif desc == 'volume' and '14' in keyext:
+                    coeff = 10.0 # KUS?
+                    log.debug('15 coeff chg to '+str(coeff))
+                elif desc == 'volume' and '15' in keyext:
+                    coeff = 100.0 # spordihoone, kamstrup402
+                    log.debug('15 coeff chg to '+str(coeff))
+                elif desc == 'power' and '2d' in keyext:
                     coeff = 100.0 # multical 602 power karla koolis
                     log.debug('coeff chg for multical 602 power to '+str(coeff))
-                elif '3b' in str(encode(self.mbm[start-1:start], 'hex_codec')):
+                elif '3b' in keyext:
                     coeff = 1.0
                     log.debug('3b coeff chg to '+str(coeff))
-                elif '2b' in str(encode(self.mbm[start-1:start], 'hex_codec')): # sensusPE power rahvamaja
+                elif '2b' in keyext: # sensusPE power rahvamaja
                     coeff = 1.0
                     log.debug('2b coeff chg to '+str(coeff))
-                elif '13' in str(encode(self.mbm[start-1:start], 'hex_codec')): # sensus volume rahvamaja
+                elif '13' in keyext: # sensus volume rahvamaja
                     coeff = 1.0
                     log.debug('13 coeff chg to '+str(coeff))
-                elif '14' in str(encode(self.mbm[start-1:start], 'hex_codec')): # volume coeff 10
+                elif '14' in keyext: # volume coeff 10
                     coeff = 10.0
                     log.debug('14 coeff chg to '+str(coeff))
-                elif '15' in str(encode(self.mbm[start-1:start], 'hex_codec')): # volume coeff 100
+                elif '15' in keyext: # volume coeff 100
                     coeff = 100.0
                     log.debug('15 coeff chg to '+str(coeff))
                 else:
-                    log.debug('coeff NOT changed, still '+str(coeff)+', key end '+str(encode(self.mbm[start-1:start], 'hex_codec')))
+                    log.debug('coeff NOT changed, still '+str(coeff)+', key end '+keyext)
 
-                log.debug('mb_decode coeff '+str(coeff)+' for '+desc+', key '+ str(encode(self.mbm[start-2:start], 'hex_codec')))
+                log.debug('mb_decode coeff '+str(coeff)+' for '+desc+', key '+ keyext)
                 return res * coeff
         except:
             traceback.print_exc()
@@ -244,8 +294,7 @@ class Mbus:
             
             self.mbm = self.ser.read(253) # kamstrup: should be 254 bytes, but the first byte E5 disappears??
             if len(self.mbm) > 0:
-                #if len(self.mbm) == 253 and str(encode(self.mbm, 'hex_codec'))[2:10] == '68f7f768' and str(encode(self.mbm, 'hex_codec'))[-3:-1] == '16':
-                if str(encode(self.mbm, 'hex_codec'))[-3:-1] == '16':
+                if str(encode(self.mbm, 'hex_codec'))[-3:-1] == '16' and self.chk_crc(): # crc chk added 6.9.2015
                     log.debug('got a valid message from mbus, length ' + str(len(self.mbm)) + ' bytes')
                     print('got a valid message of '+str(len(self.mbm))+' bytes from mbus (first 20 follow): '+str(encode(self.mbm, 'hex_codec'))[:20])
                     return 0
@@ -291,13 +340,18 @@ class Mbus:
         if self.model == 'kamstrup602':
             start = 27 # check with mtools and compare with debug output
             key = '0406' # 2 hex bytes before data, to be sure
-        elif self.model == 'kamstrup402':
+        elif self.model == 'kamstrup402': # tapselt nagu axisSKS3
             start = 27 # check with mtools and compare with debug output
             key = '0407' # 2 hex bytes before data, to be sure
+            length = 4 # auto andis vale! 6.9.2015
+            hex = 2 # auto andis vale! 6.9.2015
+            coeff  = 10.0
         elif self.model == 'sensusPE':
             start = 21
-            #key = '0c07'
+            #key = '0c07' # voib olla ka 0c06 !
             key = '0c'
+            #lenght = 4 # olgu auto! pargi3 ja rahvamaja sensused erinevad!
+            #hex = 2 # olgu auto! pargi3 ja rahvamaja sensused erinevad!
         elif self.model == 'axisSKU03': # lasteaed
             start = 53
             key = '863b'
@@ -328,8 +382,10 @@ class Mbus:
         length = None
         if self.model == 'kamstrup602' or self.model == 'kamstrup402':
             start = 33
-            key = '04' # 14'
-            coeff = 10.0 # l
+            key = '04' # teine osa 14 voi 15? auto?
+            coeff = None # parandus mb_decode ajal
+            hex = 2 # 6.9.2015
+            length = 4
         #elif self.model == 'kamstrup402':
         #    start = 33
         #    key = '0415'
@@ -338,6 +394,8 @@ class Mbus:
             start = 27
             key = '0c' # 14 or 13 the end for volume
             coeff = 10.0
+            hex = 0 # 6.9.2015, enne puudus
+            length = 4
         elif self.model == 'axisSKU03': # lasteaed
             start = 59
             key = '0413'
@@ -386,6 +444,8 @@ class Mbus:
             #key='0c2c'
             key='0c'
             coeff = 10.0 #
+            length = 4 # 6.9.2015
+            hex = 0 # 6.9.2015
         elif self.model == 'axisSKU03': # lasteaed
             start = 65
             key = '052e' # from fex float, 32real
@@ -423,8 +483,9 @@ class Mbus:
             start = 33
             #key='0c3c'
             key='0c'
+            hex = 0
             coeff = 10.0 #  L/h
-            #length = 4 # autodetect with None
+            length = 4 # autodetect with None
         elif self.model == 'axisSKU03': # lasteaed
             start = 71
             key = '053e' # from fex float
@@ -501,13 +562,13 @@ class Mbus:
             start = [45, 51, 57]
             key = ['0459', '045D', '0461'] # inlet outlet diff
             coeff = [0.01, 0.01, 0.01] # 10 mK unit
-            hex = 0
+            hex = 4 # eriti idiootne kodeering, 10 astmetega 16/koodi vaartused liita!
         elif self.model == 'sensusPE':
             start = [45, 49, 53] 
             key = ['0a5a', '0a5e', '0b60']
             coeff = [0.1, 0.1, 0.001]
             length = [2, 2, 3]
-            hex=0
+            hex = 0 # 6/9/2015   # 0 
         elif self.model == 'axisSKU03': # lasteaed
             coeff = [1.0, 1.0, 1.0]
             start = [77, 83, 89]
