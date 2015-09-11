@@ -1,6 +1,11 @@
-import sys
+''' this is a class to handle event/based flow of application. Droid4control 2015  '''
+
+import sys, os, traceback
 import tornado
 import tornado.ioloop
+import logging
+logging.basicConfig(stream=sys.stderr, level=logging.INFO)
+log = logging.getLogger(__name__)
 
 from droidcontroller.acchannels import *
 ac = ACchannels(in_sql = 'aicochannels.sql', readperiod = 0, sendperiod = 20) # ai and counters
@@ -15,6 +20,8 @@ from droidcontroller.udp_commands import * # sellega alusta, kaivitab ka SQlgene
 p = Commands(OSTYPE) # setup and commands from server
 r = RegularComm(interval=120) # variables like uptime and traffic, not io channels
 
+mac = ''
+filee = ''
 try:
     mac = os.environ['ID'] # env variable ID
     filee = 'env var ID'
@@ -28,8 +35,10 @@ except:
         mac = '000000000000'
         time.sleep(10)
     if mac != '000000000000':
-        mac = udp.get_conf('mac', 'filee')
+        mac = udp.get_conf('mac', filee)
+    else:
         filee = 'hardwired last resort ID'
+
 log.info('got mac '+mac+' from '+filee)
 udp.setID(mac) # kontrolleri id
 tcp.setID(mac) # kas tcp seda kasutabki?
@@ -60,7 +69,7 @@ class ControllerApp(object):
         interval_ms = 1000 # milliseconds
         self.loop = tornado.ioloop.IOLoop.instance()
         self.udpread_scheduler = tornado.ioloop.PeriodicCallback(self.udp_reader, 250, io_loop = self.loop)
-        self.di_scheduler = tornado.ioloop.PeriodicCallback(self.di_reader, 100, io_loop = self.loop)
+        self.di_scheduler = tornado.ioloop.PeriodicCallback(self.di_reader, 100, io_loop = self.loop) # read DI as fast as possible
         self.ai_scheduler = tornado.ioloop.PeriodicCallback(self.ai_reader, 3000, io_loop = self.loop)
         self.cal_scheduler = tornado.ioloop.PeriodicCallback(self.cal_reader, 3600000, io_loop = self.loop)
         self.udpsend_scheduler = tornado.ioloop.PeriodicCallback(self.udp_sender, 180000, io_loop = self.loop)
@@ -88,10 +97,12 @@ class ControllerApp(object):
 
     def di_reader(self): # DI reader
         print('reading di channels')
-        res = d.doall()
-        if res > 0:
-            self.app_main() # without detected change in di signals ai (or timer based) app_main execution is enough
-
+        d.doall()
+        di_dict = d.get_chg_dict()
+        if di_dict != {}: # change in di services
+            log.info('change detected in di services: '+str(di_dict))
+            self.app_main()
+                    
     def ai_reader(self): # AICO reader
         print('reading ai, co')
         ac.doall()
@@ -114,7 +125,7 @@ class ControllerApp(object):
     def app_main(self): # everything to do after reading. code in controller_app.py
         ''' ehk on vaja param anda mis muutus, may call udp_sender '''
         print('app_main')
-        res = self.app(self) # self selleks, et vahet teha erinevatel kaivitustel, valjakutsutavale lisa param instanceid vms
+        res = self.app(self) # self selleks, et vahet teha erinevatel kaivitustel, valjakutsutavale lisa param
         # if res... # saab otsustada kas saata vms.
         self.udp_sender()
 
