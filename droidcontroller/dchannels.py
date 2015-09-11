@@ -3,6 +3,7 @@
 # 04.04.2014
 # 06.04.2014 seguential register read for optimized reading
 # 14.6.2015 mingi jama mone teenusega mis ei tekita sendtuple... 
+# 11.9.2015 lisatud chg_dict, aga mingi jama
 
 ''' mb[mbi].read(mba, reg, count = 1, type = 'h'):  # modbus read example
 
@@ -38,6 +39,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         self.in_sql = in_sql.split('.')[0]
         self.out_sql = out_sql.split('.')[0]
         #self.s = SQLgeneral()
+        self.chg_dict = {} # svc:[member,value] after the change
         self.Initialize()
 
 
@@ -253,7 +255,9 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
     # sync_di() end. FRESHENED DICHANNELS TABLE VALUES AND CGH BITS (0 TO SEND, 1 TO PROCESS)
 
 
-
+    def get_chg_dict(self):
+        return self.chg_dict # {svc:[chgmap,valmap]}
+        
 
     def make_dichannels(self, svc = ''): # chk all if svc empty
         ''' Send di svc with changed member or (lapsed sendperiod AND
@@ -274,6 +278,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         ts_last = 0 # last time the service member has been reported to the server
         cur = conn.cursor()
         sendtuple = []
+        chg_dict = {} # svc:[member,value] after the change. short lifetime!
         
         try:
             Cmd="BEGIN IMMEDIATE TRANSACTION" # transaction, dichannels
@@ -285,7 +290,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 #    dichannels where ((chg+0 & 1) and ((cfg+0) & 16)) or \
                 #    ("+str(self.ts)+">ts_msg+"+str(self.sendperiod)+") \
                 #    group by val_reg"
-                Cmd = "select val_reg, chg+0 from dichannels where ((chg+0 & 1) and ((cfg+0) & 16)) or ("+str(self.ts)+">ts_msg+"+str(self.sendperiod)+") group by val_reg"
+                Cmd = "select val_reg, sum(chg<<(member-1)), sum(value<<(member-1)) from dichannels where ((chg+0 & 1) and ((cfg+0) & 16)) or ("+str(self.ts)+">ts_msg+"+str(self.sendperiod)+") group by val_reg"
                 # take into account cfg! not all changes are to be reported immediately!
                 # cfg is also for application needs, not only monitoring!
 
@@ -300,10 +305,12 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
                     if len(row) > 0:
                         val_reg = row[0] # service name
-                        chg = int(row[1]) # change bitflag here, 0 or 1
+                        chg = int(row[1]) # change bitmap by members
+                        val = int(row[2]) # values bitmap by members
                         #ts_last=int(row[2]) # last reporting time
-                        if chg == 1: # message due to bichannel state change
-                            msg='DI service '+val_reg+' has changed (chg!): '
+                        if chg > 0: # message due to bichannel state change
+                            msg='DI service '+val_reg+' needs to be notified, change bitmap '+str(hex(chg))
+                            chg_dict.update({val_reg : [chg, val]})  #### FIXME / kahtlane , 1 asemel 3, 2 asemel 6 jne
                         else:
                             msg='DI service '+val_reg+' unchanged: '
                         log.debug(msg)
@@ -314,7 +321,9 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                         log.info(msg)
                     else:
                         log.warning('FAILED to select row for '+val_reg)
-                        
+                
+                self.chg_dict = chg_dict
+                
             else:
                 sendtuple = self.make_dichannel_svc(svc)
                 udp.send(sendtuple)
@@ -656,22 +665,42 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         ''' Returns di channel value as integer '''
         #Cmd3="BEGIN IMMEDIATE TRANSACTION" # conn3, et ei saaks muutuda lugemise ajal
         #conn3.execute(Cmd3)
-        Cmd="select value from dichannels where val_reg='"+svc+"' and member='"+str(member)+"'"
-        cur=conn.cursor()
+        Cmd = "select value from dichannels where val_reg='"+svc+"' and member='"+str(member)+"'"
+        cur = conn.cursor()
         cur.execute(Cmd)
-        value=None
-        found=0    
+        value = None
+        found = 0    
         for row in cur: # should be one row only
             log.debug('get_divalue row: '+str(repr(row))) # debug
-            found=1
-            value=int(float(row[0])) if row[0] != '' and row[0] != None else 0
+            found = 1
+            value = int(float(row[0])) if row[0] != '' and row[0] != None else 0
         if found == 0:
-            msg='get_divalue failure, no member '+str(member)+' for '+svc+' found!'
+            msg = 'get_divalue failure, no member '+str(member)+' for '+svc+' found!'
             log.warning(msg)
             
         conn.commit()
         return value # also state and value should be important! like ac.get_aivalue does...
     
+    def get_divalues(self,svc): # returns values based on di service name as []
+        ''' Returns di channel values as integer list '''
+        #Cmd3="BEGIN IMMEDIATE TRANSACTION" # conn3, et ei saaks muutuda lugemise ajal
+        #conn3.execute(Cmd3)
+        Cmd = "select value from dichannels where val_reg='"+svc+"'"
+        cur = conn.cursor()
+        cur.execute(Cmd)
+        values = []
+        found = 0    
+        for row in cur: # should be one row only
+            log.debug('get_divalue row: '+str(repr(row))) # debug
+            found = 1
+            values.append(int(float(row[0])) if row[0] != '' and row[0] != None else None) ## FIXME kasuta None ka mujal?
+        if found == 0:
+            msg = 'get_divalue failure, no member values  for '+svc+' found!'
+            log.warning(msg)
+            
+        conn.commit()
+        return values 
+        
     
     def doall(self): # do this regularly, blocks for the time of socket timeout!
         ''' Does everything on time if executed regularly '''
