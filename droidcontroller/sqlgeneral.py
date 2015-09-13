@@ -483,7 +483,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
             
 
 
-    def setbit_do(self, bit, value, mba, regadd, mbi=0):  # to set a readable output channel by the physical
+    def setbit_do(self, bit, value, mba, regadd, mbi=0):  # FIXME - ei toimi!! kasuta setby_dimember_do(svc, member, value)
         # parameter order should be changed!!! to mbi, mba, regadd, bit. chk tartu, starman!
         '''Sets the output channel by the physical addresses (mbi,mba,regadd,bit) '''
         ts = int(time.time())
@@ -498,14 +498,14 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
         try:
             conn.execute(Cmd)
             conn.commit()
-            msg='output bit '+str(bit)+' set to '+str(value)+' in table dochannels'
+            msg='output bit '+str(bit)+' set to '+str(value)+' in table dochannels, mba '+str(mba)+', mbi +str(mbi)
             print(msg)
-            udp.syslog(msg)
+            #udp.syslog(msg)
             return 0
         except:
             msg='output bit '+str(bit)+' setting to '+str(value)+' in table dochannels FAILED! '+str(sys.exc_info()[1])
             print(msg)
-            udp.syslog(msg)
+            #udp.syslog(msg)
             return 1
 
 
