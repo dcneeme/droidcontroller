@@ -99,8 +99,9 @@ class ControllerApp(object):
         print('reading di channels')
         d.doall()
         di_dict = d.get_chg_dict()
-        if di_dict != {}: # change in di services
-            log.info('change detected in di services: '+str(di_dict))
+        if len(di_dict) > 0: #di_dict != {}: # change in di services
+            print('di change detected: '+str(di_dict))
+            log.info('di change detected: '+str(di_dict))
             self.app_main()
                     
     def ai_reader(self): # AICO reader
