@@ -643,7 +643,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
     def set_dovalue(self,svc,member,value): # sets binary variables within services for remote control, based on service name and member number
         ''' Setting member value using sqlgeneral set_membervalue. adding sql table below for that '''
-        return s.set_membervalue(svc,member,value,self.out_sql)
+        return s.setby_dimember_do(svc, member, value) # s.set_membervalue(svc,member,value,self.out_sql)
 
 
     def ask_values(self): # from server, use on init and conn up, send ? to server if value type = 's!'
