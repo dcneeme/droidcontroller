@@ -1,7 +1,7 @@
 # This Python file uses the following encoding: utf-8
 # last change  6.9.2015, added crc chk
 
-''' 
+'''
 read_gps.py - query GPS device via USB port, normally at 4800 8N1
  usage:
 from droidcontroller.read_gps import *
@@ -19,9 +19,9 @@ from codecs import encode # for encode to work in py3
 import time
 import serial
 import traceback
-import re  
+import re
 import sys, logging
-logging.basicConfig(stream=sys.stderr, level=logging.INFO) 
+logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 log = logging.getLogger(__name__)
 
 import serial.tools.list_ports
@@ -30,7 +30,7 @@ print(list(serial.tools.list_ports.comports()))
 
 class ReadGps:
     ''' Read and decode GPS data from serial port. Return lat lng coordinates. '''
-    def __init__(self, port='auto', autokey='Prolific', tout=1, speed=4800, model='PL2303'): 
+    def __init__(self, port='auto', autokey='Prolific', tout=1, speed=4800, model='PL2303'):
         ports = list(serial.tools.list_ports.comports())
         #found = 0
         if port == 'auto':
@@ -56,7 +56,7 @@ class ReadGps:
             log.info('ReadGps connection for model '+self.model+' successful on port '+self.port)
         else:
             log.error('ReadGps connection FAILED on port '+self.port)
-    
+
     def close(self):
         ''' Use this to get rid of the instance if not required '''
         self.__del__()
@@ -85,25 +85,29 @@ class ReadGps:
     def get_errors(self):
         return self.errors
 
-        
-    def read(self): 
+
+    def read(self):
         ''' Reads the serial buffer and splits it into various lines. Some lines contain lat+lng data. '''
         try:
-            self.gpsdata = self.ser.read(420) # in this block a few lines with coordinates must exist
-            self.ser.flushInput() # flush the rest
-            if len(self.gpsdata) > 10:
-                log.debug('got from GPS device: '+str(self.gpsdata))
-                
-            lines = self.gpsdata.decode("utf-8").split('\r\n')
-            log.debug('got '+str(len(lines))+' lines to decode')
-            self.lines = lines
-            return lines # self.gpsdata and self.lines are stored for debugging
-            
+            if self.ser.inWaiting() > 420: # do not read if not enough data
+                self.gpsdata = self.ser.read(420) # in this block a few lines with coordinates must exist
+                self.ser.flushInput() # flush the rest
+                if len(self.gpsdata) > 10:
+                    log.debug('got from GPS device: '+str(self.gpsdata))
+
+                lines = self.gpsdata.decode("utf-8").split('\r\n')
+                log.debug('got '+str(len(lines))+' lines to decode')
+                self.lines = lines
+                return lines # self.gpsdata and self.lines are stored for debugging
+            else:
+                return None
+
+
         except:
             log.warning('FAILED to read GPS device at '+self.port)
             return None
 
-        
+
     def decode(self, line):
         '''return decoded lat lng coordinates '''
         linevars = line.split(",")
@@ -117,8 +121,8 @@ class ReadGps:
         else:
             #log.warning('NO GPGGA or GPRMC in line '+line)
             return None
-                
-        
+
+
     def checksum(self, line): # FIXME
         checkString = line.split("*")
         checksum = 0
@@ -131,7 +135,7 @@ class ReadGps:
         except:
             log.warning("Error in string, no CRC")
             return False
-        
+
         if checksum == inputChecksum:
             return True
         else:
@@ -139,8 +143,8 @@ class ReadGps:
             log.warning(hex(checksum), "!=", hex(inputChecksum))
             return False
 
-        
-          
+
+
     def getTime(string,format,returnFormat):
         return time.strftime(returnFormat, time.strptime(string, format)) # Convert date and time to a nice printable format
 
@@ -149,7 +153,7 @@ class ReadGps:
         lat = float(latString[:2].lstrip('0') + "." + "%.7s" % str(float(latString[2:])*1.0/60.0).lstrip("0."))
         lng = float(lngString[:3].lstrip('0') + "." + "%.7s" % str(float(lngString[3:])*1.0/60.0).lstrip("0."))
         return lat, lng
-    
+
     def getTime(self, string, format, returnFormat):
         return time.strftime(returnFormat, time.strptime(string, format)) # Convert date and time to a nice printable format
 
@@ -161,6 +165,6 @@ class ReadGps:
             res = self.decode(line)
             if res:
                 return res
-                    
+
     ## END ##
- 
+
