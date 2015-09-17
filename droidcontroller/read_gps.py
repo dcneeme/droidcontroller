@@ -62,7 +62,9 @@ class ReadGps:
             except:
                 log.warning('NO suitable USB port found!')
                 self.close()
-                
+        else:
+            log.warning('GPS port None...')
+            self.close()
 
     def close(self):
         ''' Use this to get rid of the instance if not required '''
