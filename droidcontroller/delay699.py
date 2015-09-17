@@ -1,12 +1,11 @@
 # This Python file uses the following encoding: utf-8
-# last change  11.8.2015, added itron_mb+m watermeter
 
 ''' 
 delaychanger699.py - find a new delay for onewire sensors
 usage:
  from delaychanger import *
  d=DelayChanger()
- d.get699(input)
+ d.get_failcode()
  returns code for reg 699
 
  use with analogue channel queries 
@@ -40,11 +39,12 @@ class DelayChanger(object): # parameetriks mb
         ''' Destroyer for close() '''
         log.info(self.__class__.__name__+' destroyed')
 
-    def encode699(self, lsb, msb):
+    def encode699(self, msb, lsb):
         ''' 2 youngest bits always 1 to avoid discovery and autoadaptivity '''
         return (lsb << 8) + (msb << 2) + 3 
     
     def get_failcode(self):
+        ''' bitmap of failing sensors (9 bits max) '''
         temps = self.mb[self.mbi].read(self.mba, 600, self.senscount)
         failcode = 0
         if temps != None:
@@ -56,8 +56,8 @@ class DelayChanger(object): # parameetriks mb
         return failcode
     
     def newcode(self):
-        ''' return everything, starting with new code '''
-        if self.get_failcode() > 0:
+        ''' returns new code to try in reg 699 '''
+        if self.get_failcode() > 0: # there is error with reading
             if self.lsb < self.lsbmax:
                 self.lsb += 1
             else: #lsb on hi limit
@@ -67,9 +67,9 @@ class DelayChanger(object): # parameetriks mb
                 else: # msb on hi limit
                     self.msb = self.msbmin
                     
-        code699 = self.get_failcode()
+        code699 = self.encode699(self.msb, self.lsb)
         if code699 != self.code:
-            log.info('new msb '+str(self.msb)+', new lsb '+str(self.lsb)+', new code '+str(code699)+' written into reg 699 of mba '+str(self.mba))            
+            log.info('new msb '+str(self.msb)+', new lsb '+str(self.lsb)+', new code '+str(code699)+' to be written into reg 699 of mba '+str(self.mba))            
             self.mb[self.mbi].write(self.mba, 699, value=code699)
         self.code699 = code699
         return self.msb, self.lsb, self.code699

@@ -498,7 +498,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
         try:
             conn.execute(Cmd)
             conn.commit()
-            msg='output bit '+str(bit)+' set to '+str(value)+' in table dochannels, mba '+str(mba)+', mbi +str(mbi)
+            msg='output bit '+str(bit)+' set to '+str(value)+' in table dochannels, mba '+str(mba)+', mbi '+str(mbi)
             print(msg)
             #udp.syslog(msg)
             return 0

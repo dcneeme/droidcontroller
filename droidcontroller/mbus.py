@@ -105,11 +105,13 @@ class Mbus:
             chk = ord(self.mbm[-2:-1]) # chksum as int
             sum = 0
             for bait in range(4,len(self.mbm)-2):
-                sum += (self.mbm[bait] & 0xFF)
-            
+                sum += self.mbm[bait]
+                sum = (sum & 0xFF)
             if sum == chk:
                 return True
             else:
+                log.warning('CRC problem! sum '+str(sum)+', chk '+str(chk))
+                print('CRC problem! sum '+str(sum)+', chk '+str(chk)) ##
                 return False
     
     def set_model(self, invar):

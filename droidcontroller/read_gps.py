@@ -11,7 +11,7 @@ gps.gpsdata
 gps.lines
 line='$GPGGA,164123.000,5925.5067,N,02436.8130,E,1,04,9.1,-13.1,M,19.8,M,,0000*4B'
 gps.decode(line)
-gps.get_coordinates() # extracted from from gps.lines
+gps.get_coordinates() # do all
 
 '''
 

@@ -69,10 +69,10 @@ class ControllerApp(object):
         interval_ms = 1000 # milliseconds
         self.loop = tornado.ioloop.IOLoop.instance()
         self.udpread_scheduler = tornado.ioloop.PeriodicCallback(self.udp_reader, 250, io_loop = self.loop)
-        self.di_scheduler = tornado.ioloop.PeriodicCallback(self.di_reader, 100, io_loop = self.loop) # read DI as fast as possible
+        self.di_scheduler = tornado.ioloop.PeriodicCallback(self.di_reader, 50, io_loop = self.loop) # read DI as fast as possible
         self.ai_scheduler = tornado.ioloop.PeriodicCallback(self.ai_reader, 3000, io_loop = self.loop)
         self.cal_scheduler = tornado.ioloop.PeriodicCallback(self.cal_reader, 3600000, io_loop = self.loop)
-        self.udpsend_scheduler = tornado.ioloop.PeriodicCallback(self.udp_sender, 180000, io_loop = self.loop)
+        self.udpsend_scheduler = tornado.ioloop.PeriodicCallback(self.udp_sender, 180000, io_loop = self.loop) # ms
         self.udpread_scheduler.start()
         self.di_scheduler.start()
         self.ai_scheduler.start()
@@ -81,7 +81,7 @@ class ControllerApp(object):
         self.reset_sender_timeout() # to start
 
     def udp_reader(self): # UDP reader
-        print('reading udp')
+        ##print('reading udp')
         got = udp.udpread() # loeb ainult!
         if got != {} and got != None:
             self.got_parse(got) # see next def
@@ -96,21 +96,21 @@ class ControllerApp(object):
             p.todo_proc(todo) # execute possible commands
 
     def di_reader(self): # DI reader
-        print('reading di channels')
+        #print('reading di channels')
         d.doall()
         di_dict = d.get_chg_dict()
         if len(di_dict) > 0: #di_dict != {}: # change in di services
-            print('di change detected: '+str(di_dict))
+            #print('di change detected: '+str(di_dict))
             log.info('di change detected: '+str(di_dict))
             self.app_main()
                     
     def ai_reader(self): # AICO reader
-        print('reading ai, co')
+        #print('reading ai, co')
         ac.doall()
         self.app_main()
 
     def udp_sender(self): # UDP sender
-        print('sending udp')
+        #print('sending udp')
         udp.buff2server()
         self.reset_sender_timeout()
 
@@ -119,13 +119,13 @@ class ControllerApp(object):
 
     def reset_sender_timeout(self):
         ''' Resetting ioloop timer '''
-        print('FIXME timer reset')
+        ##print('FIXME timer reset')
         ##IOLoop.add_timeout(5000, self.udp_sender) # last line! recalls itself after timeout 5 s
 
 
     def app_main(self): # everything to do after reading. code in controller_app.py
         ''' ehk on vaja param anda mis muutus, may call udp_sender '''
-        print('app_main')
+        ##print('app_main')
         res = self.app(self) # self selleks, et vahet teha erinevatel kaivitustel, valjakutsutavale lisa param
         # if res... # saab otsustada kas saata vms.
         self.udp_sender()
