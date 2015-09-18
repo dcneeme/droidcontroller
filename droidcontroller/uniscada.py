@@ -662,7 +662,7 @@ class UDPchannel():
     def comm(self): # do this regularly, blocks for the time of socket timeout!
         ''' Communicates with monitoring server, listens to return cmd and setup key:value and sends waiting data. '''
         self.ts = int(round(time.time(),0)) # current time
-        #self.unsent() # delete old records NOT ANY MORE!
+        self.unsent() # delete too old records, dump buffer also if became empty!
         udpgot = self.udpread() # check for incoming udp data. FIXME: direct ack around buffer??
         self.buff2server() # send away. the ack for this is available on next comm() hopefully
         return udpgot

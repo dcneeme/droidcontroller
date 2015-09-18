@@ -8,7 +8,7 @@ logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 log = logging.getLogger(__name__)
 
 from droidcontroller.acchannels import *
-ac = ACchannels(in_sql = 'aicochannels.sql', readperiod = 0, sendperiod = 20) # ai and counters
+ac = ACchannels(in_sql = 'aicochannels.sql', readperiod = 0, sendperiod = 25) # ai and counters
 from droidcontroller.dchannels import *
 d = Dchannels(readperiod = 0, sendperiod = 180) # di and do. immediate notification on change, read as often as possible
 # the previous block also generated sqlgeneral and uniscada instances, like s, udp, tcp
@@ -68,17 +68,28 @@ class ControllerApp(object):
         self.app = app # client-specific main script
         interval_ms = 1000 # milliseconds
         self.loop = tornado.ioloop.IOLoop.instance()
-        self.udpread_scheduler = tornado.ioloop.PeriodicCallback(self.udp_reader, 250, io_loop = self.loop)
-        self.di_scheduler = tornado.ioloop.PeriodicCallback(self.di_reader, 50, io_loop = self.loop) # read DI as fast as possible
-        self.ai_scheduler = tornado.ioloop.PeriodicCallback(self.ai_reader, 3000, io_loop = self.loop)
-        self.cal_scheduler = tornado.ioloop.PeriodicCallback(self.cal_reader, 3600000, io_loop = self.loop)
-        self.udpsend_scheduler = tornado.ioloop.PeriodicCallback(self.udp_sender, 180000, io_loop = self.loop) # ms
-        self.udpread_scheduler.start()
+        
+        self.udpcomm_scheduler = tornado.ioloop.PeriodicCallback(self.udp_comm, 250, io_loop = self.loop) # receive/send udp every 250 ms
+        #self.udpread_scheduler = tornado.ioloop.PeriodicCallback(self.udp_reader, 250, io_loop = self.loop) # read udp 250 ms
+        #self.udpsend_scheduler = tornado.ioloop.PeriodicCallback(self.udp_sender, 240000, io_loop = self.loop) # udp resend 4 min
+        
+        self.di_scheduler = tornado.ioloop.PeriodicCallback(self.di_reader, 50, io_loop = self.loop) # read DI asap
+        self.ai_scheduler = tornado.ioloop.PeriodicCallback(self.ai_reader, 10000, io_loop = self.loop) # ai 10 s
+        self.cal_scheduler = tornado.ioloop.PeriodicCallback(self.cal_reader, 3600000, io_loop = self.loop) # gcal 1 h
+        
+        self.udpcomm_scheduler.start()
+        #self.udpread_scheduler.start()
+        #self.udpsend_scheduler.start()
         self.di_scheduler.start()
         self.ai_scheduler.start()
         self.cal_scheduler.start()
-        self.udpsend_scheduler.start()
+        
         self.reset_sender_timeout() # to start
+
+    def udp_comm(self): # 
+        got = udp.comm() # both read and send
+        if got != {} and got != None:
+            self.got_parse(got) # see next def
 
     def udp_reader(self): # UDP reader
         ##print('reading udp')
@@ -97,6 +108,8 @@ class ControllerApp(object):
 
     def di_reader(self): # DI reader
         #print('reading di channels')
+        sys.stdout.write('D') # dot without newline
+        sys.stdout.flush()
         d.doall()
         di_dict = d.get_chg_dict()
         if len(di_dict) > 0: #di_dict != {}: # change in di services
@@ -106,12 +119,14 @@ class ControllerApp(object):
                     
     def ai_reader(self): # AICO reader
         #print('reading ai, co')
+        sys.stdout.write('A') # dot without newline
+        sys.stdout.flush()
         ac.doall()
         self.app_main()
 
     def udp_sender(self): # UDP sender
         #print('sending udp')
-        udp.buff2server()
+        udp.buff2server() # ainult saadab!!! ei dumbi jne, kasuta parem udp.comm
         self.reset_sender_timeout()
 
     def cal_reader(self): # gcal  refresh, call ed by customer_app
@@ -128,6 +143,6 @@ class ControllerApp(object):
         ##print('app_main')
         res = self.app(self) # self selleks, et vahet teha erinevatel kaivitustel, valjakutsutavale lisa param
         # if res... # saab otsustada kas saata vms.
-        self.udp_sender()
+        self.udp_comm() # self.udp_sender()
 
 

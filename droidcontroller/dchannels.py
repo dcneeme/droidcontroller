@@ -529,10 +529,10 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                     for regadd in reg_dict.keys(): # chk all output registers defined in dochannels table
                         try:
                             if mb[mbi]:
-                                word=mb[mbi].read(mba, regadd, count = 1, type = 'h')[0]
+                                word = mb[mbi].read(mba, regadd, count = 1, type = 'h')[0]
                                 #print('value of the output',mba,regadd,'before change',format("%04x" % word)) # debug
                         except:
-                            log.warning('device mbi '+str(mbi)+', mba'+str(mba)+' not defined in devices table!')
+                            log.warning('device mbi '+str(mbi)+', mba'+str(mba)+', not holding register?')
                             return 2
 
                         for bit in bit_dict.keys():

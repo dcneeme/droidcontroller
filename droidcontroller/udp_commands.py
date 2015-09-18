@@ -164,8 +164,9 @@ class Commands(SQLgeneral): # p
             elif TODO == 'FULLREBOOT': # full reboot, NOT just the application but the system!
                 #stop=1 # cmd:FULLREBOOT
                 try:
-                    msg = 'started full reboot due to command' #
+                    msg = 'started full reboot due to command, dumped send buffer' #
                     udp.syslog(msg)
+                    udp.dump_buffer()
                     print(msg)
                     print('going to reboot now!')
                     time.sleep(2)
