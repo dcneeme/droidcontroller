@@ -511,23 +511,23 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             Cmd="select "+self.out_sql+".mba,"+self.out_sql+".regadd,"+self.out_sql+".value,"+self.out_sql+".mbi from "+self.out_sql+" left join "+self.in_sql+" \
                 on "+self.out_sql+".mba = "+self.in_sql+".mba AND "+self.out_sql+".mbi = "+self.in_sql+".mbi AND "+self.out_sql+".regadd = "+self.in_sql+".regadd \
                 where "+self.out_sql+".value != "+self.in_sql+".value" #
-            # the command above retrieves mba, regadd and value where values do not match in aichannels and aochannels
+            # the command above retrieves mba, regadd and value where values for mba, reagsdd, mbi do not match in aicochannels and aochannels
             #print "Cmd=",Cmd
             cur.execute(Cmd)
 
             for row in cur: # got mba, regadd and value for registers that need to be updated / written
                 #log.debug('row: '+str(repr(row))) # toob appd.log sisse
-                regadd=0
-                mba=0
+                regadd = 0
+                mba = 0
 
-                mba=int(eval(row[0])) if row[0] != '' else None  #  0 # must be a number
-                regadd=int(eval(row[1])) if row[1] != '' else 0 # must be a number
-                value=int(eval(row[2])) if row[2] != '' else 0  # komaga nr voib olla, teha int!
-                mbi=row[3] if row[3] != None else 0  # mbi on num!
+                mba = int(eval(row[0])) if row[0] != '' else None  #  0 # must be a number
+                regadd = int(eval(row[1])) if row[1] != '' else 0 # must be a number
+                value = int(eval(row[2])) if row[2] != '' else 0  # komaga nr voib olla, teha int!
+                mbi = row[3] if row[3] != None else 0  # mbi on num!
                 
                 try:
-                    if mb[mbi] and mba: # alpha innotek kasutab mba 0!  > 0:
-                        respcode=respcode+mb[mbi].write(mba=mba, reg=regadd, value=value)
+                    if mb[mbi] and mba: # alpha innotek kasutab mba 0! modbustcp puhul voimalik
+                        respcode = respcode + mb[mbi].write(mba=mba, reg=regadd, value=value)
                         if respcode == 0:
                             log.debug('successfully written value '+str(value)+' to mbi '+str(mbi)+', mba '+str(mba)+' regadd '+str(regadd))
                         else:
@@ -540,7 +540,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             conn.commit()  #  transaction end - why?
             return 0
         except:
-            msg='problem with acchannel.sync_ao()!'
+            msg = 'problem with sync_ao()!'
             log.warning(msg)
             traceback.print_exc()
             return 1
@@ -548,7 +548,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
 
-    def get_aivalue(self,svc,member): 
+    def get_aivalue(self, svc, member): 
         ''' Returns value,lo,hi,substatus values based on service name and member number. Value None if empty '''
         # status gets reported as summary status foir service, not svc member!
         #(mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,comment,type integer)
@@ -581,12 +581,12 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         log.debug('svc '+svc+' member '+str(member)+' value '+str(value)+' ts_created '+str(ts_created)) # debug
         return value, outlo, outhi, status, ts_created # ts added 26.7.2015
 
-    def get_aivalues(self, svc, maxage = None): # age in s
+    def get_aivalues(self, svc, maxage = None): # age in s FIXME no mba result?
         ''' Returns al list of all member values. Returns [] if nothing found. Stalled values are replaced with None. '''
-        cur=conn.cursor()
-        Cmd="BEGIN IMMEDIATE TRANSACTION" # conn3, et ei saaks muutuda lugemise ajal
+        cur = conn.cursor()
+        Cmd = "BEGIN IMMEDIATE TRANSACTION" # conn3, et ei saaks muutuda lugemise ajal
         conn.execute(Cmd)
-        Cmd="select value, ts from "+self.in_sql+" where val_reg='"+svc+"' order by member"
+        Cmd = "select value, ts, regtype from "+self.in_sql+" where val_reg='"+svc+"' order by member"
         log.debug(Cmd) ##
         cur.execute(Cmd)
         values = [] # None
@@ -597,8 +597,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         
         for row in cur: # should be one row only
             ts_created = int(eval(row[1])) if row[1] != '' and row[1] != None else 0 # will be stalled
+            regtype= row[2]
             found = 1
-            if self.ts - ts_created < maxage and row[1] != '' and row[1] != None:
+            if (self.ts - ts_created < maxage and row[1] != '' and row[1] != None) or (regtype[0] == 's'):
                 values.append(int(row[0]))
             else:
                 values.append(None)
@@ -618,11 +619,11 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         else:
             return 2
             
-        Cmd="BEGIN IMMEDIATE TRANSACTION" # conn3
+        Cmd = "BEGIN IMMEDIATE TRANSACTION" # conn3
         conn.execute(Cmd)
         try:
             for i in range(len(values)):
-                Cmd="update "+self.in_sql+" set value='"+str(values[i])+"', ts='"+str(self.ts)+"' where val_reg='"+svc+"' and member = '"+str(i+1)+"'"
+                Cmd = "update "+self.in_sql+" set value='"+str(values[i])+"', ts='"+str(self.ts)+"' where val_reg='"+svc+"' and member = '"+str(i+1)+"'"
                 log.debug(Cmd) ##
                 conn.execute(Cmd)
             conn.commit()
@@ -633,15 +634,15 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             return 1
         
         
-    def set_aivalue(self,svc,member,value): # sets variables like setpoints or limits to be reported within services, based on service name and member number
+    def set_aivalue(self, svc, member, value): # sets variables like setpoints or limits to be reported within services, based on service name and member number
         ''' Setting member value using sqlgeneral set_membervalue. adding sql table below for that '''
         return s.set_membervalue(svc,member,value,self.in_sql,raw=False) # set value
 
-    def set_airaw(self,svc,member,value): # sets variables like setpoints or limits to be reported within services, based on service name and member number
+    def set_airaw(self, svc, member, value): # sets variables like setpoints or limits to be reported within services, based on service name and member number
         ''' Setting member raw value using sqlgeneral set_membervalue. adding sql table below for that '''
         return s.set_membervalue(svc,member,value,self.in_sql,raw=True) # set raw, value will be calc by make_
 
-    def set_aovalue(self, value, mba, reg): # sets variables to control, based on physical addresses
+    def set_aovalue(self, value, mba, reg, mbi = 0): 
         ''' Write value to follow into aochannels table. 
             The according modbus holding register will be written by sync_ao() until the according 
             aicochannels register contain the same value. 
@@ -649,10 +650,12 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         #(mba,regadd,bootvalue,value,ts,rule,desc,comment)
         Cmd="BEGIN IMMEDIATE TRANSACTION" # conn
         conn.execute(Cmd)
-        Cmd="update "+self.out_sql+" set value='"+str(value)+"' where regadd='"+str(reg)+"' and mba='"+str(mba)+"'" # set_aovalue()
+        Cmd="update "+self.out_sql+" set value='"+str(value)+"' where regadd='"+str(reg)+"' and mba='"+str(mba)+"' and mbi="+str(mbi) # mbi int
+        #print(Cmd) 
         try:
             conn.execute(Cmd)
             conn.commit()
+            log.debug('set_aovalue value '+str(value)+' mba '+str(mba)+' regadd '+str(reg)) ##
             return 0
         except:
             msg='set_aovalue failure: '+str(sys.exc_info()[1])
@@ -666,22 +669,25 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             The aicochannels table must contain a similar input channel, to compare the result with. 
         '''
         #(mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,comment,type integer) # ai
-        Cmd="BEGIN IMMEDIATE TRANSACTION"
+        Cmd = "BEGIN IMMEDIATE TRANSACTION"
         conn.execute(Cmd)
-        Cmd="select mba,regadd from "+self.in_sql+" where val_reg='"+svc+"' and member='"+str(member)+"'"
-        cur=conn.cursor()
+        Cmd = "select mba, regadd, mbi from "+self.in_sql+" where val_reg='"+svc+"' and member='"+str(member)+"'"
+        cur = conn.cursor()
         cur.execute(Cmd)
-        mba=None
-        reg=None
+        mba = None
+        reg = None
+        mbi = None
         for row in cur: # should be one row only
             try:
-                mba=row[0]
-                reg=row[1]
-                self.set_aovalue(value,mba,reg)
+                mba = int(row[0])
+                reg = int(row[1])
+                mbi = row[2]
+                log.debug('found mbi '+str(mbi)+', mba '+str(mba)+', reg '+str(reg)+' for svc '+svc+' member '+str(member)) ##
+                self.set_aovalue(value, mba, reg, mbi) # FIXME  mbi?  ON VAJA TEGELIKULT!
                 conn.commit()
                 return 0
             except:
-                msg='set_aovalue failed for reg '+str(reg)+': '+str(sys.exc_info()[1])
+                msg = 'set_aovalue in set_aosvc failed for reg '+str(reg)+': '+str(sys.exc_info()[1])
                 log.warning(msg)
                 #udp.syslog(msg)
                 return 1
@@ -907,20 +913,19 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         
                         
                         if value != None:
-                            #limiting out the values outside  5 times hi-lo band
-                            #if (outhi > 0 and value < 5 * outhi) or outhi == 0: # update status and value
+                            #limiting out the values outside  6 times hi-lo band
                             nolim = 0  # initial value, 3 if both limits missing
                             if outlo != None and outhi != None:
                                 nolim = 0
-                                hilim = outhi + 2 * (outhi - outlo)
-                                lolim = outlo - 2 * (outhi - outlo)
+                                hilim = outhi + 3 * (outhi - outlo)
+                                lolim = outlo - 3 * (outhi - outlo)
                             elif outlo == None and outhi != None:
                                 nolim = 1
-                                hilim = outhi + 2 * abs(outhi)
-                                lolim = outhi - 2 * abs(outhi)
+                                hilim = outhi + 3 * abs(outhi)
+                                lolim = outhi - 3 * abs(outhi)
                             elif outhi == None and outlo != None:
                                 nolim = 2
-                                lolim = outlo - 2 * abs(outlo)
+                                lolim = outlo - 3 * abs(outlo)
                                 hilim = 2 ** 31 - 1
                             else: # both outhi, outlo none
                                 nolim = 3
@@ -1086,9 +1091,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         if (self.ts - self.ts_send > self.sendperiod) or (self.chg > 0): #  and self.ts - self.ts_send > self.sendperiod / 10):
             ''' send also if change is detected '''
             if self.chg > 0:
-                log.info('# # # reporting due to '+str(self.chg)+' value change(s)')
+                log.info('irregular ac reporting due to '+str(self.chg)+' value change(s)')
             else:
-                log.info('NNNNN normal reporting due sendperiod '+str(self.sendperiod)+' elapsed')
+                log.debug('normal reporting due sendperiod '+str(self.sendperiod)+' elapsed')
             
             self.ts_send = self.ts
             try:
