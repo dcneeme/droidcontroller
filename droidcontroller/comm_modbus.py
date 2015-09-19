@@ -56,7 +56,9 @@ class CommModbus(Comm):
         self.errors = {} # {mba:errcount}, per modbus address
         self.type = '' # normal modbus, may be changed to n or u for npe
         self.port = None # only exists for tcp (rtu or tcp over tcp)
+        self.mba_keepalive = kwargs.get('mba_keepalive',1) # this address must work, recreates mb[] if not
         #print(kwargs) # debug
+            
         if ('host' in kwargs):
             self.host = kwargs.get('host','127.0.0.1')
             ###############
@@ -87,7 +89,7 @@ class CommModbus(Comm):
                 #otherwise 0.5 s tout is used for every transaction!!
                 #print('CommModbus() init2: created CommModbus instance for ModbusRTU over RS485 using params '+str(kwargs))
                 log.info('CommModbus() init2: created CommModbus instance for ModbusRTU over RS485 using params '+str(kwargs))
-            
+                
             elif ('port' in kwargs): # both host and port - must be tcp, but possibly rtu over tcp
                 self.port = kwargs.get('port')
                 
@@ -99,7 +101,7 @@ class CommModbus(Comm):
                             host = self.host,
                             port = self.port,
                             framer = ModbusRtuFramer)
-                        log.info('CommModbus() init3: created CommModbus instance for ModbusRTU over TCPusing params '+str(kwargs))
+                        log.info('CommModbus() init3: created CommModbus instance for ModbusRTU over TCP using params '+str(kwargs))
                         print('CommModbus() init3: created CommModbus instance for ModbusRTU over TCP using params '+str(kwargs))
                     except:
                         log.warning('failed to create CommModbus instance for ModbusRTU over TCP using params '+str(kwargs))
@@ -125,6 +127,10 @@ class CommModbus(Comm):
                 traceback.print_exc()
                 #print('failed to create CommModbus instance for ModbusRTU over RS485using params '+str(kwargs))
 
+    def get_mba_keepalive(self):
+        ''' returns mba to keep accessible by recreating mb instance by dcannels or acchannels ''' 
+        return self.mba_keepalive # by default 1
+        
     def get_errorcount(self):
         ''' returns number of errors, becomes 0 after each successful modbus transaction '''
         return self.errorcount # one simple number, does not say anything about individual devices

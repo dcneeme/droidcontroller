@@ -353,15 +353,16 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 return 1
         else:
             #log.warning('recreating modbus channel due to error on '+str(mbhost[mbi]))
-            port = mb[mbi].get_port() # None if not tcp
-            host = mb[mbi].get_host() # always exists, ip or /dev/tty
-            #type = mb[mbi].get_type() # always exists, not needed, defined by host
-            
-            #mb[mbi] = CommModbus(host=mbhost[mbi]) # open again
-            mb[mbi] = CommModbus(host=host, port=port) # open again
-            msg = 'recreated mb['+str(mbi)+'] due to read FAILURE for mbi,mba,regadd,count '+str(mbi)+', '+str(mba)+', '+str(regadd)+', '+str(count)
-            log.warning(msg)
-            time.sleep(0.5) # hopefully helps to avoid sequential error / recreations
+            if mba == mb[mbi].get_mba_keepalive(): # recreate mb[] on access failure to this address only
+                port = mb[mbi].get_port() # None if not tcp
+                host = mb[mbi].get_host() # always exists, ip or /dev/tty
+                #type = mb[mbi].get_type() # always exists, not needed, defined by host
+                
+                #mb[mbi] = CommModbus(host=mbhost[mbi]) # open again
+                mb[mbi] = CommModbus(host=host, port=port) # open again
+                msg = 'recreated mb['+str(mbi)+'] due to read FAILURE for mbi,mba,regadd,count '+str(mbi)+', '+str(mba)+', '+str(regadd)+', '+str(count)
+                log.warning(msg)
+                time.sleep(0.5) # hopefully helps to avoid sequential error / recreations
             return 1
 
 
