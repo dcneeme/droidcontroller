@@ -33,7 +33,7 @@ import serial
 import traceback
 import struct  # struct.unpack for float from hex 
 import sys, logging
-logging.basicConfig(stream=sys.stderr, level=logging.DEBUG) # temporary
+logging.basicConfig(stream=sys.stderr, level=logging.INFO) # temporary
 log = logging.getLogger(__name__)
 
 import serial.tools.list_ports

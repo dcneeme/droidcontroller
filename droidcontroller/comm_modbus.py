@@ -453,8 +453,8 @@ class CommModbus(Comm):
 
     def udpcomm(self, reg, countvalue, type = 'r'): # type r, ra or w = read or write command. ra returns existing data (async). for npe
         ''' Communicates with (sends and receives data to&from) socat on techbase NPE, where subprocess() usage should be avoided '''
-        ureg=None
-        i=0
+        ureg = None
+        i = 0
         if (type != 'r' and type != 'rs' and type != 'w' and type != 'p' and type != 'b' and type != 'bs'):
             print('udpcomm(): invalid type '+str(type))
             return None
@@ -466,22 +466,22 @@ class CommModbus(Comm):
         if type[0] == 'r' or type[0] == 'b': # some data return is needed
             if type == 'b' and reg == 10 and countvalue != 2:
                 log.warning('udpcomm fixing countvalue for reg 10 type b from',countvalue,'to 2')
-                countvalue=2
+                countvalue = 2
 
             #if (not reg in self.datadict.keys() or type[-1] == 's' or (reg in self.datadict.keys() and len(self.datadict[reg]) != countvalue)):
             if type[-1] != 's' and (reg in self.datadict.keys() and len(self.datadict[reg].split(' ')) == countvalue): # give immediate response
                 # query with changed parameters must wait for correct result!
-                retread=self.udpread() # read buffer but do not use for output, just update datadict
+                retread = self.udpread() # read buffer but do not use for output, just update datadict
                 if retread != None:
                     self.update_datadict(retread)
 
             else: # wait until actual true response is received
-                ureg=''
-                ulen=0
+                ureg = ''
+                ulen = 0
                 while (i<20 and ((ureg != reg) or (ulen != countvalue))): # no more than 2 s here, as socat has 2 s timeout
                     #print('wait before read') # debug - read in loop until data for right reg arrives
-                    time.sleep(0.05) # wait until fresh data arrives for answer. without delay the previous read data is returned
-                    retread=self.udpread() # [data], reg. after delay the fresh one should arrive for the
+                    time.sleep(0.05) # wait until fresh data arrives for answer. without delay the previous read data may be returned
+                    retread = self.udpread() # [data], reg. after delay the fresh one should arrive for the
                     if retread != None:
                         #print('udpcomm got from udpread:',retread) # debug
                         try:
@@ -501,11 +501,11 @@ class CommModbus(Comm):
                 #print('udpcomm: correct value for '+str(reg)+' exists: '+str(self.datadict[reg])) # debug
                 #data=str(rdata.decode("utf-8")).strip('\n').split(' ') # python3 related need due to mac in hex
                 if type[0] == 'b':
-                    data=self.datadict[reg].split(' ')
+                    data = self.datadict[reg].split(' ')
                     #print('returning mac_ip',data) # debug
                 else: # num values
                     #data=[int(eval(i)) for i in str(rdata.decode("utf-8")).strip('\n').split(' ')] # avoid dots in response too
-                    data=[int(eval(i)) for i in self.datadict[reg].split(' ')] # values list
+                    data = [int(eval(i)) for i in self.datadict[reg].split(' ')] # values list
                 return data
             else:
                 log.warning('not what we need in datadict for reg '+str(reg)+': '+str(self.datadict))
@@ -529,10 +529,10 @@ class CommModbus(Comm):
 
     def udpread(self): # not to be called from outside of this method, used only by udpsend() above
         ''' Read npe_io over socat or other udp channel. Register will be returned as the first value, may NOT be the one asked last! '''
-        data=['','']
+        data = ['','']
         #print('udpread: trying to get udp data from '+str(self.saddr)) # debug
         try: # if anything is comes into udp buffer before timeout
-            buf=256
+            buf = 256
             rdata,raddr = self.UDPSock.recvfrom(buf)
             #print('udpread got rdata: ',rdata) # debug
             data=rdata.replace(' ','|',1).strip('\n').split('|')
@@ -545,7 +545,7 @@ class CommModbus(Comm):
 
         if len(data) > 0: # something arrived
             if raddr[0] != self.ip:
-                msg='illegal_sender'+str(raddr[0])+' for message: '+str(data)  # ignore the data received!
+                msg = 'illegal_sender'+str(raddr[0])+' for message: '+str(data)  # ignore the data received!
                 print(msg)
                 #syslog(msg)
                 return None

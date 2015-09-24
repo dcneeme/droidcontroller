@@ -469,6 +469,9 @@ class UDPchannel():
         ''' Sends UDP data immediately, without buffer, adding self.inum if ask_ack == True. DO NOT MISUSE, prevents gap filling! 
             Only the key:value pairs with similar timestamp are combined into one message!
             Common for all included keyvalue pairs (ts) should be included in the string to send.
+            
+            Sendstring must be terminated with newline!
+            
         '''
         if sendstring == '': # nothing to send
             log.warning('nothing to send!')
@@ -495,14 +498,18 @@ class UDPchannel():
         except:
             #msg = 'udp send failure to '+str(repr(self.saddr))+' for '+str(int(self.ts - self.ts_udpsent))+' s, '+str(self.linecount)+' rows dumped, '+str(self.undumped)+' undumped' # cannot send, problem with connectivity
             #syslog(msg)
-            msg = 'send FAILURE to'+str(self.saddr)
+            msg = 'send FAILURE to'+str(self.saddr)+' for '+str(int(self.ts - self.ts_udpsent))+' s, recreating socket at age 500' 
             log.warning(msg)
             self.ts_udpunsent = self.ts # last UNsuccessful udp send
             traceback.print_exc()
 
             if 'led' in dir(self):
                 self.led.alarmLED(1) # send failure
-            
+            if self.ts - self.ts_udpsent > 500:
+                self.UDPSock = socket(AF_INET,SOCK_DGRAM)
+                self.UDPSock.settimeout(0.1)
+                log.info('**** recreated udp socket! *****')
+                self.ts_udpsent = self.ts # new delay starts
             return None
 
 

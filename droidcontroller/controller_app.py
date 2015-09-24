@@ -87,11 +87,13 @@ class ControllerApp(object):
         self.reset_sender_timeout() # to start
 
     def udp_comm(self): # 
+        sys.stdout.write('U') # dot without newline
+        sys.stdout.flush()
         got = udp.comm() # both read and send
         if got != {} and got != None:
             self.got_parse(got) # see next def
-
-    def udp_reader(self): # UDP reader
+            
+    def udp_reader(self): # UDP reader  #### TIMER OFF
         ##print('reading udp')
         got = udp.udpread() # loeb ainult!
         if got != {} and got != None:
