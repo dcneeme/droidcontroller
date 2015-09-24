@@ -94,7 +94,7 @@ class SenecaPanel(object): # parameetriks mb
         else: # still checking readiness
             log.info('no linedict change, no send') ##
             if self.ready == 0 and self.power == 1: # powered but not ready yet
-                if chk_ready() == 0:
+                if self.chk_ready() == 0:
                     log.info('powered and ready, sending all')
                     self.ready = 1
                     self.sendall()
