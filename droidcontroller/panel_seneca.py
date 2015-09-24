@@ -12,7 +12,7 @@ panel.send(400,44)
 mb[0].read(1,400,4)
 '''
 
-import sys, logging
+import sys, logging, time
 logging.basicConfig(stream=sys.stderr, level=logging.INFO) # temporary
 log = logging.getLogger(__name__)
 
@@ -60,14 +60,16 @@ class SenecaPanel(object): # parameetriks mb
         ''' if data is list (max len 2! for seneca), then multiregister write with sequential addresses is used '''
         if self.linedict[line] != data:
             self.linedict.update({line:data})
-            log.info('linedict updated, going to send') ##
+            log.info('linedict updated') ##
             if self.power == 1:
                 if self.ready == 1:
-                    res = self.mb[self.mbi].write(self.mba, line, value=data)
+                    res = self.mb[self.mbi].write(self.mba, line, value=data) # inly sends if changed
                     if res != 0:
                         self.ready = 0
-                        log.warning('NOT READY any more!')
-                    return res
+                        log.warning('NOT READY any more due to reg 'str(line)' read failure!')
+                    else:
+                        log.debug('sent to panel linereg '+str(line)+' new value '+str(data))
+                        return 0 # ok
                 else: # not ready
                     if self.chk_ready(line) == 0: # check if ready now
                         res = self.mb[self.mbi].write(self.mba, line, value=data)
@@ -76,6 +78,7 @@ class SenecaPanel(object): # parameetriks mb
                             res = self.mb[self.mbi].read(self.mba, line, 1)[0]
                             if res == data:
                                 self.ready = 1
+                                log.info('became ready, sending all')
                                 res = self.sendall()
                                 return res
                             else:
@@ -96,16 +99,16 @@ class SenecaPanel(object): # parameetriks mb
                     self.ready = 1
                     self.sendall()
             return 0
-            
+
 
     def sendall(self):
-        ''' sends the linedict content to the panel ''' 
+        ''' sends the linedict content to the panel '''
         res = 0
         for line in self.linedict.keys():
             res += self.mb[self.mbi].write(self.mba, line, value=self.linedict[line])
         return res
 
-        
+
     def chk_ready(self, line):
         '''returns 0 on successful read '''
         try:
