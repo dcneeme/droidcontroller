@@ -66,7 +66,7 @@ class SenecaPanel(object): # parameetriks mb
                     res = self.mb[self.mbi].write(self.mba, line, value=data) # inly sends if changed
                     if res != 0:
                         self.ready = 0
-                        log.warning('NOT READY any more due to reg 'str(line)' read failure!')
+                        log.warning('NOT READY any more due to reg '+str(line)+' read failure!')
                     else:
                         log.debug('sent to panel linereg '+str(line)+' new value '+str(data))
                         return 0 # ok
