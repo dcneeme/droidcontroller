@@ -32,7 +32,7 @@ import time
 import serial
 import traceback
 import re
-import pynmea2 # gps parser
+#import pynmea2 # gps parser
 
 import sys, logging
 logging.basicConfig(stream=sys.stderr, level=logging.INFO)
