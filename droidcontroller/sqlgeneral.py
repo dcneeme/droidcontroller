@@ -496,15 +496,15 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
         Cmd="update dochannels set value = '"+str(value)+"', ts='"+str(ts)+"' where mba='"+str(mba)+"' and mbi="+str(mbi)+" and regadd='"+str(regadd)+"' and bit='"+str(bit)+"'"
         #print(Cmd) # debug
         try:
-            conn.execute(Cmd)
+            conn.execute(Cmd)s
             conn.commit()
             msg='output bit '+str(bit)+' set to '+str(value)+' in table dochannels, mba '+str(mba)+', mbi '+str(mbi)
-            print(msg)
+            log.info(msg)
             #udp.syslog(msg)
             return 0
         except:
             msg='output bit '+str(bit)+' setting to '+str(value)+' in table dochannels FAILED! '+str(sys.exc_info()[1])
-            print(msg)
+            log.warning(msg)
             #udp.syslog(msg)
             return 1
 
