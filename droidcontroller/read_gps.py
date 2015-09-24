@@ -13,6 +13,16 @@ line='$GPGGA,164123.000,5925.5067,N,02436.8130,E,1,04,9.1,-13.1,M,19.8,M,,0000*4
 gps.decode(line)
 gps.get_coordinates() # do all
 
+see nmea infot at http://www.gpsinformation.org/dale/nmea.htm#RMC
+use the following 2 linetypes IF they consist data (some numbers may be missing if not ready)
+
+invalid data until fixed:
+'$GPRMC,122033.069,V,,,,,,,240915,,,N*48'
+'$GPGGA,122034.056,,,,,0,00,,,M,0.0,M,,0000*53'
+
+fixed data:
+$GPRMC,132733.000,A,5925.4861,N,02436.8034,E,0.00,126.97,240915,,,A*65  # note A = active
+$GPGGA,132734.000,5925.4861,N,02436.8034,E,1,05,1.7,16.0,M,19.8,M,,0000*64 # note 1 after E
 '''
 
 from codecs import encode # for encode to work in py3
@@ -20,6 +30,8 @@ import time
 import serial
 import traceback
 import re
+import pynmea2 # gps parser
+
 import sys, logging
 logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -56,7 +68,7 @@ class ReadGps:
                 self.gpsdata = '' # last message
                 self.lines = []
                 if self.ser.isOpen():
-                    log.info('ReadGps connection for model '+self.model+' successful on port '+self.port)
+                    log.info('ReadGps connection for receiver model '+self.model+' successful on port '+self.port)
                 else:
                     log.error('ReadGps connection FAILED on port '+str(self.port)) # port can be None!!
             except:
@@ -102,10 +114,10 @@ class ReadGps:
                 self.gpsdata = self.ser.read(420) # in this block a few lines with coordinates must exist
                 self.ser.flushInput() # flush the rest
                 if len(self.gpsdata) > 10:
-                    log.debug('got from GPS device: '+str(self.gpsdata))
+                    log.debug('got from GPS device: '+str(self.gpsdata)) ##
 
                 lines = self.gpsdata.decode("utf-8").split('\r\n')
-                log.debug('got '+str(len(lines))+' lines to decode')
+                log.debug('got '+str(len(lines))+' lines to decode') ##
                 self.lines = lines
                 return lines # self.gpsdata and self.lines are stored for debugging
             else:
@@ -118,38 +130,52 @@ class ReadGps:
 
 
     def decode(self, line):
+        ''' 
+            return decoded lat lng coordinates 
+            DDDMM.SSSS ("Degrees, minutes, seconds") format used in the NMEA protocol
+            use RMC or GGA (complete) member of the following
+            ['$GPGGA,133137.000,5925.4915,N,02436.8032,E,1,07,1.2,3.1,M,19.8,M,,0000*56', '$GPGSA,A,3,22,08,04,27,11,14,18,,,,,,2.9,1.2,2.6*3B', '$GPRMC,133137.000,A,5925.4915,N,02436.8032,E,0.00,26.40,240915,,,A*59', '$GPGGA,133138.000,5925.4915,N,02436.8032,E,1,07,1.2,3.1,M,19.8,M,,0000*59', '$GPGSA,A,3,22,08,04,27,11,14,18,,,,,,2.9,1.2,2.7*3A', '$GPRMC,133138.000,A,5925.4915,N,02436.8032,E,0.00,26.40,240915,,,A*56', '$GPGGA,133139.000,5925']
+        '''
+        #msg = pynmea2.parse(line)
+        #log.info('parse output '+str(msg))
+        #lat = msg.latitude
+        #lon = msg.longitude
+        #return lat, lon
+    
         '''return decoded lat lng coordinates '''
         linevars = line.split(",")
-        log.debug('linevars '+str(linevars)) ##
-        if line[0:6] == '$GPGGA': # this line is complete and contains coordinates data
-            #print('found GPGGA line: '+line) ##
+        log.info('linevars '+str(linevars)) ##
+        if line[0:6] == '$GPGGA' and linevars[2] != 'A': # this line is complete and contains coordinates data
+            log.debug('found GPGGA line: '+line) ##
             return self.getLatLng(linevars[2],linevars[4])
-        elif line[0:6] == '$GPRMC':
-            #print('found GPRMC line: '+line) ##
+            
+        if line[0:6] == '$GPRMC' and linevars[6] != '0':
+            log.debug('found GPRMC line: '+line) ##
             return self.getLatLng(linevars[3],linevars[5])
+            
         else:
-            #log.warning('NO GPGGA or GPRMC in line '+line)
+            #log.warning('NO $GPRMC or GPRMS found in '+line)
             return None
 
 
     def checksum(self, line): # FIXME
         checkString = line.split("*")
         checksum = 0
-        for c in checkString[0].encode('utf-8'): # into bytes in py3!
-            checksum ^= c
-            print(checksum)
-
+        bstring= checkString[0].encode('utf-8') # into bytes in py3!
+        for i in range(len(bstring)):
+            checksum ^= bstring[i]
+            
         try: # Just to make sure
-            inputChecksum = int(checkString[1].rstrip(), 16);
+            inputChecksum = int(checkString[1].encode('utf-8'), 16)
         except:
             log.warning("Error in string, no CRC")
             return False
 
         if checksum == inputChecksum:
+            log.info('crc ok') ##
             return True
         else:
-            log.warning("= Checksum error! =")
-            log.warning(hex(checksum), "!=", hex(inputChecksum))
+            log.warning('Checksum ERROR: ' + hex(checksum) + ' != ' + hex(inputChecksum))
             return False
 
 
@@ -159,8 +185,9 @@ class ReadGps:
 
     def getLatLng(self, latString, lngString):
         '''from https://gist.github.com/Lauszus/5785023 '''
-        lat = float(latString[:2].lstrip('0') + "." + "%.7s" % str(float(latString[2:])*1.0/60.0).lstrip("0."))
-        lng = float(lngString[:3].lstrip('0') + "." + "%.7s" % str(float(lngString[3:])*1.0/60.0).lstrip("0."))
+        log.debug(' latstring: '+latString+', lngstring: '+lngString)
+        lat = float(latString[:2].lstrip('0') + "." + "%.7s" % str(float(latString[2:]) / 60.0).lstrip("0."))
+        lng = float(lngString[:3].lstrip('0') + "." + "%.7s" % str(float(lngString[3:])/ 60.0).lstrip("0."))
         return lat, lng
 
     def getTime(self, string, format, returnFormat):
@@ -169,8 +196,9 @@ class ReadGps:
     def get_coordinates(self): # from self.lines
         ''' read and process until the first line with coordinates is found and decoded '''
         self.read() # into self.gpsdata and self.lines
-        for line in self.lines:
-            ##if self.checksum(line): $ FIXME
+        res = None
+        for line in self.lines[1:-1]: # skip first and last
+            #if self.checksum(line): # FIXME
             res = self.decode(line)
             if res:
                 return res
