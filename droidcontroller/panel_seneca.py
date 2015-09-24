@@ -48,7 +48,7 @@ class SenecaPanel(object): # parameetriks mb
         if power != self.power:
             if power >= 0 and power <= 1:
                 self.power = power
-                log.info('new power value '+str(self.power))
+                log.info('new power value '+str(self.power)+', not ready!')
                 self.ready = 0
             else:
                 log.warning('illegal value for power: '+str(power))
@@ -63,6 +63,9 @@ class SenecaPanel(object): # parameetriks mb
             if self.power == 1:
                 if self.ready == 1:
                     res = self.mb[self.mbi].write(self.mba, line, value=data)
+                    if res != 0:
+                        self.ready = 0
+                        log.warning('NOT READY any more!')
                     return res
                 else:
                     try:
@@ -74,10 +77,8 @@ class SenecaPanel(object): # parameetriks mb
                             res = self.mb[self.mbi].read(self.mba, line, 1)[0]
                             if res == data:
                                 self.ready = 1
-                                res = 0
-                                for line in self.linedict.keys():
-                                    res += self.mb[self.mbi].write(self.mba, line, value=self.linedict[line])
-                                    return res
+                                res = self.sendall()
+                                return res
                             else:
                                 log.warning('panel read did not returned written data '+str(data))
                     except:
@@ -86,3 +87,10 @@ class SenecaPanel(object): # parameetriks mb
             else:
                 log.info('panel not powered')
                 return 1
+
+    def sendall():
+        ''' sends the linedict content to the panel ''' 
+        res = 0
+        for line in self.linedict.keys():
+            res += self.mb[self.mbi].write(self.mba, line, value=self.linedict[line])
+        return res
