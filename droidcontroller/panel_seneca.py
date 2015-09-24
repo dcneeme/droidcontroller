@@ -60,7 +60,7 @@ class PanelSeneca(object): # parameetriks mb
         ''' if data is list (max len 2! for seneca), then multiregister write with sequential addresses is used '''
         if self.linedict[line] != data:
             self.linedict.update({line:data})
-            log.info('linedict updated') ##
+            log.debug('linedict updated') ##
             if self.power == 1:
                 if self.ready == 1:
                     res = self.mb[self.mbi].write(self.mba, line, value=data) ## only sends if changed
@@ -96,10 +96,10 @@ class PanelSeneca(object): # parameetriks mb
                 log.info('panel not powered')
                 return 1
         else: # still checking readiness
-            log.info('no linedict change, no send') ##
+            log.debug('no linedict change, no send') ##
             if self.ready == 0 and self.power == 1: # powered but not ready yet
                 if self.chk_ready(line) == 0:
-                    log.info('powered and ready, sending all')
+                    log.info('powered and now also ready, sending all')
                     self.ready = 1
                     self.sendall()
             return 0
@@ -119,6 +119,6 @@ class PanelSeneca(object): # parameetriks mb
             res = self.mb[self.mbi].read(self.mba, line, 1)[0]
             return 0
         except:
-            log.warning('panel not ready, tested linereg '+str(line))
+            log.debug('panel not ready, tested linereg '+str(line))
             return 1
         
