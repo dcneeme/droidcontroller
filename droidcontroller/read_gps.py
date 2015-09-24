@@ -23,6 +23,8 @@ invalid data until fixed:
 fixed data:
 $GPRMC,132733.000,A,5925.4861,N,02436.8034,E,0.00,126.97,240915,,,A*65  # note A = active
 $GPGGA,132734.000,5925.4861,N,02436.8034,E,1,05,1.7,16.0,M,19.8,M,,0000*64 # note 1 after E
+
+The reader must blink if position is fixed !!!
 '''
 
 from codecs import encode # for encode to work in py3
@@ -144,12 +146,12 @@ class ReadGps:
     
         '''return decoded lat lng coordinates '''
         linevars = line.split(",")
-        log.info('linevars '+str(linevars)) ##
-        if line[0:6] == '$GPGGA' and linevars[2] != 'A': # this line is complete and contains coordinates data
+        log.debug('linevars '+str(linevars)) ##
+        if line[0:6] == '$GPGGA' and linevars[6] != '0': # this line is complete and contains coordinates data
             log.debug('found GPGGA line: '+line) ##
             return self.getLatLng(linevars[2],linevars[4])
             
-        if line[0:6] == '$GPRMC' and linevars[6] != '0':
+        if line[0:6] == '$GPRMC' and linevars[2] != 'V':
             log.debug('found GPRMC line: '+line) ##
             return self.getLatLng(linevars[3],linevars[5])
             
