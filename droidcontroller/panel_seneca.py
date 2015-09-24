@@ -4,11 +4,11 @@
 to write seneca s401 modbus panel without reading back, to avoid constant reading and delays if panel power off
 
 testing:
-#from main... import *
+from main_sauna import *
 from droidcontroller.panel_seneca import *
 panel=SenecaPanel(mb,1,linedict={400:10, 401:11, 403:13})
+panel.set_power(1)
 panel.send(400,44)
-panel.power(1)
 mb[0].read(1,400,4)
 '''
 
@@ -60,6 +60,7 @@ class SenecaPanel(object): # parameetriks mb
         ''' if data is list (max len 2! for seneca), then multiregister write with sequential addresses is used '''
         if self.linedict[line] != data:
             self.linedict.update({line:data})
+            log.info('linedict updated, going to send') ##
             if self.power == 1:
                 if self.ready == 1:
                     res = self.mb[self.mbi].write(self.mba, line, value=data)
@@ -67,10 +68,8 @@ class SenecaPanel(object): # parameetriks mb
                         self.ready = 0
                         log.warning('NOT READY any more!')
                     return res
-                else:
-                    try:
-                        self.mb[self.mbi].read(self.mba, line, 1) # becomes ready if there is some answer
-                        time.sleep(0.1)
+                else: # not ready
+                    if self.chk_ready(line) == 0: # check if ready now
                         res = self.mb[self.mbi].write(self.mba, line, value=data)
                         if res == 0:
                             time.sleep(0.1)
@@ -80,17 +79,39 @@ class SenecaPanel(object): # parameetriks mb
                                 res = self.sendall()
                                 return res
                             else:
-                                log.warning('panel read did not returned written data '+str(data))
-                    except:
+                                log.warning('powered panel not ready, did not returned written data '+str(data))
+                                self.ready = 0
+                    else:
                         log.warning('panel powered but not ready yet, read '+str(self.mba)+'.'+str(line)+' failed')
+                        self.ready = 0
                         return 2
             else:
                 log.info('panel not powered')
                 return 1
+        else: # still checking readiness
+            log.info('no linedict change, no send') ##
+            if self.ready == 0 and self.power == 1: # powered but not ready yet
+                if chk_ready() == 0:
+                    log.info('powered and ready, sending all')
+                    self.ready = 1
+                    self.sendall()
+            return 0
+            
 
-    def sendall():
+    def sendall(self):
         ''' sends the linedict content to the panel ''' 
         res = 0
         for line in self.linedict.keys():
             res += self.mb[self.mbi].write(self.mba, line, value=self.linedict[line])
+        return res
+
+        
+    def chk_ready(self, line):
+        '''returns 0 on successful read '''
+        try:
+            self.mb[self.mbi].read(self.mba, line, 1)
+            return 0
+        except:
+            log.warning('panel not ready, tested linereg '+str(line))
+            return 1
         return res
