@@ -6,7 +6,7 @@ to write seneca s401 modbus panel without reading back, to avoid constant readin
 testing:
 from main_sauna import *
 from droidcontroller.panel_seneca import *
-panel=SenecaPanel(mb,1,linedict={400:10, 401:11, 403:13})
+panel=PanelSeneca(mb,1,linedict={400:10, 401:11, 403:13})
 panel.set_power(1)
 panel.send(400,44)
 mb[0].read(1,400,4)
@@ -63,7 +63,7 @@ class PanelSeneca(object): # parameetriks mb
             log.info('linedict updated') ##
             if self.power == 1:
                 if self.ready == 1:
-                    res = self.mb[self.mbi].write(self.mba, line, value=data) # inly sends if changed
+                    res = self.mb[self.mbi].write(self.mba, line, value=data) ## only sends if changed
                     if res != 0:
                         self.ready = 0
                         log.warning('NOT READY any more due to reg '+str(line)+' read failure!')
@@ -72,9 +72,10 @@ class PanelSeneca(object): # parameetriks mb
                         return 0 # ok
                 else: # not ready
                     if self.chk_ready(line) == 0: # check if ready now
-                        res = self.mb[self.mbi].write(self.mba, line, value=data)
+                        time.sleep(0.5)
+                        res = self.mb[self.mbi].write(self.mba, line, value=data) ### send
                         if res == 0:
-                            time.sleep(0.1)
+                            time.sleep(0.5)
                             res = self.mb[self.mbi].read(self.mba, line, 1)[0]
                             if res == data:
                                 self.ready = 1
@@ -84,6 +85,9 @@ class PanelSeneca(object): # parameetriks mb
                             else:
                                 log.warning('powered panel not ready, did not returned written data '+str(data))
                                 self.ready = 0
+                        else:
+                            log.warning('powered panel not ready due to write result '+str(res))
+                            self.ready = 0
                     else:
                         log.warning('panel powered but not ready yet, read '+str(self.mba)+'.'+str(line)+' failed')
                         self.ready = 0
