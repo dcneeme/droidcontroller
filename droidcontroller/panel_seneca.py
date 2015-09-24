@@ -2,7 +2,15 @@
 
 ''' 
 to write seneca s401 modbus panel without reading back, to avoid constant reading and delays if panel power off
- '''
+
+testing:
+from droidcontroller.panel_seneca import *
+panel=SenecaPanel(mb,1,lines=[400,401,403,404])
+panel.send(400,[10,20])
+panel.send(403,30)
+mb[0].read(1,400,4)
+[10, 20, 0, 30]
+'''
 
 import sys, logging
 logging.basicConfig(stream=sys.stderr, level=logging.DEBUG) # temporary
@@ -15,7 +23,7 @@ class SenecaPanel(object): # parameetriks mb
         self.mbi = mbi
         self.mba = mba
         self.lines = lines
-        log.info(self.__class__.__name__+' instance created with mbi '+str(self.mbi)+',  mba '+str(self.mba))
+        log.info(self.__class__.__name__+' instance created with mbi '+str(self.mbi)+',  mba '+str(self.mba)+', lineregisters '+str(lines))
         
     def send(self,line,data):
         ''' if data is list (max len 2! for seneca), then multiregister write with sequential addresses is used '''
