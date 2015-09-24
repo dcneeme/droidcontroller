@@ -112,8 +112,8 @@ class SenecaPanel(object): # parameetriks mb
     def chk_ready(self, line):
         '''returns 0 on successful read '''
         try:
-            res = self.mb[self.mbi].read(self.mba, line, 1)
-            return res
+            res = self.mb[self.mbi].read(self.mba, line, 1)[0]
+            return 0
         except:
             log.warning('panel not ready, tested linereg '+str(line))
             return 1
