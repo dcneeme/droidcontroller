@@ -473,7 +473,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
         try:
             conn.execute(Cmd)
             conn.commit()
-            log.info(table + ' updated with '+valraw[raw]+' = '+str(value)+' for '+svc+'.'+str(member)) ##
+            log.debug(table + ' updated with '+valraw[raw]+' = '+str(value)+' for '+svc+'.'+str(member)) ##
             return 0
         except:
             msg='set_membervalue failure: '+str(sys.exc_info()[1])
@@ -496,7 +496,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
         Cmd="update dochannels set value = '"+str(value)+"', ts='"+str(ts)+"' where mba='"+str(mba)+"' and mbi="+str(mbi)+" and regadd='"+str(regadd)+"' and bit='"+str(bit)+"'"
         #print(Cmd) # debug
         try:
-            conn.execute(Cmd)s
+            conn.execute(Cmd)
             conn.commit()
             msg='output bit '+str(bit)+' set to '+str(value)+' in table dochannels, mba '+str(mba)+', mbi '+str(mbi)
             log.info(msg)
