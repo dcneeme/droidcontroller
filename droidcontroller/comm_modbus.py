@@ -5,6 +5,7 @@
 from droidcontroller.comm import Comm
 from pymodbus import *
 from pymodbus.exceptions import *
+from pymodbus.transaction import * # needed for ModbusRtuFramer
 from pymodbus.register_read_message import ReadHoldingRegistersResponse, ReadInputRegistersResponse
 from pymodbus.register_write_message import WriteMultipleRegistersResponse, WriteSingleRegisterResponse
 import traceback
