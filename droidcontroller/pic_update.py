@@ -39,6 +39,9 @@ class PicUpdate(object): # using the existing mb instance
         self.mb = mb # modbus communication instance / object
         #self.log = log or logging.getLogger(__name__) 
         self.skipsend = 0 # this becomes 1 for data eeprom
+        if mbi > len(mb) -1:
+            log.error('invalid mbi '+str(mbi)+' while len(mb) is '+str(len(mb)))
+            raise ValueError ## kuidas katkestada?
         self.set_params(mbi, regadd, keepconf, simu)
         self.sum = -1 # valid control sum 0..255
         self.filename = ''
@@ -308,8 +311,4 @@ class PicUpdate(object): # using the existing mb instance
             log.warning('upload FAILED, pic still in bootloader mode')
             return 3
 
-    def __del__(self):
-        ''' Destroy after usage with '''
-        class_name = self.__class__.__name__
-        log.info(class_name+' destroyed')
-        
+         
