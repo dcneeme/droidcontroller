@@ -584,6 +584,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
     def get_aivalues(self, svc, maxage = None): # age in s FIXME no mba result?
         ''' Returns al list of all member values. Returns [] if nothing found. Stalled values are replaced with None. '''
+        if maxage == None:
+            maxage = self.ts # all ages are good
         cur = conn.cursor()
         Cmd = "BEGIN IMMEDIATE TRANSACTION" # conn3, et ei saaks muutuda lugemise ajal
         conn.execute(Cmd)

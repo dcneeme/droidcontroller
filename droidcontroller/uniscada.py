@@ -191,10 +191,14 @@ class UDPchannel():
         sql = ''
         filename=table+'.sql' # the file to read from
         try:
-            sql = open(filename).read()
-            msg = 'found '+filename
-            log.info(msg)
+            if os.path.getsize(filename) > 50:
+                sql = open(filename).read()
+                msg = 'found '+filename
+            else:
+                msg = filename+' missing, corrupt or empty!'
+                log.info(msg)
         except:
+            traceback.print_exc()
             return 1 # no dump
 
         Cmd = 'drop table if exists '+table
@@ -283,7 +287,7 @@ class UDPchannel():
             status = int(servicetuple[1])
             val_reg = str(servicetuple[2])
             value = str(servicetuple[3])
-            self.ts = int(round(time.time(),0)) # no decimals
+            self.ts = int(round(time.time(), 0)) # no decimals
             Cmd = "INSERT into "+self.table+" values('"+sta_reg+"',"+str(status)+",'"+val_reg+"','"+value+"',"+str(self.ts)+",0,0)" # inum and ts_tried left initially empty
             #print(Cmd) # debug
             self.conn.execute(Cmd)
@@ -292,10 +296,11 @@ class UDPchannel():
                 self.copynotifier(servicetuple) # see on nagios.py sees asuv output_and_send
             return 0
         except:
-            msg = 'FAILED to write svc into buffer'
+            msg = 'FAILED to write svc into buffer, recreating table buff2server'
+            self.makebuffer()
             #syslog(msg) # incl syslog
             log.warning(msg)
-            traceback.print_exc()
+            #traceback.print_exc()
             return 1
 
 
@@ -357,6 +362,7 @@ class UDPchannel():
             traceback.print_exc()
             #sys.stdout.flush()
             #time.sleep(1)
+            self.makebuffer() ## recreate buff2server table
             return 1
 
         #unsent() end
