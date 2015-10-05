@@ -2,7 +2,7 @@
 
 # send and receive monitoring and control messages to from UniSCADA monitoring system
 # able to restore unsent history from buffer2server.sql when connectivity restored
-# FIXME - some services should be sent out of general queue! IPV,UPW,cmd,ERV - use udpsend()!
+## FIXME - led usage via method, chk if GPIO usable
 
 import time, datetime
 import sqlite3

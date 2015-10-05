@@ -791,7 +791,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             avg = 0 # keskmistamistegur, mojub alates 2
             block = 0 # power off_tout for counters
             hyst = 0
-            result=None
+            result = None
             #desc=''
             #comment=''
             rowproblem = 0 # initially ok
@@ -911,7 +911,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
                             if mstatus != ostatus: # member status change detected
                                 self.chg += 1 # immediate notification within this method
-                                log.debug('member status chg (after possible inversion) to ' +str(mstatus))
+                                log.info('member status chg (after possible inversion) to ' +str(mstatus))
 
                         
                         
@@ -941,7 +941,11 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                 conn.execute(Cmd) # who commits? the calling method, read_all()!!!
                                 log.debug(Cmd) # status and value update based on raw
                             else:
-                                log.warning('skipped updating '+self.in_sql+' due to '+val_reg+' member '+str(member)+' value '+str(value)+' out of allowed band from '+str(lolim)+' to '+str(hilim)+', based on outhlo '+str(outlo)+', outhi '+str(outhi)+', nolim '+str(nolim))
+                                log.warning('val_reg+'+val_reg+'.'+str(member)+' value '+str(value)+' out of allowed band from '+str(lolim)+' to ' +str(hilim))
+                                # but still updating status... to avois excessive status change related reporting with faulty limits
+                                Cmd="update "+self.in_sql+" set status='"+str(mstatus)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
+                                conn.execute(Cmd) # who commits? the calling method, read_all()!!!
+                                
                         else:
                             log.warning('skipped updating '+self.in_sql+' due to '+val_reg+' member '+str(member)+' value None! chk regadd '+str(regadd))
                             rowproblem = 1
@@ -1016,28 +1020,28 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         #print('value,cfg,outlo,outhi',value,cfg,outlo,outhi) # debug
 
         if (cfg&32): # status inversion IN USE, normalize
-            if ostatus>0:
-                ostatus=0
+            if ostatus > 0:
+                ostatus = 0
             else:
-                ostatus=1 # treating statuses 1 and 2 equally
+                ostatus = 1 # treating statuses 1 and 2 equally
 
         if outhi != None: # hi limit set
             if value > outhi + hyst: # above hi limit
                 #print('value above outhi,cfg',cfg) # debug
-                if (cfg&4)>0: # warning
-                    mstatus=1
+                if (cfg&4) > 0: # warning
+                    mstatus = 1
                 if (cfg&8)>0: # critical
-                    mstatus=2
+                    mstatus = 2
                 if (cfg&12) == 12: #  not to be sent
-                    mstatus=3
+                    mstatus = 3
                 #print('mstatus due to value above outhi',mstatus) # debug
             else: # POSSIBLE return with hysteresis, even without existing outlo
                 if value < outhi - hyst and (outlo == None or (outlo != None and value > outlo + hyst)):
-                    mstatus=0 # below hyst limit
+                    mstatus = 0 # below hyst limit
                     #print('mstatus due to return below outhi',mstatus) # debug
                 else: # within dead zone or above
                     if mstatus == 0 and ostatus > 0:
-                        mstatus=ostatus
+                        mstatus = ostatus
                         #print('no change for old mstatus due to dead zone hi',mstatus) # debug
 
         if outlo != None: # lo limit set

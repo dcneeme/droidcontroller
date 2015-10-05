@@ -5,13 +5,17 @@
 import subprocess
 import os, sys
 import socket, struct, fcntl
-import psutil
-
-from droidcontroller.sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
-s=SQLgeneral() 
-
 import logging
 log = logging.getLogger(__name__)
+
+
+try:
+    import psutil
+except:
+    log.warning('psutil import failed!')
+    
+from droidcontroller.sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
+s=SQLgeneral() 
 
 
 class Commands(SQLgeneral): # p
