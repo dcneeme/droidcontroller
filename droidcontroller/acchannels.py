@@ -23,6 +23,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         #self.s = SQLgeneral()
         self.cp = [] # possible counter2value calculation instances
         self.chg = 0 # possible need for immediate notification
+        self.msg = ''  # to reduce repetitive messages
         self.Initialize()
 
 
@@ -361,7 +362,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 #mb[mbi] = CommModbus(host=mbhost[mbi]) # open again
                 mb[mbi] = CommModbus(host=host, port=port) # open again
                 msg = 'recreated mb['+str(mbi)+'] due to read FAILURE for mbi,mba,regadd,count '+str(mbi)+', '+str(mba)+', '+str(regadd)+', '+str(count)
-                log.warning(msg)
+                if self.msg != msg:
+                    self.msg = msg
+                    log.warning(msg)
                 time.sleep(0.5) # hopefully helps to avoid sequential error / recreations
             return 1
 
@@ -473,7 +476,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
         except: 
             msg = 'problem with acchannels.read_all(): '+str(sys.exc_info()[1])
-            log.warning(msg)
+            if self.msg != msg:
+               self.msg = msg
+               log.warning(msg)
             #udp.syslog(msg)
             traceback.print_exc()
             sys.stdout.flush()
@@ -724,7 +729,10 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     udp.send(sendtuple) # can send to buffer double if make_svc found change. no dbl sending if ts is the same.
                     log.info('buffered for reporting: '+str(sendtuple)) ##
                 else:
-                    log.warning('FAILED to report due to empty sendtuple for svc '+val_reg)
+                    msg = 'FAILED to report due to empty sendtuple for svc '+val_reg
+                    if self.msg != msg:
+                        self.msg = msg
+                        log.warning(msg)
                     # return 1 # other services still need to be reported, commit needs to be done.
 
             conn.commit() # aicochannels svc_report transaction end
@@ -735,7 +743,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             log.warning(msg)
             #udp.syslog(msg)
             traceback.print_exc()
-            return 1
+            return
 
 
 
@@ -846,7 +854,10 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             if (regtype == 'h' or regtype == 'i'  or regtype == 'c' or regtype == 'r'): # for channel data only, not for setup values (s, s!)
                 if raw != None:
                     if rowproblem == 1:
-                        log.warning('svc processing skipped due to invalid data from '+self.in_sql+' for svc '+val_reg+', srow: '+repr(srow))
+                        msg = 'svc processing skipped due to invalid data from '+self.in_sql+' for svc '+val_reg+', srow: '+repr(srow)
+                        if self.msg != msg:
+                            self.msg = msg
+                            log.warning(msg)
                     elif regtype != 'r' and (ots < ts_now - 10*self.readperiod and ots < ts_now - 2*self.sendperiod): # raw too old, stalled
                         log.warning('svc processing skipped due to stalled (for '+str(int(ts_now - ots))+' s) raw data ('+str(raw)+') for '+val_reg+'.'+str(member))
                     else: # data fresh enough, going to process. data of type r is never stalled.
@@ -947,7 +958,10 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                 conn.execute(Cmd) # who commits? the calling method, read_all()!!!
                                 
                         else:
-                            log.warning('skipped updating '+self.in_sql+' due to '+val_reg+' member '+str(member)+' value None! chk regadd '+str(regadd))
+                            msg = 'skipped updating '+self.in_sql+' due to '+val_reg+' member '+str(member)+' value None! chk regadd '+str(regadd)
+                            if self.msg != msg:
+                                self.msg = msg
+                                log.warning(msg)
                             rowproblem = 1
 
                     ############# h, c, r or i processing done #######
@@ -968,7 +982,10 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             try: # what if None? exception?
                 lisa += str(int(round(value))) # adding member values into one string
             except:
-                log.warning('invalid value '+str(value)+' found for service '+val_reg+'.'+str(member)) # do not refer value here, may be missing from another mba!
+                msg = 'invalid value '+str(value)+' found for service '+val_reg+'.'+str(member)
+                if self.msg != msg:
+                    self.msg = msg
+                    log.warning(msg) # do not refer value here, may be missing from another mba!
                 rowproblem = 1
 
             if mstatus > status:
@@ -981,7 +998,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
         # service members done, check if all of them valid to use in svc tuple
         if rowproblemcount == 0: # all members valid
-            sendtuple = [sta_reg,status,val_reg,lisa] # sending service to buffer
+            sendtuple = [sta_reg, status, val_reg, lisa] # sending service to buffer
             return sendtuple # for regular send or status check
         else:
             log.warning(val_reg+' had '+str(rowproblemcount)+' problematic members, sendtuple NOT created! status '+str(status)+', lisa: '+lisa)
