@@ -125,18 +125,18 @@ class UDPchannel():
     def setIP(self, invar):
         ''' Set the monitoring server ip address '''
         self.ip = invar
-        self.saddr = (self.ip,self.port) # refresh needed
+        self.saddr = (self.ip, self.port) # refresh needed
 
     def setLogIP(self, invar):
         ''' Set the syslog monitor ip address '''
         self.loghost = invar
-        self.logaddr = (self.loghost,self.logport) # refresh needed
+        self.logaddr = (self.loghost, self.logport) # refresh needed
 
 
     def setPort(self, invar):
         ''' Set the monitoring server UDP port '''
-        self.port = invar
-        self.saddr = (self.ip,self.port) # refresh needed
+        self.port = int(invar)
+        self.saddr = (self.ip, self.port) # refresh needed
 
 
     def setID(self, invar):
@@ -502,14 +502,14 @@ class UDPchannel():
             self.led.commLED(0) # off, blinking shows sending and time to ack
         
         try:
-            sendlen = int(self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr)) # tagastab saadetud baitide arvu
-            self.traffic[1] = self.traffic[1] + sendlen # traffic counter udp out
+            sendlen = self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr) # tagastab saadetud baitide arvu
+            self.traffic[1] += sendlen # traffic counter udp out
             msg = '==>> sent ' +str(sendlen)+' bytes with age '+str(age)+' to '+str(repr(self.saddr))+' '+sendstring.replace('\n',' ')   # show as one line
             log.info(msg)
             #syslog(msg)
             sendstring = ''
             self.ts_udpsent = self.ts # last successful udp send
-            return sendlen
+            return int(sendlen)
         except:
             #msg = 'udp send failure to '+str(repr(self.saddr))+' for '+str(int(self.ts - self.ts_udpsent))+' s, '+str(self.linecount)+' rows dumped, '+str(self.undumped)+' undumped' # cannot send, problem with connectivity
             #syslog(msg)
