@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 
 class PanelSeneca(object): # parameetriks mb
     ''' Returns new delay to try for register 699, from the allowed range '''
-    def __init__(self, mb, mba, mbi = 0, linedict={1000:-999,1001:-999, 1003:-999,1004:-999, 1006:-999,1007:-999,1009:-999}, power = 0):
+    def __init__(self, mb, mba, mbi = 0, linedict={1000:999,1001:999, 1003:999,1004:999, 1006:999,1007:999,1009:999}, power = 0):
         self.mb = mb
         self.mbi = mbi
         self.mba = mba
@@ -68,18 +68,19 @@ class PanelSeneca(object): # parameetriks mb
                         self.ready = 0
                         log.warning('NOT READY any more due to reg '+str(line)+' read failure!')
                     else:
-                        log.debug('sent to panel linereg '+str(line)+' new value '+str(data))
+                        log.debug('sent to panel linereg '+str(line)+' new value '+str(data)) ##
                         return 0 # ok
                 else: # not ready
                     if self.chk_ready(line) == 0: # check if ready now
                         time.sleep(0.5)
-                        res = self.mb[self.mbi].write(self.mba, line, value=data) ### send
+                        res = self.mb[self.mbi].write(self.mba, line, value=data) ### then send
                         if res == 0:
                             time.sleep(0.5)
                             res = self.mb[self.mbi].read(self.mba, line, 1)[0]
                             if res == data:
                                 self.ready = 1
-                                log.info('became ready, sending all')
+                                self.power = 1
+                                log.info('became powered and ready, sending all')
                                 res = self.sendall()
                                 return res
                             else:
@@ -88,7 +89,7 @@ class PanelSeneca(object): # parameetriks mb
                         else:
                             log.warning('powered panel not ready due to write result '+str(res))
                             self.ready = 0
-                    else:
+                    else: # no proper answer
                         log.warning('panel powered but not ready yet, read '+str(self.mba)+'.'+str(line)+' failed')
                         self.ready = 0
                         return 2
@@ -109,6 +110,7 @@ class PanelSeneca(object): # parameetriks mb
         ''' sends the linedict content to the panel '''
         res = 0
         for line in self.linedict.keys():
+            log.debug('writing '+str(self.linedict[line])+' into reg '+str(line)) ##
             res += self.mb[self.mbi].write(self.mba, line, value=self.linedict[line])
         return res
 

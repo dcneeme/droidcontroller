@@ -81,7 +81,7 @@ class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters,
             import android_network # android_network.py and android_utils.py must be present!
             import os.path
             self.OSTYPE='android'
-            import BeautifulSoup # ?
+            import BeautifulSoup # ? 
             import termios
             msg = 'running on android, current directory '+os.getcwd()
             print(msg)

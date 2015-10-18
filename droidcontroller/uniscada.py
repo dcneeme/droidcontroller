@@ -13,6 +13,10 @@ import os
 import gzip
 import tarfile
 import requests
+from  functools import partial # for add_reader_callback()
+import tornado
+import tornado.ioloop
+
 import logging
 log = logging.getLogger(__name__)
 
@@ -81,6 +85,11 @@ class UDPchannel():
         #self.setLogIP(self.loghost)
 
 
+    def add_reader_callback(self, callback):
+        '''  use this once for one socket with tornado only, avoiding udpread() then '''
+        tornado.ioloop.IOLoop.instance().add_handler(self.UDPSock.fileno(),partial(callback, self), tornado.ioloop.IOLoop.READ)
+        
+    
     def get_conf(self, key, filename, delimiter = ' '): # delimiter separated key and string in the file
         ''' Return the string after the key and delimiter from the file '''
         try:
@@ -680,6 +689,13 @@ class UDPchannel():
         self.buff2server() # send away. the ack for this is available on next comm() hopefully
         return udpgot
 
+    def iocomm(self): # for ioloop
+        ''' Send to monitoring server '''
+        self.ts = int(round(time.time(),0)) # current time
+        self.unsent() # delete too old records, dump buffer also if became empty!
+        #udpgot = self.udpread() # check for incoming udp data. FIXME: direct ack around buffer??
+        self.buff2server() # send away. the ack for this is available on next comm() hopefully
+        #return udpgot
 
 
 class TCPchannel(UDPchannel): # used this parent to share self.syslog()

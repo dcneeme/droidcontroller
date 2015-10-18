@@ -68,8 +68,9 @@ class ControllerApp(object):
         self.app = app # client-specific main script
         interval_ms = 1000 # milliseconds
         self.loop = tornado.ioloop.IOLoop.instance()
+        udp.add_reader_callback(self.udp_reader)
         
-        self.udpcomm_scheduler = tornado.ioloop.PeriodicCallback(self.udp_comm, 250, io_loop = self.loop) # receive/send udp every 250 ms
+        self.udpcomm_scheduler = tornado.ioloop.PeriodicCallback(self.udp_comm, 1500, io_loop = self.loop) # send udp every 1.5s
         #self.udpread_scheduler = tornado.ioloop.PeriodicCallback(self.udp_reader, 250, io_loop = self.loop) # read udp 250 ms
         #self.udpsend_scheduler = tornado.ioloop.PeriodicCallback(self.udp_sender, 240000, io_loop = self.loop) # udp resend 4 min
         
@@ -78,8 +79,6 @@ class ControllerApp(object):
         self.cal_scheduler = tornado.ioloop.PeriodicCallback(self.cal_reader, 3600000, io_loop = self.loop) # gcal 1 h
         
         self.udpcomm_scheduler.start()
-        #self.udpread_scheduler.start()
-        #self.udpsend_scheduler.start()
         self.di_scheduler.start()
         self.ai_scheduler.start()
         self.cal_scheduler.start()
@@ -89,16 +88,18 @@ class ControllerApp(object):
     def udp_comm(self): # 
         sys.stdout.write('U') # dot without newline
         sys.stdout.flush()
-        got = udp.comm() # both read and send
-        if got != {} and got != None:
-            self.got_parse(got) # see next def
-            
-    def udp_reader(self): # UDP reader  #### TIMER OFF
+        udp.iocomm()
+        
+    def udp_reader(self, udp, fd, events): # no timer!
         ##print('reading udp')
-        got = udp.udpread() # loeb ainult!
-        if got != {} and got != None:
-            self.got_parse(got) # see next def
-
+        if events & self.loop.READ:
+            got = udp.udpread() # loeb ainult!
+            if got != {} and got != None:
+                log.info('udp_reader got from server '+str(got))
+                self.got_parse(got) # see next def
+        if events & self.loop.ERROR:
+            log.error('UDP socket error!')
+            
     def got_parse(self, got):
         ''' check the ack or cmd from server '''
         if got != {} and got != None: # got something from monitoring server
