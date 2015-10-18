@@ -1,4 +1,4 @@
-''' this is a class to handle event/based flow of application. Droid4control 2015  '''
+''' This is a class to handle event-based flow of application. Droid4control 2015  '''
 
 import sys, os, traceback
 import tornado
@@ -18,7 +18,7 @@ print('OSTYPE',OSTYPE)
 
 from droidcontroller.udp_commands import * # sellega alusta, kaivitab ka SQlgeneral
 p = Commands(OSTYPE) # setup and commands from server
-r = RegularComm(interval=120) # variables like uptime and traffic, not io channels
+r = RegularComm(interval=12) # interval needs to be below timer value!
 
 mac = ''
 filee = ''
@@ -71,24 +71,24 @@ class ControllerApp(object):
         udp.add_reader_callback(self.udp_reader)
         
         self.udpcomm_scheduler = tornado.ioloop.PeriodicCallback(self.udp_comm, 1500, io_loop = self.loop) # send udp every 1.5s
-        #self.udpread_scheduler = tornado.ioloop.PeriodicCallback(self.udp_reader, 250, io_loop = self.loop) # read udp 250 ms
-        #self.udpsend_scheduler = tornado.ioloop.PeriodicCallback(self.udp_sender, 240000, io_loop = self.loop) # udp resend 4 min
-        
+        self.regular_scheduler = tornado.ioloop.PeriodicCallback(self.regular_svc, 120000, io_loop = self.loop) # send regular svc
         self.di_scheduler = tornado.ioloop.PeriodicCallback(self.di_reader, 50, io_loop = self.loop) # read DI asap
         self.ai_scheduler = tornado.ioloop.PeriodicCallback(self.ai_reader, 10000, io_loop = self.loop) # ai 10 s
         self.cal_scheduler = tornado.ioloop.PeriodicCallback(self.cal_reader, 3600000, io_loop = self.loop) # gcal 1 h
         
         self.udpcomm_scheduler.start()
+        self.regular_scheduler.start()
         self.di_scheduler.start()
         self.ai_scheduler.start()
         self.cal_scheduler.start()
         
-        self.reset_sender_timeout() # to start
+        #self.reset_sender_timeout() # to start
+        
 
-    def udp_comm(self): # 
+    def udp_comm(self): # only send
         sys.stdout.write('U') # dot without newline
         sys.stdout.flush()
-        udp.iocomm()
+        udp.iocomm() # chk buff and send to monitoring
         
     def udp_reader(self, udp, fd, events): # no timer!
         ##print('reading udp')
@@ -127,11 +127,16 @@ class ControllerApp(object):
         ac.doall()
         self.app_main()
 
-    def udp_sender(self): # UDP sender
+    def udp_sender(self): # UDP sender / not in use, see udp_comm using udp.iocomm
         #print('sending udp')
         udp.buff2server() # ainult saadab!!! ei dumbi jne, kasuta parem udp.comm
         self.reset_sender_timeout()
 
+    def regular_svc(self):
+        sys.stdout.write('R') # 
+        sys.stdout.flush()
+        r.regular_svc() # UPW,UTW, ipV, baV, cpV. mfV are default services.
+    
     def cal_reader(self): # gcal  refresh, call ed by customer_app
         print('FIXME cal sync')
 
@@ -141,7 +146,7 @@ class ControllerApp(object):
         ##IOLoop.add_timeout(5000, self.udp_sender) # last line! recalls itself after timeout 5 s
 
 
-    def app_main(self): # everything to do after reading. code in controller_app.py
+    def app_main(self): # application-specific app() in iomain_xxx.py
         ''' ehk on vaja param anda mis muutus, may call udp_sender '''
         ##print('app_main')
         res = self.app(self) # self selleks, et vahet teha erinevatel kaivitustel, valjakutsutavale lisa param
