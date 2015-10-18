@@ -502,8 +502,8 @@ class UDPchannel():
             self.led.commLED(0) # off, blinking shows sending and time to ack
         
         try:
-            sendlen = self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr) # tagastab saadetud baitide arvu
-            self.traffic[1] = self.traffic[1]+sendlen # traffic counter udp out
+            sendlen = int(self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr)) # tagastab saadetud baitide arvu
+            self.traffic[1] = self.traffic[1] + sendlen # traffic counter udp out
             msg = '==>> sent ' +str(sendlen)+' bytes with age '+str(age)+' to '+str(repr(self.saddr))+' '+sendstring.replace('\n',' ')   # show as one line
             log.info(msg)
             #syslog(msg)
@@ -689,7 +689,7 @@ class UDPchannel():
         self.buff2server() # send away. the ack for this is available on next comm() hopefully
         return udpgot
 
-    def iocomm(self): # for ioloop
+    def iocomm(self): # for ioloop, send only
         ''' Send to monitoring server '''
         self.ts = int(round(time.time(),0)) # current time
         self.unsent() # delete too old records, dump buffer also if became empty!
