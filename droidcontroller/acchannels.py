@@ -952,7 +952,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                 conn.execute(Cmd) # who commits? the calling method, read_all()!!!
                                 log.debug(Cmd) # status and value update based on raw
                             else:
-                                log.warning('val_reg+'+val_reg+'.'+str(member)+' value '+str(value)+' out of allowed band from '+str(lolim)+' to ' +str(hilim))
+                                log.warning('val_reg '+val_reg+'.'+str(member)+' value '+str(value)+' out of allowed band from '+str(lolim)+' to ' +str(hilim))
                                 # but still updating status... to avois excessive status change related reporting with faulty limits
                                 Cmd="update "+self.in_sql+" set status='"+str(mstatus)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
                                 conn.execute(Cmd) # who commits? the calling method, read_all()!!!
