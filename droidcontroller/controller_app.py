@@ -62,11 +62,12 @@ logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 log = logging.getLogger(__name__)
 
 
-class ControllerApp(object):
+class ControllerApp(object): # default modbus address of io in controller = 1
     ''' '''
-    def __init__(self, app):
+    def __init__(self, app, mba = 1, mbi = 0):
         self.app = app # client-specific main script
-        #interval_ms = 1000 # milliseconds / not used
+        self.mba = mba # controller io modbus address if dc6888
+        self.mbi = mbi # io channel for controller 
         self.loop = tornado.ioloop.IOLoop.instance()
         udp.add_reader_callback(self.udp_reader)
         
@@ -92,7 +93,7 @@ class ControllerApp(object):
         t = os.path.getmtime(filename)
         mod_mtime = datetime.datetime.fromtimestamp(t).strftime(' %Y-%m-%d')
         try:
-            hw = hex(mb[0].read(1,257,1)[0]) # assuming it5888, mba 1!
+            hw = hex(mb[self.mbi].read(self.mba,257,1)[0]) # assuming it5888, mba 1!
         except:
             hw = 'n/a'
         self.AVV = 'AVV:HW '+hw+', APP '+filename+mod_mtime+'\nAVS:'
@@ -122,14 +123,36 @@ class ControllerApp(object):
                     self.got_parse(got) # see next def
                 
                 if udp.sk.get_state()[3] == 1: # firstup
-                    udp.udpsend(self.AVV) # AVV only, the rest go via buffer
-                    udp.send(['TCS',1,'TCW','?']) # restore via buffer
-                    for i in range(3):
-                        udp.send(['H'+str(i+1)+'CS',1,'H'+str(i+1)+'CW','?']) # cumulative heat energy restoration via buffer
+                    self.firstup()
+
+    def firstup(self):
+        ''' Things to do on the first connectivity establisment after startup '''
+        udp.udpsend(self.AVV) # AVV only, the rest go via buffer
+        udp.send(['TCS',1,'TCW','?']) # restore via buffer
+        for i in range(3):
+            udp.send(['H'+str(i+1)+'CS',1,'H'+str(i+1)+'CW','?']) # cumulative heat energy restoration via buffer
+        
+        ac.ask_counters() # restore values from server
+        log.info('******* uniscada connectivity up, sent AVV and tried to restore counters and some variables ********')
                     
-                    ac.ask_counters() # restore values from server
-                    log.info('******* uniscada connectivity up, sent AVV and tried to restore counters and some variables ********')
-                    
+    def powerbreak(self):
+            # age and neverup taken into account from udp.sk statekeeper instance
+            msg = '**** going to cut power NOW (at '+str(int(time.time()))+') via 0xFEED in attempt to restore connectivity ***'
+            log.warning(msg)
+            udp.dump_buffer() # save unsent messages as file
+
+            with open("/root/d4c/appd.log", "a") as logfile:
+                logfile.write(msg)
+            p.subexec('/usr/bin/sync', 0) # to make sure power will be cut in the end
+            time.sleep(1)
+            mb[self.mbi].write(self.mba, 999, value = 0xFEED) # ioboard ver > 2.35 cuts power to start cold reboot (see reg 277)
+            #if that does not work, appd and python main* must be stopped, to cause 5V reset without 0xFEED functionality
+            try:
+                mb[self.mbi].write(self.mba, 277, value = 9) # length of break in s
+                p.subexec('/root/d4c/killapp',0) # to make sure power will be cut in the end
+            except:
+                log.warning('executing /root/d4c/killapp failed!')
+                
     def got_parse(self, got):
         ''' check the ack or cmd from server '''
         if got != {} and got != None: # got something from monitoring server
@@ -166,6 +189,8 @@ class ControllerApp(object):
         sys.stdout.write('R') # 
         sys.stdout.flush()
         r.regular_svc() # UPW, UTW, ipV, baV, cpV. mfV are default services.
+        if udp.sk.get_state()[1] > 300 + udp.sk.get_state()[2] * 300: # total 10 min down, cold reboot needed
+            self.powerbreak() # 999 feed to restart via 5V break
     
     def cal_reader(self): # gcal  refresh, call ed by customer_app
         print('FIXME cal sync')
