@@ -136,22 +136,28 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         log.info('******* uniscada connectivity up, sent AVV and tried to restore counters and some variables ********')
                     
     def powerbreak(self):
-            # age and neverup taken into account from udp.sk statekeeper instance
-            msg = '**** going to cut power NOW (at '+str(int(time.time()))+') via 0xFEED in attempt to restore connectivity ***'
-            log.warning(msg)
-            udp.dump_buffer() # save unsent messages as file
+        # age and neverup taken into account from udp.sk statekeeper instance
+        ''' 5V power break for cold reboot '''
+        msg = '**** going to cut power NOW (at '+str(int(time.time()))+') via 0xFEED in attempt to restore connectivity ***'
+        log.warning(msg)
+        udp.dump_buffer() # save unsent messages as file
 
-            with open("/root/d4c/appd.log", "a") as logfile:
-                logfile.write(msg)
+        with open("/root/d4c/appd.log", "a") as logfile:
+            logfile.write(msg)
+        try:
             p.subexec('/usr/bin/sync', 0) # to make sure power will be cut in the end
+            time.sleep(1)
+            mb[self.mbi].write(self.mba, 277, value = 9) # length of break in s
             time.sleep(1)
             mb[self.mbi].write(self.mba, 999, value = 0xFEED) # ioboard ver > 2.35 cuts power to start cold reboot (see reg 277)
             #if that does not work, appd and python main* must be stopped, to cause 5V reset without 0xFEED functionality
-            try:
-                mb[self.mbi].write(self.mba, 277, value = 9) # length of break in s
-                p.subexec('/root/d4c/killapp',0) # to make sure power will be cut in the end
-            except:
-                log.warning('executing /root/d4c/killapp failed!')
+        except:
+            traceback.print_exc()
+            
+        try:
+            p.subexec('/root/d4c/killapp',0) # to make sure power will be cut in the end
+        except:
+            log.warning('executing /root/d4c/killapp failed!')
                 
     def got_parse(self, got):
         ''' check the ack or cmd from server '''
@@ -189,7 +195,8 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         sys.stdout.write('R') # 
         sys.stdout.flush()
         r.regular_svc() # UPW, UTW, ipV, baV, cpV. mfV are default services.
-        if udp.sk.get_state()[1] > 300 + udp.sk.get_state()[2] * 300: # total 10 min down, cold reboot needed
+        skstate = udp.sk.get_state() # udp conn statekeeper
+        if skstate[0] == 0 and skstate[1] > 300 + skstate[2] * 300: # total 10 min down, cold reboot needed
             self.powerbreak() # 999 feed to restart via 5V break
     
     def cal_reader(self): # gcal  refresh, call ed by customer_app
