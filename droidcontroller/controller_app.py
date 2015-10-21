@@ -1,6 +1,6 @@
 ''' This is a class to handle event-based flow of application. Droid4control 2015  '''
 
-import sys, os, traceback
+import sys, os, traceback, inspect, datetime
 import tornado
 import tornado.ioloop
 import logging
@@ -66,12 +66,12 @@ class ControllerApp(object):
     ''' '''
     def __init__(self, app):
         self.app = app # client-specific main script
-        interval_ms = 1000 # milliseconds
+        #interval_ms = 1000 # milliseconds / not used
         self.loop = tornado.ioloop.IOLoop.instance()
         udp.add_reader_callback(self.udp_reader)
         
         self.udpcomm_scheduler = tornado.ioloop.PeriodicCallback(self.udp_comm, 1500, io_loop = self.loop) # send udp every 1.5s
-        self.regular_scheduler = tornado.ioloop.PeriodicCallback(self.regular_svc, 120000, io_loop = self.loop) # send regular svc
+        self.regular_scheduler = tornado.ioloop.PeriodicCallback(self.regular_svc, 60000, io_loop = self.loop) # send regular svc
         self.di_scheduler = tornado.ioloop.PeriodicCallback(self.di_reader, 50, io_loop = self.loop) # read DI asap
         self.ai_scheduler = tornado.ioloop.PeriodicCallback(self.ai_reader, 10000, io_loop = self.loop) # ai 10 s
         self.cal_scheduler = tornado.ioloop.PeriodicCallback(self.cal_reader, 3600000, io_loop = self.loop) # gcal 1 h
@@ -81,7 +81,27 @@ class ControllerApp(object):
         self.di_scheduler.start()
         self.ai_scheduler.start()
         self.cal_scheduler.start()
-        
+        frm = inspect.stack()[1]
+        mod = inspect.getmodule(frm[0])
+        modname = str(mod).split("'")[3]
+        filename = os.path.basename(modname)
+        self.rescue = 0
+        if 'rescue' in str(mod):
+            self.rescue = 1
+            log.warning('rescue application starting!')
+        t = os.path.getmtime(filename)
+        mod_mtime = datetime.datetime.fromtimestamp(t).strftime(' %Y-%m-%d')
+        try:
+            hw = hex(mb[0].read(1,257,1)[0]) # assuming it5888, mba 1!
+        except:
+            hw = 'n/a'
+        self.AVV = 'AVV:HW '+hw+', APP '+filename+mod_mtime+'\nAVS:'
+        if self.rescue != 0:
+            self.AVV += '2\n' # critical status
+        else:
+            self.AVV += '0\n'
+                    
+        log.info('ControllerApp instance created by '+filename+' from '+str(mod_mtime)+', '+self.AVV)
         #self.reset_sender_timeout() # to start
         
 
@@ -92,14 +112,24 @@ class ControllerApp(object):
         
     def udp_reader(self, udp, fd, events): # no timer!
         ##print('reading udp')
-        if events & self.loop.READ:
-            got = udp.udpread() # loeb ainult!
-            if got != {} and got != None:
-                log.info('udp_reader got from server '+str(got))
-                self.got_parse(got) # see next def
         if events & self.loop.ERROR:
             log.error('UDP socket error!')
-            
+        elif events & self.loop.READ:
+            got = udp.udpread() # loeb ainult!
+            if got != None: ## at least ack received
+                if got != {}: 
+                    log.info('udp_reader got from server '+str(got))
+                    self.got_parse(got) # see next def
+                
+                if udp.sk.get_state()[3] == 1: # firstup
+                    udp.udpsend(self.AVV) # AVV only, the rest go via buffer
+                    udp.send(['TCS',1,'TCW','?']) # restore via buffer
+                    for i in range(3):
+                        udp.send(['H'+str(i+1)+'CS',1,'H'+str(i+1)+'CW','?']) # cumulative heat energy restoration via buffer
+                    
+                    ac.ask_counters() # restore values from server
+                    log.info('******* uniscada connectivity up, sent AVV and tried to restore counters and some variables ********')
+                    
     def got_parse(self, got):
         ''' check the ack or cmd from server '''
         if got != {} and got != None: # got something from monitoring server
@@ -132,10 +162,10 @@ class ControllerApp(object):
         udp.buff2server() # ainult saadab!!! ei dumbi jne, kasuta parem udp.comm
         self.reset_sender_timeout()
 
-    def regular_svc(self):
+    def regular_svc(self): # FIXME - send on change too! pakkida?
         sys.stdout.write('R') # 
         sys.stdout.flush()
-        r.regular_svc() # UPW,UTW, ipV, baV, cpV. mfV are default services.
+        r.regular_svc() # UPW, UTW, ipV, baV, cpV. mfV are default services.
     
     def cal_reader(self): # gcal  refresh, call ed by customer_app
         print('FIXME cal sync')
