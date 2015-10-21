@@ -8,7 +8,7 @@ import time, datetime
 import sqlite3
 import traceback
 from socket import *
-import sys
+import sys, inspect
 import os
 import gzip
 import tarfile
@@ -31,22 +31,22 @@ class UDPchannel():
     def __init__(self, id ='000000000000', ip='127.0.0.1', port=44445, receive_timeout=0.1, retrysend_delay=3, loghost='0.0.0.0', logport=514, copynotifier=None): # delays in seconds
         #from droidcontroller.connstate import ConnState
         from droidcontroller.statekeeper import StateKeeper
-        self.sk = StateKeeper(off_tout=300, on_tout=0) # conn state with up/down times. 
-        # do hard reboot via 0xFEED when changed to down. 
+        self.sk = StateKeeper(off_tout=300, on_tout=0) # conn state with up/down times.
+        # do hard reboot via 0xFEED when changed to down.
         # what to do if never up? keep hard rebooting?
-        
+
         try:
             from droidcontroller.gpio_led import GPIOLED
             self.led = GPIOLED() # led alarm and conn
         except:
             log.warning('GPIOLED not imported')
-                        
+
         self.set_copynotifier(copynotifier) # parallel to uniscada notification in another format
         self.host_id = id # controller ip as tun0 wlan0 eth0 127.0.0.1
         self.ip = ip # monitoring server
         self.port = port # monitoring server
         self.saddr = (self.ip,self.port)
-        
+
         self.loghost = loghost
         self.logport = logport
         self.logaddr = (self.loghost,self.logport) # tuple
@@ -62,9 +62,11 @@ class UDPchannel():
         self.UDPlogSock.setsockopt(SOL_SOCKET, SO_BROADCAST, 1) # broadcast allowed
 
         log.info('init: created uniscada and syslog connections to '+ip+':'+str(port)+' and '+loghost+':'+str(logport))
+
         self.table = 'buff2server' # can be anything, not accessible to other objects WHY? would be useful to know the queue length...
         self.sent = '' # last servicetuple sent to the buffer
         self.age = 0 # unsent history age, also to be queried
+        self.APVER = 'app ver undefined'
         self.Initialize()
 
     def Initialize(self):
@@ -75,12 +77,12 @@ class UDPchannel():
         self.ts_udpsent = self.ts
         self.ts_udpgot = self.ts
         self.ts_udpunsent = self.ts # failed send timestamp
-        
+
         self.conn = sqlite3.connect(':memory:')
         #self.cur=self.conn.cursor() # cursors to read data from tables / cursor can be local
         self.makebuffer() # create buffer table for unsent messages
         self.linecount = 0 # lines in buffer
-        self.undumped = 0 # not yet dumped into buff2server.sql 
+        self.undumped = 0 # not yet dumped into buff2server.sql
         #self.setIP(self.ip)
         #self.setLogIP(self.loghost)
 
@@ -88,8 +90,11 @@ class UDPchannel():
     def add_reader_callback(self, callback):
         '''  use this once for one socket with tornado only, avoiding udpread() then '''
         tornado.ioloop.IOLoop.instance().add_handler(self.UDPSock.fileno(),partial(callback, self), tornado.ioloop.IOLoop.READ)
-        
-    
+
+
+    def get_classes(self): # debug
+        return str(inspect.getmembers(sys.modules[__name__], inspect.isclass))
+
     def get_conf(self, key, filename, delimiter = ' '): # delimiter separated key and string in the file
         ''' Return the string after the key and delimiter from the file '''
         try:
@@ -102,30 +107,34 @@ class UDPchannel():
             log.error('no readable file '+filename+' for '+key)
         return None
 
-    
+
     def get_ip(self): # obsolete, use r.get_host_ip()
         ''' Returns ONE effective ip address, the selection order is: tun0, eth0, wlan0, eth1 '''
         pass # kuidas jalgida ip adr vms olekut pythonist?
-        
-    
-    def getIP(self): 
+
+
+    def getIP(self):
         ''' returns server ip for this instance '''
         return self.ip
-        
-    
+
+
     def get_age(self):
-        ''' age of oldest unsent message in buffer ''' 
+        ''' age of oldest unsent message in buffer '''
         return self.age
-        
-        
+
+
     def set_copynotifier(self, copynotifier):
         self.copynotifier = copynotifier
-        
-    
+
+
     def setIP(self, invar):
         ''' Set the monitoring server ip address '''
         self.ip = invar
         self.saddr = (self.ip, self.port) # refresh needed
+
+    def setAPVER(self, invar):
+        ''' Set the app version '''
+        self.APVER = invar
 
     def setLogIP(self, invar):
         ''' Set the syslog monitor ip address '''
@@ -226,15 +235,15 @@ class UDPchannel():
             traceback.print_exc()
             time.sleep(1)
             return 1
-            
-            
+
+
     def makebuffer(self): # rereads buffer dump or creates new empty one if dump does not exist
         ''' Old dumped rows in buffer will be sent first if not empty '''
-        
+
         if self.sqlread(self.table) == 0: # dump read
             log.info('reusing buffer dump to fill the possible gaps')
             return 0
-            
+
         else: # create new table
             Cmd='drop table if exists '+self.table
             self.conn.execute(Cmd) # drop the table if it exists
@@ -281,7 +290,7 @@ class UDPchannel():
             traceback.print_exc()
             return 1
 
-            
+
 
     def send(self, servicetuple): # store service components to buffer for send and resend
         ''' Adds service components into buffer table to be sent as a string message
@@ -290,7 +299,7 @@ class UDPchannel():
         if servicetuple == None:
             log.warning('ignored servicetuple with value None')
             return 2
-            
+
         try:
             sta_reg = str(servicetuple[0])
             status = int(servicetuple[1])
@@ -316,19 +325,19 @@ class UDPchannel():
     #def get_last(self):
     #    ''' Return last servicetuple sent to the buffer. Can be used for parallel messaging for example. '''
     #    return self.last
-    
-    
+
+
     def unsent(self, maxage=86400):   # 24 hours max history to be kept
-        ''' Counts the non-acknowledged messages and removes older than maxage seconds (24h by default). 
+        ''' Counts the non-acknowledged messages and removes older than maxage seconds (24h by default).
             If no more lines in buffer, dump empty table into sql file to avoid rows de ja vue on next start
         '''
-            
+
         self.ts = int(round(time.time(),0))
         self.ts_unsent = self.ts
         mintscreated = 0
         maxtscreated = 0
         delcount = 0
-        
+
         try:
             Cmd="BEGIN IMMEDIATE TRANSACTION"  # buff2server
             self.conn.execute(Cmd)
@@ -338,7 +347,7 @@ class UDPchannel():
             cur.execute(Cmd)
             for rida in cur: # only one line for count if any at all
                 delcount = rida[0] # to be removed as too old
-                
+
             if delcount > 0: # something to be removed
                 Cmd = "delete from "+self.table+" where ts_created+0+"+str(maxage)+"<"+str(self.ts)
                 self.conn.execute(Cmd)
@@ -348,23 +357,23 @@ class UDPchannel():
             cur.execute(Cmd)
             for rida in cur: # only one line for count if any at all
                 linecount = rida[0] # int
-                
+
             msg=''
             #if self.sk.get_state()[0] == 0: # no conn
             if linecount > self.linecount + 100: # dump again while the table keeps increasing
                 msg=str(linecount)+' messages to be dumped from table '+self.table+'!'
             elif linecount == 0 and self.linecount > 0: # dump empty table into sql file
                 msg='empty buffer to be dumped from table '+self.table+'!'
-            
+
             if msg != '':
                 log.info(msg)
                 self.dump_buffer() # dump to add more lines into sql file
                 self.linecount = linecount # dumped rows
-            
+
             self.undumped = linecount - self.linecount
             self.conn.commit() # buff2server transaction end
             return linecount # 0
-            
+
         except:
             msg='problem with unsent, '+str(sys.exc_info()[1])
             log.warning(msg)
@@ -375,13 +384,13 @@ class UDPchannel():
             return 1
 
         #unsent() end
-        
+
 
     def udpreset(self):
         ''' Reopen socket  s the first measure to reconnect '''
         self.UDPSock = socket(AF_INET,SOCK_DGRAM)
         self.UDPSock.settimeout(self.receive_timeout)
-     
+
 
     def buff2server(self): # send the buffer content
         ''' ONE UDP monitoring message creation and sending (using self.udpsend).
@@ -395,10 +404,10 @@ class UDPchannel():
         sendstring = ''
         cur = self.conn.cursor()
         cur2 = self.conn.cursor()
-        limit = self.sk.get_state()[0] * 49 + 1  ## 1 key:value to try if conn down, 5 if up. 100 is too much, above 1 kB ## 
+        limit = self.sk.get_state()[0] * 49 + 1  ## 1 key:value to try if conn down, 5 if up. 100 is too much, above 1 kB ##
         age = 0 # the oldest, will be self.age later
         #log.info('...trying to select and send max '+str(limit)+' buffer lines')
-        
+
         #if self.sk.get_state()[0] == 0: # no conn
         #    timetoretry = int(self.ts_udpunsent + 3 * self.retrysend_delay) # try less often during conn break
         #else: # conn ok
@@ -409,15 +418,15 @@ class UDPchannel():
         else:
             log.debug('using longer retrysend_delay, conn NOT ok') ##
             timetoretry = int(self.ts_udpunsent + 3 * self.retrysend_delay) # longer retry delay with no conn
-            
+
         if self.ts < timetoretry: # too early to send again
             log.debug('conn state '+str(self.sk.get_state()[0])+'. wait with buff2server until timetoretry '+str(int(timetoretry))) ##
             return 0 # perhaps next time
         else:
             log.debug('buff2server execution due to time '+str(self.ts-timetoretry)+' s past timetoretry '+str(timetoretry))
-        
+
         self.unsent()  # delete too old lines, count the rest
-        
+
         Cmd = "BEGIN IMMEDIATE TRANSACTION" # buff2server
         try:
             self.conn.execute(Cmd)
@@ -425,23 +434,23 @@ class UDPchannel():
             Cmd = 'select ts_created+0 from '+self.table+' group by ts_created limit '+str(limit) # find the oldest creation timestamp(s)
             #log.info(Cmd) ##
             cur.execute(Cmd)
-            
+
             for row in cur: # ts alusel, iga ts jaoks oma in
                 ts_created = int(round(row[0],0)) if row[0] != '' else 0 # should be int
-                
+
                 #if age == 0: # vanim, vaid esimesel lugemisel
                 if (self.ts - ts_created) > age:
                     age = int(self.ts - ts_created) # find the oldest in the group
-                    
+
                 log.debug('processing ts_created '+str(ts_created)+', age '+str(self.ts - ts_created)+', the oldest age '+str(age))
                 #if ts_created > 1433000000: # valid ts AGA kui on vale siis mingu serveri aeg
                 self.inum += 1 # increase the message number  for every ts_created
-                sendstr = "in:" + str(self.inum) + ","+str(ts_created)+"\n" # start the new in: block    
+                sendstr = "in:" + str(self.inum) + ","+str(ts_created)+"\n" # start the new in: block
                 Cmd = 'SELECT * from '+self.table+' where ts_created='+str(ts_created)
                 log.debug('selecting rows for inum'+str(self.inum)+': '+Cmd) # debug
                 cur2.execute(Cmd)
                 self.age = age # the oldest in these grouped timestamps
-                
+
                 for srow in cur2:
                     svc_count += 1
                     sta_reg = srow[0]
@@ -452,7 +461,7 @@ class UDPchannel():
                         sendstr += val_reg+":"+str(value)+"\n"
                     if sta_reg != '':
                         sendstr += sta_reg+":"+str(status)+"\n"
-                
+
                 if len(sendstr) > 0:
                     sendstring += sendstr
                     log.debug('added to sendstring in related sendstr: '+sendstr.replace('\n',' ')) ###
@@ -461,18 +470,18 @@ class UDPchannel():
                     self.conn.execute(Cmd)
                 else:
                     log.warning('!! NO svc data for ts selection with limit'+str(limit))
-                    
+
             # ts loop end
             self.conn.commit() # buff2server transaction end
-        
+
             if svc_count > 0: # there is something to be sent!
                 #sendstring = "in:" + str(self.inum) + ","+str(ts_created)+"\n" + sendstring # in alusel vastuses toimub puhvrist kustutamine
                 sendstring = "id:" + str(self.host_id) + "\n" + sendstring # alustame sellega datagrammi
                 log.debug('going to udpsend from buff2server, sendstring : '+sendstring) ##
                 self.udpsend(sendstring, self.age) # sending away
             return 0
-        
-            
+
+
         except:
             log.warning('PROBLEM with creating message to be sent based on '+self.table)
             traceback.print_exc()
@@ -481,26 +490,26 @@ class UDPchannel():
 
 
     def udpsend(self, sendstring = '', age = 0): # actual udp sending, no resend. give message as parameter. used by buff2server too.
-        ''' Sends UDP data immediately, without buffer, adding self.inum if ask_ack == True. DO NOT MISUSE, prevents gap filling! 
+        ''' Sends UDP data immediately, without buffer, adding self.inum if ask_ack == True. DO NOT MISUSE, prevents gap filling!
             Only the key:value pairs with similar timestamp are combined into one message!
             Common for all included keyvalue pairs (ts) should be included in the string to send.
-            
+
             Sendstring must be terminated with newline!
-            
+
         '''
         if sendstring == '': # nothing to send
             log.warning('nothing to send!')
             return 1
-        
+
         if not 'id:' in sendstring: # probably response to command not via buffer
             sendstring = 'id:'+str(self.host_id)+'\n'+sendstring
             log.warning('added id to the sendstring to '+str(self.saddr)+': '+sendstring)
-        
+
         self.traffic[1] = self.traffic[1] + len(sendstring) # adding to the outgoing UDP byte counter
 
         if 'led' in dir(self):
             self.led.commLED(0) # off, blinking shows sending and time to ack
-        
+
         try:
             sendlen = self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr) # tagastab saadetud baitide arvu
             self.traffic[1] += sendlen # traffic counter udp out
@@ -513,7 +522,7 @@ class UDPchannel():
         except:
             #msg = 'udp send failure to '+str(repr(self.saddr))+' for '+str(int(self.ts - self.ts_udpsent))+' s, '+str(self.linecount)+' rows dumped, '+str(self.undumped)+' undumped' # cannot send, problem with connectivity
             #syslog(msg)
-            msg = 'send FAILURE to'+str(self.saddr)+' for '+str(int(self.ts - self.ts_udpsent))+' s, recreating socket at age 500' 
+            msg = 'send FAILURE to'+str(self.saddr)+' for '+str(int(self.ts - self.ts_udpsent))+' s, recreating socket at age 500'
             log.warning(msg)
             self.ts_udpunsent = self.ts # last UNsuccessful udp send
             traceback.print_exc()
@@ -549,8 +558,8 @@ class UDPchannel():
         ''' tykeldab in keyvaluega datagrammi, igas jupois kordab id vaartust '''
         dataout = []
         if "id:" in data:
-            lines = data[data.find("id:")+3:].splitlines() 
-            id = lines[0] 
+            lines = data[data.find("id:")+3:].splitlines()
+            id = lines[0]
             incount = len(data.split('in:')) - 1 # 0 if n is missing
             if incount > 1:
                 for i in range(incount):
@@ -566,7 +575,7 @@ class UDPchannel():
             log.info('invalid data from server, missing id')
         return dataout
 
-    
+
     def udpread(self):
         ''' Checks received data for monitoring server to see if the data contains key(s) "in:",
             then deletes the rows with this inum in the sql table.
@@ -610,13 +619,13 @@ class UDPchannel():
                     log.warning("invalid id "+in_id+" in server message from "+str(raddr[0])) # this is not for us!
                     datagram = ''
                     return {} # error condition, traffic counter was still increased
-                else:
-                    #log.info('got ack or cmd from server '+str(raddr[0])) #### 
+                else: # valid id in the message from the server
+                    log.debug('got ack or cmd from server '+str(raddr[0])) ####
                     self.sk.up()
                     self.ts_udpgot = self.ts # timestamp of last udp received
                     if 'led' in dir(self):
                         self.led.commLED(1) # data from server, comm OK
-                    
+
                 indata = self.datasplit(datagram)  # into pieces with separate id and in if exists
                 for data in indata:
                     lines=data.splitlines() # split message into key:value lines
@@ -630,7 +639,7 @@ class UDPchannel():
                                 msg='got setup/cmd reg:val '+sregister+':'+svalue  # need to reply in order to avoid retransmits of the command(s)
                                 log.info(msg)
                                 data_dict.update({ sregister : svalue }) # in and id are not included in dict
-                            
+
                             else:
                                 if sregister == "in": # one such a key in message
                                     instr = data[data.find("in:")+3:].splitlines()[0].split(',')[0]
@@ -655,7 +664,7 @@ class UDPchannel():
                                             time.sleep(1)
                                         self.conn.commit() # buff2server transaction end
 
-                return data_dict # possible key:value pairs here for setup change or commands. 
+                return data_dict # possible key:value pairs here for setup change or commands.
                 # returns {} in case of ack with no cmd. datadict does not contain id or in values.
         else:
             return None

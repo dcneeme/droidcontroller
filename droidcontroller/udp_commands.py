@@ -376,11 +376,11 @@ class RegularComm(SQLgeneral): # r
     '''
 
     def __init__(self, interval = 120): #
-        self.interval=interval # todo_proc() retries
-        self.app_start=int(time.time())
-        self.ts_regular=self.app_start - interval # for immediate sending on start
-        self.ts=self.app_start
-        self.uptime=[0,0,0]
+        self.interval = interval # todo_proc() retries
+        self.app_start = int(time.time())
+        self.ts_regular = self.app_start - interval # for immediate sending on start
+        self.ts = self.app_start
+        self.uptime = [0,0,0]
         self.host_ip = 'unknown' # controller ip
         self.cpV = 0 # cpu load
         
@@ -463,7 +463,6 @@ class RegularComm(SQLgeneral): # r
         
         if self.ts > self.ts_regular + self.interval: # time to send again
 
-
             self.sync_uptime()
             sendstring=''
             
@@ -518,6 +517,7 @@ class RegularComm(SQLgeneral): # r
             udp.udpsend(sendstring) # SEND AWAY directly, omitting buffer
 
             return res # None if nothing sent
+            
 
     def alive_fork(self, alivecmd, interval = 0): # spawn a process indicating activity, start via regular actions (not too often)
         ''' to enable checking application activity the process with lifetime of 2*interval is started via subexec() 
