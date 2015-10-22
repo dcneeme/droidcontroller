@@ -67,22 +67,30 @@ class ControllerApp(object): # default modbus address of io in controller = 1
     def __init__(self, app, mba = 1, mbi = 0):
         self.app = app # client-specific main script
         self.mba = mba # controller io modbus address if dc6888
-        self.mbi = mbi # io channel for controller 
+        self.mbi = mbi # io channel for controller
+        self.running = 0 # 999 feed enabled if running only
+        self.get_AVV(inspect.stack()[1]) # caller name and hw version
+
         self.loop = tornado.ioloop.IOLoop.instance()
         udp.add_reader_callback(self.udp_reader)
-        
+
         self.udpcomm_scheduler = tornado.ioloop.PeriodicCallback(self.udp_comm, 1500, io_loop = self.loop) # send udp every 1.5s
         self.regular_scheduler = tornado.ioloop.PeriodicCallback(self.regular_svc, 60000, io_loop = self.loop) # send regular svc
         self.di_scheduler = tornado.ioloop.PeriodicCallback(self.di_reader, 50, io_loop = self.loop) # read DI asap
         self.ai_scheduler = tornado.ioloop.PeriodicCallback(self.ai_reader, 10000, io_loop = self.loop) # ai 10 s
         self.cal_scheduler = tornado.ioloop.PeriodicCallback(self.cal_reader, 3600000, io_loop = self.loop) # gcal 1 h
-        
+
         self.udpcomm_scheduler.start()
         self.regular_scheduler.start()
         self.di_scheduler.start()
         self.ai_scheduler.start()
         self.cal_scheduler.start()
-        frm = inspect.stack()[1]
+        log.info('ControllerApp instance created. '+self.AVV)
+
+
+    def get_AVV(self, frm):
+        ''' Get the name of calling customer-specific script and controller hw version as self.AVV '''
+        #frm = inspect.stack()[1]
         mod = inspect.getmodule(frm[0])
         modname = str(mod).split("'")[3]
         filename = os.path.basename(modname)
@@ -101,27 +109,24 @@ class ControllerApp(object): # default modbus address of io in controller = 1
             self.AVV += '2\n' # critical status
         else:
             self.AVV += '0\n'
-                    
-        log.info('ControllerApp instance created by '+filename+' from '+str(mod_mtime)+', '+self.AVV)
-        #self.reset_sender_timeout() # to start
-        
+
 
     def udp_comm(self): # only send
         sys.stdout.write('U') # dot without newline
         sys.stdout.flush()
         udp.iocomm() # chk buff and send to monitoring
-        
+
     def udp_reader(self, udp, fd, events): # no timer!
-        ##print('reading udp')
+        self.running = 1 # ioloop must be started if udp_reader was called
         if events & self.loop.ERROR:
             log.error('UDP socket error!')
         elif events & self.loop.READ:
             got = udp.udpread() # loeb ainult!
             if got != None: ## at least ack received
-                if got != {}: 
+                if got != {}:
                     log.info('udp_reader got from server '+str(got))
                     self.got_parse(got) # see next def
-                
+
                 if udp.sk.get_state()[3] == 1: # firstup
                     self.firstup()
 
@@ -131,10 +136,10 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         udp.send(['TCS',1,'TCW','?']) # restore via buffer
         for i in range(3):
             udp.send(['H'+str(i+1)+'CS',1,'H'+str(i+1)+'CW','?']) # cumulative heat energy restoration via buffer
-        
+
         ac.ask_counters() # restore values from server
         log.info('******* uniscada connectivity up, sent AVV and tried to restore counters and some variables ********')
-                    
+
     def powerbreak(self):
         # age and neverup taken into account from udp.sk statekeeper instance
         ''' 5V power break for cold reboot '''
@@ -153,12 +158,12 @@ class ControllerApp(object): # default modbus address of io in controller = 1
             #if that does not work, appd and python main* must be stopped, to cause 5V reset without 0xFEED functionality
         except:
             traceback.print_exc()
-            
+
         try:
             p.subexec('/root/d4c/killapp',0) # to make sure power will be cut in the end
         except:
             log.warning('executing /root/d4c/killapp failed!')
-                
+
     def got_parse(self, got):
         ''' check the ack or cmd from server '''
         if got != {} and got != None: # got something from monitoring server
@@ -178,7 +183,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
             #print('di change detected: '+str(di_dict))
             log.info('di change detected: '+str(di_dict))
             self.app_main()
-                    
+
     def ai_reader(self): # AICO reader
         #print('reading ai, co')
         sys.stdout.write('A') # dot without newline
@@ -192,13 +197,13 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         self.reset_sender_timeout()
 
     def regular_svc(self): # FIXME - send on change too! pakkida?
-        sys.stdout.write('R') # 
+        sys.stdout.write('R') #
         sys.stdout.flush()
         r.regular_svc() # UPW, UTW, ipV, baV, cpV. mfV are default services.
         skstate = udp.sk.get_state() # udp conn statekeeper
-        if skstate[0] == 0 and skstate[1] > 300 + skstate[2] * 300: # total 10 min down, cold reboot needed
+        if self.running != 0 and skstate[0] == 0 and skstate[1] > 300 + skstate[2] * 300: # total 10 min down, cold reboot needed
             self.powerbreak() # 999 feed to restart via 5V break
-    
+
     def cal_reader(self): # gcal  refresh, call ed by customer_app
         print('FIXME cal sync')
 
@@ -215,4 +220,22 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         # if res... # saab otsustada kas saata vms.
         self.udp_comm() # self.udp_sender()
 
+    def commtest(self):
+        ''' Use for testing from iomain_xxx, cua.ca.commtest() '''
+        log.info('testing modbus and udp communication')
+        self.di_reader()
+        self.ai_reader()
+        self.udp_comm()
+        time.sleep(1)
+        #self.udp_reader(udp, fd, events) # see nii ei toimi
+        got = udp.udpread() # loeb ainult!
+        if got != None: ## at least ack received
+            if got != {}:
+                log.info('udp_reader got from server '+str(got))
+                self.got_parse(got) # see next def
+            if udp.sk.get_state()[3] == 1: # firstup
+                self.firstup()
 
+    def apptest(self):
+        ''' testing app part in the calling iomain script'''
+        self.app('test')
