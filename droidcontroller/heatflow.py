@@ -87,7 +87,7 @@ class FlowRate:
     It is assumed that flow is stable when the pump works. Calculation is based on averaging.
     Volume counter (if present) is used to check and correct thee flowrate result.
     '''
-    def __init__(self, litres_per_pulse = 10, maxpulseinc = 5, maxflowrate = 3): # maxflowrate l/s
+    def __init__(self, litres_per_pulse = 10, maxpulseinc = 15, maxflowrate = 3): # maxflowrate l/s
         self.litres_per_pulse = litres_per_pulse #
         self.flowrate = [0, 0]
         self.maxflowrate = maxflowrate
@@ -98,7 +98,7 @@ class FlowRate:
         self.pulsecount = [0, 0] # separate for both edges
         self.startvolume = [ None, None ]
         self.lastvolume = [ None, None ]
-        self.maxpulseinc = maxpulseinc
+        self.maxpulseinc = maxpulseinc # max allowed pulse count increase between calculations
         log.info('FlowRate init')
 
     def update(self, di_pump, di_pulse, volume = None): # execute often not to lose pulses!
