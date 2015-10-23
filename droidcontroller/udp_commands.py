@@ -13,9 +13,9 @@ try:
     import psutil
 except:
     log.warning('psutil import failed!')
-    
+
 from droidcontroller.sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
-s=SQLgeneral() 
+s=SQLgeneral()
 
 
 class Commands(SQLgeneral): # p
@@ -26,9 +26,9 @@ class Commands(SQLgeneral): # p
     def __init__(self, OSTYPE):
         ''' PSTYPE not used since 22.6.2015. vpnon and vpnoff must be present in curr dir! '''
         self.todocode = 0 # todo_proc() retries
-        self.vpn_start = '/root/d4c/vpnon' 
+        self.vpn_start = '/root/d4c/vpnon'
         self.vpn_stop = '/root/d4c/vpnoff'
-        
+
 
 
     def free(path='./'): #returns free MB and percentage of given fs (can be current fs './' as well) # FIXME!
@@ -60,7 +60,7 @@ class Commands(SQLgeneral): # p
         A dictionary member may also present a service value, in which case the according sql table is updated.
         The dictionary members that are not recognized, are ignored and not returned.
         Returns string TODO or ''
-        
+
         '''
 
         TODO = ''
@@ -98,11 +98,11 @@ class Commands(SQLgeneral): # p
                     #udp.syslog(msg)
                     if TODO == '': # no change if not empty
                         TODO = value # command content to be parsed and executed
-                        
+
                 #return immediately the cmd to avoid unnecessary repeated execution
                 sendstring = key+':'+value+'\n' # return exactly the same what we got to clear newstate. must NOT be forwarded to nagios
                 udp.udpsend(sendstring) # no buffering here
-                
+
 
 
 
@@ -278,7 +278,7 @@ class Commands(SQLgeneral): # p
                 else:
                     log.warning('INVALID parameter count for cmd '+TODO)
                     todocode = 2
-                    
+
             # start scripts in parallel (with 10s pause in this channelmonitor). cmd:run,nimi,0 # 0 or 1 means bg or fore
             # use background normally, the foreground process will open a window and keep it open until closed manually (in android)
             elif TODO.split(',')[0] == 'run': # FIXME! below is for android only
@@ -336,16 +336,16 @@ class Commands(SQLgeneral): # p
 
             else:
                 log.warning('UNIMPLEMENTED cmd '+cmd)
-                
-                
-                
+
+
+
             # common part for all commands
             if todocode == 0: # success with TODO execution
                 msg = 'remote command '+TODO+' successfully executed'
                 log.info(msg)
                 sendstring += 'ERS:0\n'
                 TODO='' # no more execution
-                
+
             else: # no success
                 msg='remote command '+TODO+' execution failed or incomplete on try '+str(pulltry)
                 sendstring += 'ERS:2\n'
@@ -358,7 +358,7 @@ class Commands(SQLgeneral): # p
                     msg = msg+', giving up TODO='+TODO+', todocode='+str(todocode)
                     TODO=''
                 log.warning(msg)
-                
+
             #udp.syslog(msg)
             sendstring += 'ERV:'+msg+'\n' # msh cannot contain colon or newline
             udp.udpsend(sendstring) # SEND AWAY. this can go directly, omitting buffer
@@ -368,7 +368,7 @@ class Commands(SQLgeneral): # p
         else:
             pulltry = 0 # next time like first time
 
-           
+
 
 class RegularComm(SQLgeneral): # r
     ''' Checks the incoming datagram members (key,value) for commands and setup variables.
@@ -383,7 +383,7 @@ class RegularComm(SQLgeneral): # r
         self.uptime = [0,0,0]
         self.host_ip = 'unknown' # controller ip
         self.cpV = 0 # cpu load
-        
+
         try:
             self.sync_uptime() # sys apptime to uptime[0]
             #uptime[0]=int(self.subexec('cut -f1 -d. /proc/uptime',1)) # should be avoided on npe, use only once
@@ -403,12 +403,12 @@ class RegularComm(SQLgeneral): # r
         sockfd = sock.fileno()
         SIOCGIFADDR = 0x8915
         ip = None
-        
+
         if iface == 'auto':
             ifacelist = ['tun0','wlan0','eth0'] # for auto
         else:
             ifacelist = [iface] # for NOT auto
-            
+
         for iface in ifacelist:
             ifreq = struct.pack('16sH14s', iface.encode('utf-8'), socket.AF_INET, b'\x00'*14)
             try:
@@ -417,13 +417,13 @@ class RegularComm(SQLgeneral): # r
                 break
             except:
                 pass
-            
+
         if ip != None:
             return socket.inet_ntoa(ip)
         else:
             return '127.0.0.1' # no other interface up
-        
-    
+
+
     def subexec(self, exec_cmd, submode = 1): # submode 0 - returns exit code only, 1 - waits for output, 2 - forks to background. use []
         ''' shell command execution. if submode 0-, return exit staus.. if 1, exit std output produced.
             exec_cmd is a list of cmd and parameters! use []
@@ -460,18 +460,18 @@ class RegularComm(SQLgeneral): # r
         sendstring = ''
         age = 0
         agestatus = 0
-        
+
         if self.ts > self.ts_regular + self.interval: # time to send again
 
             self.sync_uptime()
             sendstring=''
-            
+
             ## udp.send() jaoks servicetuple
             #sta_reg = str(servicetuple[0])
             #status = int(servicetuple[1])
             #val_reg = str(servicetuple[2])
             #value = str(servicetuple[3])
-            
+
             for svc in svclist:
                 if svc == 'UTW' or svc == 'TCW': # traffic
                     valuestring = str(udp.traffic[0])+' '+str(udp.traffic[1])+' '+str(tcp.traffic[0])+' '+str(tcp.traffic[1])
@@ -479,37 +479,37 @@ class RegularComm(SQLgeneral): # r
                         status = 0 # ok
                     else:
                         status = 1
-                    
+
                 elif svc == 'ULW' or svc == 'UPW': # uptime
                     valuestring = str(self.uptime[0])+' '+str(self.uptime[1]) # diagnostic uptimes, add status!
                     if (self.uptime[0] > 1800) and (self.uptime[0] > 1800):
                     #    sendstring += '0\n' # ok
-                        status = 0 
+                        status = 0
                     else:
                         status = 1
-                
+
                 elif svc == 'IPV' or svc == 'ip' or svc == 'ipV': # ip address currently in use
                     valuestring = self.get_host_ip() # ip address in use from a list starting with tun0
-                
+
                 elif svc == 'mfV': # free memory
                     valuestring = str(psutil.phymem_usage()[2]) # free memory in bytes
-                
-                elif svc == 'cpV': # free memory
+
+                elif svc == 'cpV': # cpu load %
                     self.cpV = (self.cpV + psutil.cpu_percent())/2.0
                     valuestring = str(int(round(self.cpV,0))) # cpu load %
-                    
+
                 else:
                     valuestring = 'regular service '+svc+' not yet supported'
-                    
+
                 if valuestring != None and len(valuestring) > 0:
                     res += udp.send([svc[:-1]+'S', status, svc, valuestring]) # via buffer. udp.send() adds ts
                     log.info('added to buffer regular service ' + svc+':'+valuestring)
                     ## NB! cmd or ERV responses passing the buffer, see udp.udpsend() uses above and also below.
                 else:
                     log.warning('regular svc '+svc+' not supported!')
-                    
+
             self.ts_regular = self.ts
-            age = udp.get_age() # send buffer age from uniscada 
+            age = udp.get_age() # send buffer age from uniscada
             agestatus = 1
             if age < 10 and age >= 0:
                 agestatus = 0
@@ -517,10 +517,10 @@ class RegularComm(SQLgeneral): # r
             udp.udpsend(sendstring) # SEND AWAY directly, omitting buffer
 
             return res # None if nothing sent
-            
+
 
     def alive_fork(self, alivecmd, interval = 0): # spawn a process indicating activity, start via regular actions (not too often)
-        ''' to enable checking application activity the process with lifetime of 2*interval is started via subexec() 
+        ''' to enable checking application activity the process with lifetime of 2*interval is started via subexec()
             the script name is descriptive and the content is sleep
         '''
         if interval == 0:
@@ -537,5 +537,5 @@ class RegularComm(SQLgeneral): # r
 
     def set_host_ip(self, ip): # deprecated, get_host_ip() finds the ip itself dynamically
         return 0
-    
-    ## END ## 
+
+    ## END ##
