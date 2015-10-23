@@ -449,7 +449,7 @@ class RegularComm(SQLgeneral): # r
         log.debug('uptimes sys, app, app_start_uptime '+str(self.uptime))
 
 
-    def regular_svc(self, svclist = ['UPW','TCW','ipV','cpV']): # , 'mfV', 'd2W']): # baV (buffer age) is always sent, omitting buffer! kernel 4 psutil?
+    def regular_svc(self, svclist = ['UPW','TCW','ipV','cpV','mfV']): # , 'd2W']): # baV (buffer age) is always sent, omitting buffer!
         ''' sends regular service messages that are not related to aichannels, dichannels or counters.
             Returns number of bytes sent, None if send queue was not appended at this time.
         '''
