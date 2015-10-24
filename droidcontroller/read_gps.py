@@ -32,7 +32,6 @@ import time
 import serial
 import traceback
 import re
-#import pynmea2 # gps parser
 
 import sys, logging
 logging.basicConfig(stream=sys.stderr, level=logging.INFO)
@@ -46,7 +45,6 @@ class ReadGps:
     ''' Read and decode GPS data from serial port. Return lat lng coordinates. '''
     def __init__(self, port='auto', autokey='Prolific', tout=1, speed=4800, model='PL2303'):
         ports = list(serial.tools.list_ports.comports())
-        #found = 0
         self.port = None
         if port == 'auto':
             try:
@@ -63,22 +61,23 @@ class ReadGps:
         self.tout = tout
         self.speed = speed
         self.model = model
+        self.lines = []
         if self.port != None:
             try:
                 self.ser = serial.Serial(self.port, self.speed, timeout=tout, parity=serial.PARITY_NONE) # also opening the port
                 self.errors = 0 # every success zeroes
                 self.gpsdata = '' # last message
-                self.lines = []
+                
                 if self.ser.isOpen():
                     log.info('ReadGps connection for receiver model '+self.model+' successful on port '+self.port)
                 else:
                     log.error('ReadGps connection FAILED on port '+str(self.port)) # port can be None!!
             except:
                 log.warning('NO suitable USB port found!')
-                self.close()
+                #self.close()
         else:
             log.warning('GPS port None...')
-            self.close()
+            #self.close()
 
     def close(self):
         ''' Use this to get rid of the instance if not required '''

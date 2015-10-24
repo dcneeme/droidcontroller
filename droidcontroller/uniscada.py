@@ -783,7 +783,7 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
 
         if '.gz' in filename or '.tgz' in filename: # packed already
             pass
-        else: # lets unpack too
+        else: # lets pack
             f_in = open(filename, 'rb')
             f_out = gzip.open(filename+'.gz', 'wb')
             f_out.writelines(f_in)
@@ -823,21 +823,21 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
             too if filename contains .gz or tgz and succesfully retrieved.
             Parameter start=0 normally, higher with resume.
         '''
-        oksofar=1 # success flag
-        filename2='' # for uncompressed from the downloaded file
-        filepart=filename+'.part' # temporary, to be renamed to filename when complete
-        filebak=filename+'.bak'
-        dnsize=0 # size of downloaded file
-        if start>filesize:
-            msg='pull parameters: file '+filename+' start '+str(start)+' above filesize '+str(filesize)
+        oksofar = 1 # success flag
+        filename2 = '' # for uncompressed from the downloaded file
+        filepart = filename+'.part' # temporary, to be renamed to filename when complete
+        filebak = filename+'.bak'
+        dnsize = 0 # size of downloaded file
+        if start > filesize:
+            msg = 'pull parameters: file '+filename+' start '+str(start)+' above filesize '+str(filesize)
             log.debug(msg)
             #udp.syslog(msg)
             return 99 # illegal parameters or file bigger than stated during download resume
 
         req = 'http://'+self.supporthost+self.directory+self.host_id+'/'+filename
-        pullheaders={'Range': 'bytes=%s-' % (start)} # with requests
+        pullheaders = {'Range': 'bytes=%s-' % (start)} # with requests
 
-        msg='trying '+req+' from byte '+str(start)+' using '+repr(pullheaders)
+        msg = 'trying '+req+' from byte '+str(start)+' using '+repr(pullheaders)
         log.info(msg)
         #udp.syslog(msg)
         try:
@@ -846,22 +846,22 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
             output.write(response.content)
             output.close()
         except:
-            msg='pull: partial or failed download of temporary file '+filepart+' '+str(sys.exc_info()[1])
+            msg = 'pull: partial or failed download of temporary file '+filepart+' '+str(sys.exc_info()[1])
             log.warning(msg)
             #udp.syslog(msg)
             #traceback.print_exc()
 
         try:
-            dnsize=os.stat(filepart)[6]  # int(float(subexec('ls -l '+filename,1).split(' ')[4]))
+            dnsize = os.stat(filepart)[6]  # int(float(subexec('ls -l '+filename,1).split(' ')[4]))
         except:
-            msg='pull: got no size for file '+os.getcwd()+'/'+filepart+' '+str(sys.exc_info()[1])
+            msg = 'pull: got no size for file '+os.getcwd()+'/'+filepart+' '+str(sys.exc_info()[1])
             print(msg)
             #udp.syslog(msg)
             #traceback.print_exc()
-            oksofar=0
+            oksofar = 0
 
         if dnsize == filesize: # ok
-            msg='pull: file '+filename+' download OK, size '+str(dnsize)
+            msg = 'pull: file '+filename+' download OK, size '+str(dnsize)
             print(msg)
             #udp.syslog(msg)
 
@@ -870,20 +870,20 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
                 #msg='renamed '+filename+' to '+filebak
             except:
                 #traceback.print_exc()
-                msg='FAILED to rename '+filename+' to '+filebak+' '+str(sys.exc_info()[1])
+                msg = 'FAILED to rename '+filename+' to '+filebak+' '+str(sys.exc_info()[1])
                 print(msg)
                 #udp.syslog(msg)
-                oksofar=0
+                oksofar = 0
 
 
             try:
                 os.rename(filepart, filename) #rename filepart to filename2
                 #msg='renamed '+filepart+' to '+filename
             except:
-                msg='FAILED to rename '+filepart+' to '+filename+' '+str(sys.exc_info()[1])
+                msg = 'FAILED to rename '+filepart+' to '+filename+' '+str(sys.exc_info()[1])
                 print(msg)
                 #udp.syslog(msg)
-                oksofar=0
+                oksofar = 0
                 #traceback.print_exc()
 
             if oksofar == 0: # trouble, exit
@@ -891,7 +891,7 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
                 return 1
 
             if '.gz' in filename: # lets unpack too
-                filename2=filename.replace('.gz','')
+                filename2 = filename.replace('.gz','')
                 try:
                     os.rename(filename2, filename2+'.bak') # keep the previous versioon if exists
                 except:
@@ -903,11 +903,11 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
                     output = open(filename2,'wb')
                     output.write(f.read());
                     output.close() # file with filename2 created
-                    msg='pull: gz file '+filename+' unzipped to '+filename2+', previous file kept as '+filebak
+                    msg = 'pull: gz file '+filename+' unzipped to '+filename2+', previous file kept as '+filebak
                     log.warning(msg)
                 except:
                     os.rename(filename2+'.bak', filename2) # restore the previous versioon if unzip failed
-                    msg='pull: file '+filename+' unzipping failure, previous file '+filename2+' restored. '+str(sys.exc_info()[1])
+                    msg = 'pull: file '+filename+' unzipping failure, previous file '+filename2+' restored. '+str(sys.exc_info()[1])
                     #traceback.print_exc()
                     log.info(msg)
                     #udp.syslog(msg)
@@ -919,11 +919,11 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
                     f = tarfile.open(filename,'r')
                     f.extractall() # extract all into the current directory
                     f.close()
-                    msg='pull: tgz file '+filename+' successfully unpacked'
+                    msg = 'pull: tgz file '+filename+' successfully unpacked'
                     log.info(msg)
                     #udp.syslog(msg)
                 except:
-                    msg='pull: tgz file '+filename+' unpacking failure! '+str(sys.exc_info()[1])
+                    msg = 'pull: tgz file '+filename+' unpacking failure! '+str(sys.exc_info()[1])
                     #traceback.print_exc()
                     log.warning(msg)
                     #udp.syslog(msg)
@@ -950,13 +950,13 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
 
         else:
             if dnsize<filesize:
-                msg='pull: file '+filename+' received partially with size '+str(dnsize)
+                msg = 'pull: file '+filename+' received partially with size '+str(dnsize)
                 log.warning(msg)
                 #udp.syslog(msg)
                 self.traffic[0] += dnsize
                 return 1 # next try will continue
             else:
-                msg='pull: file '+filename+' received larger than unexpected, in size '+str(dnsize)
+                msg = 'pull: file '+filename+' received larger than unexpected, in size '+str(dnsize)
                 log.warning(msg)
                 #udp.syslog(msg)
                 self.traffic[0] += dnsize
@@ -964,8 +964,8 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
 
 
     def makecalendar(self, table='calendar'): # creates  buffer table in memory for calendar events
-        Cmd='drop table if exists '+table
-        sql="CREATE TABLE "+table+"(title,timestamp,value);CREATE INDEX ts_calendar on "+table+"(timestamp);" # semicolon needed for NPE for some reason!
+        Cmd = 'drop table if exists '+table
+        sql = "CREATE TABLE "+table+"(title,timestamp,value);CREATE INDEX ts_calendar on "+table+"(timestamp);" # semicolon needed for NPE for some reason!
         try:
             self.conn.execute(Cmd) # drop the table if it exists
             self.conn.executescript(sql) # read table into database
@@ -973,7 +973,7 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
             msg='successfully (re)created table '+table
             return 0
         except:
-            msg='sqlread: '+str(sys.exc_info()[1])
+            msg = 'sqlread: '+str(sys.exc_info()[1])
             print(msg)
             #udp.syslog(msg)
             traceback.print_exc()
@@ -985,15 +985,15 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
         ''' google calendar events via monitoring server '''
         # example:   http://www.itvilla.ee/cgi-bin/gcal.cgi?mac=000101000001&days=10
         self.ts_cal=time.time() # calendar access timestamp
-        cur=self.conn.cursor()
+        cur = self.conn.cursor()
         req = 'http://www.itvilla.ee/cgi-bin/gcal.cgi?mac='+id+'&days='+str(days)+'&format=json'
-        headers={'Authorization': 'Basic YmFyaXg6Y29udHJvbGxlcg=='} # Base64$="YmFyaXg6Y29udHJvbGxlcg==" ' barix:controller
-        msg='starting gcal query '+req
+        headers = {'Authorization': 'Basic YmFyaXg6Y29udHJvbGxlcg=='} # Base64$="YmFyaXg6Y29udHJvbGxlcg==" ' barix:controller
+        msg = 'starting gcal query '+req
         print(msg) # debug
         try:
             response = requests.get(req, headers = headers)
         except:
-            msg='gcal query '+req+' failed!'
+            msg = 'gcal query '+req+' failed!'
             traceback.print_exc()
             print(msg)
             #udp.syslog(msg)
@@ -1002,7 +1002,7 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
         try:
             events = eval(response.content) # string to list
         except:
-            msg='getting calendar events failed for host id '+id
+            msg = 'getting calendar events failed for host id '+id
             print(msg)
             #udp.syslog(msg)
             traceback.print_exc() # debug
@@ -1012,25 +1012,25 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
         Cmd = "BEGIN IMMEDIATE TRANSACTION"
         try:
             self.conn.execute(Cmd)
-            Cmd="delete from calendar"
+            Cmd = "delete from calendar"
             self.conn.execute(Cmd)
             for event in events:
                 #print('event',event) # debug
-                columns=str(list(event.keys())).replace('[','(').replace(']',')')
-                values=str(list(event.values())).replace('[','(').replace(']',')')
+                columns = str(list(event.keys())).replace('[','(').replace(']',')')
+                values = str(list(event.values())).replace('[','(').replace(']',')')
                 #columns=str(list(event.keys())).replace('{','(').replace('}',')')
                 #values=str(list(event.values())).replace('{','(').replace('}',')')
                 Cmd = "insert into calendar"+columns+" values"+values
                 print(Cmd) # debug
                 self.conn.execute(Cmd)
             self.conn.commit()
-            msg='calendar table updated'
+            msg = 'calendar table updated'
             log.warning(msg)
             #udp.syslog(msg) # FIXME - syslog via UDPchannel does not work. syslog() is found, but not it's logaddr?
             #self.syslog(msg) # common parent UDP TCP channel
             return 0
         except:
-            msg='delete + insert to calendar table failed!'
+            msg = 'delete + insert to calendar table failed!'
             log.warning(msg)
             #udp.syslog(msg)
             log.warning('logaddr in tcp',self.logaddr)

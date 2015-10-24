@@ -137,12 +137,11 @@ class ControllerApp(object): # default modbus address of io in controller = 1
             log.error('UDP socket error!')
         elif events & self.loop.READ:
             got = udp.udpread() # loeb ainult!
-            if got != None: ## at least ack received
-                if got != {}:
-                    log.info('udp_reader got from server '+str(got))
-                    self.got_parse(got) 
+            while got != None and got != {}:
+                self.got_parse(got)
+                got = udp.udpread()
 
-                if udp.sk.get_state()[3] == 1: # firstup
+            if udp.sk.get_state()[3] == 1: # firstup
                     self.firstup()
 
     def firstup(self):
@@ -182,6 +181,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
     def got_parse(self, got):
         ''' check the ack or cmd from server '''
         if got != {} and got != None: # got something from monitoring server
+            log.info('parsing got '+str(got)) # voimalik et mitu jarjest?
             ac.parse_udp(got) # chk if setup or counters need to be changed
             d.parse_udp(got) # chk if setup ot toggle for di
             todo = p.parse_udp(got) # any commands or setup variables from server?
