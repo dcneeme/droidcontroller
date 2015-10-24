@@ -210,27 +210,31 @@ class UDPchannel():
         filename=table+'.sql' # the file to read from
         try:
             if os.path.getsize(filename) > 50:
-                sql = open(filename).read()
                 msg = 'found '+filename
+                sql = open(filename).read()
             else:
-                msg = filename+' missing, corrupt or empty!'
+                msg = filename+' corrupt or empty!'
                 log.info(msg)
+                time.sleep(1)
+                return 1
         except:
-            traceback.print_exc()
-            return 1 # no dump
-
+            msg = filename+' missing!'
+            log.warning(msg)
+            time.sleep(1)
+            return 1
+            
         Cmd = 'drop table if exists '+table
         try:
             self.conn.execute(Cmd) # drop the table if it exists
             self.conn.commit()
-            self.conn.executescript(sql) # read table into database
+            self.conn.executescript(sql) # read the existing table into database
             self.conn.commit()
             msg = 'successfully recreated table '+table
             log.info(msg)
             return 0
 
         except:
-            msg = 'sqlread() problem for '+table+': '+str(sys.exc_info()[1])
+            msg = filenmame+' corrupt: '+str(sys.exc_info()[1])
             log.warning(msg)
             traceback.print_exc()
             time.sleep(1)
@@ -240,7 +244,7 @@ class UDPchannel():
     def makebuffer(self): # rereads buffer dump or creates new empty one if dump does not exist
         ''' Old dumped rows in buffer will be sent first if not empty '''
 
-        if self.sqlread(self.table) == 0: # dump read
+        if self.sqlread(self.table) == 0: # dump read ok
             log.info('reusing buffer dump to fill the possible gaps')
             return 0
 
@@ -251,14 +255,12 @@ class UDPchannel():
             try:
                 self.conn.executescript(sql) # read table into database
                 self.conn.commit()
-                msg='no dump to restore, (re)created table '+self.table
+                msg='created empty table '+self.table
                 log.info(msg)
                 return 0
             except:
-                msg='failed to reread and create buffer table, '+str(sys.exc_info()[1])
+                msg='failed to create buffer table, '+str(sys.exc_info()[1])
                 log.warning(msg)
-                #syslog(msg)
-                #traceback.print_exc()
                 time.sleep(1)
                 return 1
 
