@@ -76,7 +76,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
 
         self.udpcomm_scheduler = tornado.ioloop.PeriodicCallback(self.udp_comm, 1500, io_loop = self.loop) # send udp every 1.5s
         self.regular_scheduler = tornado.ioloop.PeriodicCallback(self.regular_svc, 60000, io_loop = self.loop) # send regular svc
-        self.di_scheduler = tornado.ioloop.PeriodicCallback(self.di_reader, 50, io_loop = self.loop) # read DI asap
+        self.di_scheduler = tornado.ioloop.PeriodicCallback(self.di_reader, 10, io_loop = self.loop) # read DI asap. was 50 ms
         self.ai_scheduler = tornado.ioloop.PeriodicCallback(self.ai_reader, 10000, io_loop = self.loop) # ai 10 s
         self.cal_scheduler = tornado.ioloop.PeriodicCallback(self.cal_reader, 3600000, io_loop = self.loop) # gcal 1 h
 

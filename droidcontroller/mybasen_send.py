@@ -8,27 +8,24 @@ log = logging.getLogger(__name__)
 
 
 class MyBasenSend(object):
-    ''' Sends away the messages, combining different key:value pairs and adding host id and time. Listens for incoming commands and setup data.
-    Several UDPchannel instances can be used in parallel, to talk with different servers.
-
-    Used by sqlgeneral.py
-
+    ''' Sends away the messages, combining different key:value pairs and adding host id and time.
+        Listens for response, non-blocking, relies on tornado IOLoop.
     '''
 
     def __init__(self, aid = 'itvilla', uid = b'itvilla', passwd = b'MxPZcbkjdFF5uEF9', path= 'tutorial/testing/test_async'):
-        ''' Sender to mybase '''    
+        ''' Sender to mybase '''
         self.url = 'https://mybasen.pilot.basen.com/_ua/'+aid+'/v0.1/data'
         self.uid = uid # binary!
         self.passwd = passwd # binary!
         self.path = path
-        
+
 
     def set_channels(self, in_dict):
-        ''' channel configuration as dictionary {id:[name,type,coeff]} ''' 
+        ''' channel configuration as dictionary {id:[name,type,coeff]} '''
         self.channels2basen = in_dict
         log.info(str(self.channels2basen))
-        
-    
+
+
     def mybasen_rows(self, values2basen):
         ''' Create datta rows for mybasen '''
         rows = []
@@ -49,7 +46,7 @@ class MyBasenSend(object):
             log.info(row)
             rows.append(row)
         return rows
-            
+
 
     def domessage(self, rows):
         ''' Create json message for the given subpath and uid+password '''
@@ -67,25 +64,6 @@ class MyBasenSend(object):
         return msg
 
 
-   # def mybasen_send(self, message):
-        '''Send the message over https POST'''
-        #self.createhttpheaders()
-        #try:
-            #r = requests.post(self.url, data=message, headers=self.httpheaders) # NOT SUPPORTED!
-            #r = requests.put(self.url, data=message, headers=self.httpheaders) # returns status code
-        #    tornado.httpclient.AsyncHTTPClient().fetch(self.__class__.self.url + user, self._async_handle_request) # asunc
-            #log.info('response: '+str(r.content))
-       # except:
-        #    logging.error("https connection to mybasen failed")
-        #    traceback.print_exc()
-         #   return False
-
-        #if r != 200:
-        #    logging.error("https connection response not ok "+str(r))
-        #    return False
-       # return True
-
-
     def basen_send(self, values2basen):
         ''' the whole sending process with ioloop timer '''
         log.info('sending values '+str(values2basen))
@@ -93,20 +71,20 @@ class MyBasenSend(object):
             rows = self.mybasen_rows(values2basen)
             self.mybasen_send(self.domessage(rows))
 
-            
+
     def mybasen_send(self, message):
+        ''' Actually sending '''
         headers = { "Content-Type": "application/json; charset=utf-8" }
-        log.info('sending request')
-        tornado.httpclient.AsyncHTTPClient().fetch(self.url, self._async_handle_request, method='PUT', headers=headers, 
+        log.info('sending PUT request, body '+str(message))
+        tornado.httpclient.AsyncHTTPClient().fetch(self.url, self._async_handle_request, method='PUT', headers=headers,
             body=message, auth_username=self.uid, auth_password=self.passwd, auth_mode="basic")
-        log.info('request sent')
- 
- 
+
+
     def _async_handle_request(self, response):
-        log.info('response received')
+        ''' event of https put response '''
+        #log.info('response received')
         if response.error:
             log.error('response error: %s', str(response.error))
         else:
             log.info('response: %s', response.body)
-        
- 
+
