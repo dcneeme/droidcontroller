@@ -50,7 +50,8 @@ class UDPchannel():
         self.loghost = loghost
         self.logport = logport
         self.logaddr = (self.loghost,self.logport) # tuple
-
+        self.unsent_count = 0
+        
         self.traffic = [0,0] # UDP bytes in, out
         self.UDPSock = socket(AF_INET,SOCK_DGRAM)
         self.UDPSock.settimeout(receive_timeout)
@@ -276,7 +277,7 @@ class UDPchannel():
             traceback.print_exc()
 
     def dump_buffer(self):
-        ''' Writes the buffer table into a SQL-file to keep unsent data '''
+        ''' Writes the buffer table into a SQL-file to keep unsent data. syncs too! '''
         msg=self.table+' dump into '+self.table+'.sql'
         log.info(msg)
         try:
@@ -284,12 +285,14 @@ class UDPchannel():
                 for line in self.conn.iterdump(): # see dumbib koik kokku!
                     if self.table in line: # needed for one table only! without that dumps all!
                         f.write('%s\n' % line)
+            p.subexec('sync',0)
+            time.sleep(0.1)
             return 0
         except:
             msg = 'FAILURE dumping '+self.table+'! '+str(sys.exc_info()[1])
             log.warning(msg)
-            #syslog(msg)
             traceback.print_exc()
+            time.sleep(1)
             return 1
 
 
@@ -365,13 +368,12 @@ class UDPchannel():
             if linecount > self.linecount + 100: # dump again while the table keeps increasing
                 msg=str(linecount)+' messages to be dumped from table '+self.table+'!'
             elif linecount == 0 and self.linecount > 0: # dump empty table into sql file
-                msg='empty buffer to be dumped from table '+self.table+'!'
+                msg='empty buffer to be dumped from table '+self.table+', sync!'
 
             if msg != '':
                 log.info(msg)
-                self.dump_buffer() # dump to add more lines into sql file
+                self.dump_buffer() # dump to add more lines into sql file, syncs too
                 self.linecount = linecount # dumped rows
-
             self.undumped = linecount - self.linecount
             self.conn.commit() # buff2server transaction end
             return linecount # 0
@@ -527,10 +529,11 @@ class UDPchannel():
             msg = 'send FAILURE to'+str(self.saddr)+' for '+str(int(self.ts - self.ts_udpsent))+' s, recreating socket at age 500'
             log.warning(msg)
             self.ts_udpunsent = self.ts # last UNsuccessful udp send
-            traceback.print_exc()
+            #traceback.print_exc()
 
             if 'led' in dir(self):
                 self.led.alarmLED(1) # send failure
+            
             if self.ts - self.ts_udpsent > 500:
                 self.UDPSock = socket(AF_INET,SOCK_DGRAM)
                 self.UDPSock.settimeout(0.1)
@@ -701,13 +704,11 @@ class UDPchannel():
         return udpgot
 
     def iocomm(self): # for ioloop, send only
-        ''' Send to monitoring server '''
+        ''' Send to monitoring server, chk the unsent, dump '''
         self.ts = int(round(time.time(),0)) # current time
-        self.unsent() # delete too old records, dump buffer also if became empty!
-        #udpgot = self.udpread() # check for incoming udp data. FIXME: direct ack around buffer??
+        unsent_count = self.unsent() # delete too old records, dumps buffer and sync if needed!
         self.buff2server() # send away. the ack for this is available on next comm() hopefully
-        #return udpgot
-
+        
 
 class TCPchannel(UDPchannel): # used this parent to share self.syslog()
     ''' Communication via TCP (pull, push, calendar)  '''
