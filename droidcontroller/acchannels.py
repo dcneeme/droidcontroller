@@ -298,7 +298,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 else:
                     msg += ' -- no mb[]!'
 
-                log.debug(msg) ## log.info(msg) ###### See on hea kompaktne raw kontroll
+                log.info(msg) ###### See on hea kompaktne raw kontroll
 
             except:
                 msg += ' -- FAILED!'
@@ -325,7 +325,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         if len(result) - 1 >= i:
                             tcpdata = result[i]
                         else:
-                            log.warning('read_grp invalid, i='+str(i)+' while result='+str(result))
+                            log.warning('read_grp invalid, i='+str(i)+' while result='+str(result)+', mba '+str(mba)+', regadd '+str(regadd)+', count '+str(count)+', regtype '+regtype)
                     else: # something else, lengths other than 1 2 -2 not yet supported!
                         log.warning('unsupported counter word size '+str(wcount))
                         return 1
