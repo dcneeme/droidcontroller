@@ -526,7 +526,7 @@ class UDPchannel():
         except:
             #msg = 'udp send failure to '+str(repr(self.saddr))+' for '+str(int(self.ts - self.ts_udpsent))+' s, '+str(self.linecount)+' rows dumped, '+str(self.undumped)+' undumped' # cannot send, problem with connectivity
             #syslog(msg)
-            msg = 'send FAILURE to'+str(self.saddr)+' for '+str(int(self.ts - self.ts_udpsent))+' s, recreating socket at age 500, '+str(self.linecount)+' dumped rows'
+            msg = 'send FAILURE to'+str(self.saddr)+' for '+str(int(self.ts - self.ts_udpsent))+' s, recreating socket at age 100, '+str(self.linecount)+' dumped rows'
             log.warning(msg)
             self.ts_udpunsent = self.ts # last UNsuccessful udp send
             #traceback.print_exc()
@@ -534,7 +534,7 @@ class UDPchannel():
             if 'led' in dir(self):
                 self.led.alarmLED(1) # send failure
             
-            if self.ts - self.ts_udpsent > 500:
+            if self.ts - self.ts_udpsent > 100:
                 self.UDPSock = socket(AF_INET,SOCK_DGRAM)
                 self.UDPSock.settimeout(0.1)
                 log.info('**** recreated udp socket! *****')
