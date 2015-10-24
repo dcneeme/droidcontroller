@@ -42,6 +42,9 @@ class UDPchannel():
             log.warning('GPIOLED not imported')
 
         self.receive_timeout = receive_timeout
+        self.sk.dn() # initially no comm success registered
+        self.sk_send.dn()
+        
         self.set_copynotifier(copynotifier) # parallel to uniscada notification in another format
         self.host_id = id # controller ip as tun0 wlan0 eth0 127.0.0.1
         self.ip = ip # monitoring server
@@ -518,6 +521,14 @@ class UDPchannel():
         if 'led' in dir(self):
             self.led.commLED(0) # off, blinking shows sending and time to ack
 
+        # trying to restore udp connectivity
+        send_state = self.sk_send.get_state()
+        if send_state[0] == 0 and send_state[1] > 100:  ## send problem
+            log.warning('** udpreset due to send failure **')
+            self.sk_send.up()
+            self.sk_send.dn() # to restart timer
+            self.udpreset() # recreating socket
+
         try:
             sendlen = self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr) # tagastab saadetud baitide arvu
             self.traffic[1] += sendlen # traffic counter udp out
@@ -531,7 +542,7 @@ class UDPchannel():
         except:
             #msg = 'udp send failure to '+str(repr(self.saddr))+' for '+str(int(self.ts - self.ts_udpsent))+' s, '+str(self.linecount)+' rows dumped, '+str(self.undumped)+' undumped' # cannot send, problem with connectivity
             #syslog(msg)
-            msg = 'send FAILURE to'+str(self.saddr)+' for '+str(int(self.ts - self.ts_udpsent))+' s, recreating socket at age 100, '+str(self.linecount)+' dumped rows'
+            msg = 'send FAILURE to'+str(self.saddr)+' for '+str(int(self.ts - self.ts_udpsent))+' s, '+str(self.linecount)+' dumped rows'
             log.warning(msg)
             self.sk_send.dn() # FIXME this should be used instead of below...
             self.ts_udpunsent = self.ts # last UNsuccessful udp send
@@ -540,9 +551,6 @@ class UDPchannel():
             if 'led' in dir(self):
                 self.led.alarmLED(1) # send failure
 
-            if self.ts - self.ts_udpsent > 100:
-                self.udpreset()
-                self.ts_udpsent = self.ts # new delay starts
             return None
 
 
@@ -603,7 +611,6 @@ class UDPchannel():
             datagram = rdata.decode("utf-8") # python3 related need due to mac in hex
         except:
             #print('no new udp data received') # debug
-            #traceback.print_exc()
             return None
 
         if len(datagram) > 0: # something arrived
@@ -708,7 +715,7 @@ class UDPchannel():
         return udpgot
 
     def iocomm(self): # for ioloop, send only
-        ''' Send to monitoring server, chk the unsent, dump '''
+        ''' Send to monitoring server, chk the unsent, dump. Read on event! '''
         self.ts = int(round(time.time(),0)) # current time
         unsent_count = self.unsent() # delete too old records, dumps buffer and sync if needed!
         self.buff2server() # send away. the ack for this is available on next comm() hopefully

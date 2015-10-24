@@ -115,9 +115,24 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         sys.stdout.write('U') # dot without newline
         sys.stdout.flush()
         udp.iocomm() # chk buff and send to monitoring
+        # chk for udb receive ability
+        send_state = udp.sk_send.get_state()
+        receive_state = udp.sk.get_state()
+        if send_state[0] == 1 and send_state[1] > 30 and receive_state[0] == 0 and receive_state[1] > 30: ## receive problem
+            log.warning('** udp send ok but no answer. read buffer until empty! **') # if read buff not empty then no event from new data!
+            udp.sk.up()
+            udp.sk.dn() # to restart timer
+            got = udp.udpread()
+            while got != None and got != {}:
+                self.got_parse(got)
+                got = udp.udpread()
+            log.info('*** read buffer done we IOLoop!!!')
+            time.sleep(1)
+            
 
-    def udp_reader(self, udp, fd, events): # no timer!
-        self.running = 1 # ioloop must be started if udp_reader was called
+    def udp_reader(self, udp, fd, events): # no timer! on event!
+        ##return None ## test reaction on udp input wo ioloop event
+        self.running = 1 # ioloop must be running if udp_reader was called
         if events & self.loop.ERROR:
             log.error('UDP socket error!')
         elif events & self.loop.READ:
@@ -125,7 +140,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
             if got != None: ## at least ack received
                 if got != {}:
                     log.info('udp_reader got from server '+str(got))
-                    self.got_parse(got) # see next def
+                    self.got_parse(got) 
 
                 if udp.sk.get_state()[3] == 1: # firstup
                     self.firstup()
@@ -207,6 +222,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
     def cal_reader(self): # gcal  refresh, call ed by customer_app
         print('FIXME cal sync')
 
+
     def reset_sender_timeout(self):
         ''' Resetting ioloop timer '''
         ##print('FIXME timer reset')
@@ -227,7 +243,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         self.ai_reader()
         self.udp_comm()
         time.sleep(1)
-        #self.udp_reader(udp, fd, events) # see nii ei toimi
+        #self.udp_reader(udp, fd, events) # see nii ei toimi kui loop ei kai
         got = udp.udpread() # loeb ainult!
         if got != None: ## at least ack received
             if got != {}:
