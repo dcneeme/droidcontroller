@@ -9,7 +9,7 @@ import sqlite3
 import traceback
 from socket import *
 import sys, inspect
-import os
+import os, subprocess
 import gzip
 import tarfile
 import requests
@@ -285,7 +285,7 @@ class UDPchannel():
                 for line in self.conn.iterdump(): # see dumbib koik kokku!
                     if self.table in line: # needed for one table only! without that dumps all!
                         f.write('%s\n' % line)
-            p.subexec('sync',0)
+            subprocess.call('sync') # p.subexec('sync',0) # p not found here
             time.sleep(0.1)
             return 0
         except:
@@ -526,7 +526,7 @@ class UDPchannel():
         except:
             #msg = 'udp send failure to '+str(repr(self.saddr))+' for '+str(int(self.ts - self.ts_udpsent))+' s, '+str(self.linecount)+' rows dumped, '+str(self.undumped)+' undumped' # cannot send, problem with connectivity
             #syslog(msg)
-            msg = 'send FAILURE to'+str(self.saddr)+' for '+str(int(self.ts - self.ts_udpsent))+' s, recreating socket at age 500'
+            msg = 'send FAILURE to'+str(self.saddr)+' for '+str(int(self.ts - self.ts_udpsent))+' s, recreating socket at age 500, '+str(self.linecount)+' dumped rows'
             log.warning(msg)
             self.ts_udpunsent = self.ts # last UNsuccessful udp send
             #traceback.print_exc()
