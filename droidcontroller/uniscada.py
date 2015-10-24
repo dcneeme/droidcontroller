@@ -14,11 +14,14 @@ import gzip
 import tarfile
 import requests
 from  functools import partial # for add_reader_callback()
-import tornado
-import tornado.ioloop
-
 import logging
 log = logging.getLogger(__name__)
+try:
+    import tornado
+    import tornado.ioloop
+except:
+    log.warning('no tornado imported, ioloop not usable!')
+    time.sleep(2)
 
 class UDPchannel():
     ''' Sends away the messages, combining different key:value pairs and adding host id and time. Listens for incoming commands and setup data.
