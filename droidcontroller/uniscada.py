@@ -31,9 +31,9 @@ class UDPchannel():
     def __init__(self, id ='000000000000', ip='127.0.0.1', port=44445, receive_timeout=0.1, retrysend_delay=3, loghost='0.0.0.0', logport=514, copynotifier=None): # delays in seconds
         #from droidcontroller.connstate import ConnState
         from droidcontroller.statekeeper import StateKeeper
-        self.sk = StateKeeper(off_tout=300, on_tout=0) # conn state with up/down times.
-        # do hard reboot via 0xFEED when changed to down.
-        # what to do if never up? keep hard rebooting?
+        self.sk = StateKeeper(off_tout=300, on_tout=0) # conn state with up/down times based on udp received
+        self.sk_send = StateKeeper(off_tout=300, on_tout=0) # conn state with up/down times based on udp send
+        # it is possible that send is sucessful but nothing is received. try udp_reset then.
 
         try:
             from droidcontroller.gpio_led import GPIOLED
@@ -41,6 +41,7 @@ class UDPchannel():
         except:
             log.warning('GPIOLED not imported')
 
+        self.receive_timeout = receive_timeout
         self.set_copynotifier(copynotifier) # parallel to uniscada notification in another format
         self.host_id = id # controller ip as tun0 wlan0 eth0 127.0.0.1
         self.ip = ip # monitoring server
@@ -51,7 +52,7 @@ class UDPchannel():
         self.logport = logport
         self.logaddr = (self.loghost,self.logport) # tuple
         self.unsent_count = 0
-        
+
         self.traffic = [0,0] # UDP bytes in, out
         self.UDPSock = socket(AF_INET,SOCK_DGRAM)
         self.UDPSock.settimeout(receive_timeout)
@@ -223,7 +224,7 @@ class UDPchannel():
             log.warning(msg)
             time.sleep(1)
             return 1
-            
+
         Cmd = 'drop table if exists '+table
         try:
             self.conn.execute(Cmd) # drop the table if it exists
@@ -391,14 +392,17 @@ class UDPchannel():
 
 
     def udpreset(self):
-        ''' Reopen socket  s the first measure to reconnect '''
+        ''' Reopen socket as the first measure to reconnect '''
         self.UDPSock = socket(AF_INET,SOCK_DGRAM)
         self.UDPSock.settimeout(self.receive_timeout)
+        log.info('**** recreated udp socket! timeout '+str(self.receive_timeout)+' *****')
+        time.sleep(1)
 
 
     def buff2server(self): # send the buffer content
         ''' ONE UDP monitoring message creation and sending (using self.udpsend).
-            Happens based on already existing buff2server data. Only the oldest rows will be sent!
+            Based on already existing buff2server data, starting from the oldest rows.
+
             buff2server rows successfully sent will be later deleted by udpread()
             (based on one or more in: contained in the received  message).
         '''
@@ -412,10 +416,10 @@ class UDPchannel():
         age = 0 # the oldest, will be self.age later
         #log.info('...trying to select and send max '+str(limit)+' buffer lines')
 
-        #if self.sk.get_state()[0] == 0: # no conn
-        #    timetoretry = int(self.ts_udpunsent + 3 * self.retrysend_delay) # try less often during conn break
-        #else: # conn ok
-        #    timetoretry = int(self.ts_udpsent + self.retrysend_delay)
+        if self.sk.get_state()[0] == 0: # no conn
+            timetoretry = int(self.ts_udpunsent + 3 * self.retrysend_delay) # try less often during conn break
+        else: # conn ok
+            timetoretry = int(self.ts_udpsent + self.retrysend_delay)
         if self.ts_udpsent > self.ts_udpunsent:
             log.debug('using shorter retrysend_delay, conn ok') ##
             timetoretry = int(self.ts_udpsent + self.retrysend_delay)
@@ -481,7 +485,7 @@ class UDPchannel():
             if svc_count > 0: # there is something to be sent!
                 #sendstring = "in:" + str(self.inum) + ","+str(ts_created)+"\n" + sendstring # in alusel vastuses toimub puhvrist kustutamine
                 sendstring = "id:" + str(self.host_id) + "\n" + sendstring # alustame sellega datagrammi
-                log.debug('going to udpsend from buff2server, sendstring : '+sendstring) ##
+                log.info('going to udpsend from buff2server, svc_count '+str(svc_count)+', row limit: '+str(limit)+', retry in '+str(timetoretry - self.ts)+' s') ##
                 self.udpsend(sendstring, self.age) # sending away
             return 0
 
@@ -522,22 +526,22 @@ class UDPchannel():
             #syslog(msg)
             sendstring = ''
             self.ts_udpsent = self.ts # last successful udp send
+            self.sk_send.up() # send success
             return int(sendlen)
         except:
             #msg = 'udp send failure to '+str(repr(self.saddr))+' for '+str(int(self.ts - self.ts_udpsent))+' s, '+str(self.linecount)+' rows dumped, '+str(self.undumped)+' undumped' # cannot send, problem with connectivity
             #syslog(msg)
             msg = 'send FAILURE to'+str(self.saddr)+' for '+str(int(self.ts - self.ts_udpsent))+' s, recreating socket at age 100, '+str(self.linecount)+' dumped rows'
             log.warning(msg)
+            self.sk_send.dn() # FIXME this should be used instead of below...
             self.ts_udpunsent = self.ts # last UNsuccessful udp send
             #traceback.print_exc()
 
             if 'led' in dir(self):
                 self.led.alarmLED(1) # send failure
-            
+
             if self.ts - self.ts_udpsent > 100:
-                self.UDPSock = socket(AF_INET,SOCK_DGRAM)
-                self.UDPSock.settimeout(0.1)
-                log.info('**** recreated udp socket! *****')
+                self.udpreset()
                 self.ts_udpsent = self.ts # new delay starts
             return None
 
@@ -626,7 +630,7 @@ class UDPchannel():
                     return {} # error condition, traffic counter was still increased
                 else: # valid id in the message from the server
                     log.debug('got ack or cmd from server '+str(raddr[0])) ####
-                    self.sk.up()
+                    self.sk.up() # alive state
                     self.ts_udpgot = self.ts # timestamp of last udp received
                     if 'led' in dir(self):
                         self.led.commLED(1) # data from server, comm OK
@@ -708,7 +712,7 @@ class UDPchannel():
         self.ts = int(round(time.time(),0)) # current time
         unsent_count = self.unsent() # delete too old records, dumps buffer and sync if needed!
         self.buff2server() # send away. the ack for this is available on next comm() hopefully
-        
+
 
 class TCPchannel(UDPchannel): # used this parent to share self.syslog()
     ''' Communication via TCP (pull, push, calendar)  '''
