@@ -5,13 +5,14 @@ import logging
 log = logging.getLogger(__name__)
 
 
-class SpeedoMeter:
+class SpeedoMeter():
     ''' Counts the calls, return their number per second  '''
-
     def __init__(self, windowsize=100):
         ''' Calculations are based on sliding window of count() call timestamps. Counting can be started/stopped. '''
-        self.winsize = windowsize
+        self.windowsize = windowsize
         self.counting = False
+        self.ts_up = None
+        self.ts_dn = None
         self.reset()
         log.info('speedometer created with window size '+str(self.windowsize))
 
@@ -24,35 +25,38 @@ class SpeedoMeter:
     def start(self):
         ''' Starts counting '''
         self.counting = True
-        skiptime = time.time() - self.window[-1]
-        for i in range(len(self.window)):
-            self.window[i] += skiptime
+        self.ts_up = time.time()
+        if self.ts_dn:
+            skiptime = self.ts_up - self.ts_dn
+            for i in range(len(self.window)):
+                self.window[i] += skiptime
         log.info('speedometer (re)started')
 
     def stop(self):
         ''' Stops counting, window time is not increased '''
         self.counting = False
+        self.ts_dn = time.time()
         log.info('speedometer stopped')
 
-        
+
     def get_state(self):
         ''' Returns False if stopped, True if counting '''
         return self.counting
-        
-        
+
+
     def get_speed(self):
         ''' Return current count per second '''
         return self.speed
-        
-        
+
+
     def count(self):
         ''' Updates the counting window (if counting) and calculates the new self.speed. No output returned. '''
         if self.counting:
             self.window.append(time.time())
-            if len(self.window) > self.winsize:
+            if len(self.window) > self.windowsize:
                 del self.window[0] # remove the oldest
-        
-            len = len(self.window)
-            if len > 1:
-                self.speed = (len - 1) / (self.window[-1] - self.window[0])
+
+            lenn = len(self.window)
+            if lenn > 1:
+                self.speed = (lenn - 1) / (self.window[-1] - self.window[0])
                 log.info('current speed '+str(self.speed))
