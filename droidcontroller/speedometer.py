@@ -19,7 +19,6 @@ class SpeedoMeter():
     def reset(self):
         ''' initial state, but does not change counting state! '''
         self.window = []
-        self.speed = None
 
 
     def start(self):
@@ -46,9 +45,22 @@ class SpeedoMeter():
 
     def get_speed(self):
         ''' Return current count per second '''
-        return self.speed
+        lenn = len(self.window)
+        speed = None
+        if lenn > 1:
+            count = (lenn - 1)
+            ts_inc = self.window[-1] - self.window[0]
+            if ts_inc > 0:
+                speed = count / ts_inc
+                log.debug('current speed '+str(speed)+' ('+str(count)+' / ' +str(ts_inc)+')')
+            return speed
 
 
+    def get_window(self):
+        ''' For debugging '''
+        return self.window
+        
+        
     def count(self):
         ''' Updates the counting window (if counting) and calculates the new self.speed. No output returned. '''
         if self.counting:
@@ -56,7 +68,4 @@ class SpeedoMeter():
             if len(self.window) > self.windowsize:
                 del self.window[0] # remove the oldest
 
-            lenn = len(self.window)
-            if lenn > 1:
-                self.speed = (lenn - 1) / (self.window[-1] - self.window[0])
-                log.info('current speed '+str(self.speed))
+            
