@@ -12,6 +12,7 @@ ac = ACchannels(in_sql = 'aicochannels.sql', readperiod = 0, sendperiod = 25) # 
 from droidcontroller.dchannels import *
 d = Dchannels(readperiod = 0, sendperiod = 180) # di and do. immediate notification on change, read as often as possible
 # the previous block also generated sqlgeneral and uniscada instances, like s, udp, tcp
+from droidcontroller.speedometer import * # cycle speed
 
 OSTYPE='archlinux'
 print('OSTYPE',OSTYPE)
@@ -69,6 +70,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         self.mba = mba # controller io modbus address if dc6888
         self.mbi = mbi # io channel for controller
         self.running = 0 # 999 feed enabled if running only
+        self.spm = SpeedoMeter(windowsize = 100) # to see di speed
         self.get_AVV(inspect.stack()[1]) # caller name and hw version
 
         self.loop = tornado.ioloop.IOLoop.instance()
@@ -194,6 +196,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         sys.stdout.flush()
         d.doall()
         di_dict = d.get_chg_dict()
+        self.spm.count() # di speed calc
         if len(di_dict) > 0: #di_dict != {}: # change in di services
             #print('di change detected: '+str(di_dict))
             log.info('di change detected: '+str(di_dict))
