@@ -57,40 +57,22 @@ class CommModbus(Comm):
         self.errorcount = 0 # add here modbus problems, related to mba
         self.errors = {} # {mba:errcount}, per modbus address
         self.type = '' # normal modbus, may be changed to n or u for npe
-        self.port = None # only exists for tcp (rtu or tcp over tcp)
+        self.port = None # only for tcp or rtu over tcp, numeric not com port name!
+        self.host = None # can be com port name or ip address
+        self.speed = 19200 # default speed
+        self.parity = 'E' # default
+        
         self.mba_keepalive = kwargs.get('mba_keepalive',1) # this address must work, recreates mb[] if not
         #print(kwargs) # debug
             
-        if ('host' in kwargs):
+        if ('host' in kwargs): # tcp or serial
             self.host = kwargs.get('host','127.0.0.1')
-            ###############
-            if self.host == 'npe_io': # npe_io via subexec(), no pymodbus in use
-                self.type = 'n' # npe_io
-                log.info('CommModbus() init1: created CommModbus instance to use npe_read.sh and npe_write.sh via subprocess(), type',self.type)
-            elif self.host == 'npe_udpio': # npe_io via so_comm(), via udp port 444441 to read and 44442 to write.
-                self.type = 'u' # npe_udpio. do not forget to set this as channel type in sql too! FIXME: set up a client for that? ##############
-                #from droidcontroller.npechannels import NPEchannel # socat channel to use npe_io.sh for local io
-                #npe=NPEchannel(ip='127.0.0.1', port=44441) # universal (socat based udp) channel for both reading and writing
-                #self.timeout=timeout  # receive timeout, data in buffer waits for next time if not ready
-                #import time
-                from socket import socket, AF_INET, SOCK_DGRAM
-                self.UDPSock = socket(AF_INET,SOCK_DGRAM)
-                self.UDPSock.settimeout(0.1)
-                self.ip = '127.0.0.1' # FIXME: SHOULD BE BASED ON PORT NUMBER LIKE WITH XPORT
-                self.port = 44441
-                self.saddr = (self.ip,self.port)
-                self.datadict = {} # to give instant response from previous reading
-                #self.data=[]
-                #print('created npe channel to',self.saddr)
-                log.info('CommModbus() init1u: created CommModbus instance to use npe_io.sh over udp using params '+str(kwargs))
-            ###############
-            elif '/dev/tty' in self.host: # direct serial connection defined via host
-                from pymodbus.client.sync import ModbusSerialClient as ModbusClient
-                self.client = ModbusClient(method='rtu', stopbits=1, bytesize=8, parity='E', baudrate=19200, timeout=0.5, port=kwargs.get('host'))
-                #use improved by cougar ModbusClient package with expected response length calculation!
-                #otherwise 0.5 s tout is used for every transaction!!
-                #print('CommModbus() init2: created CommModbus instance for ModbusRTU over RS485 using params '+str(kwargs))
-                log.info('CommModbus() init2: created CommModbus instance for ModbusRTU over RS485 using params '+str(kwargs))
+            if '/dev/tty' in self.host: # direct serial connection defined via host
+                self.port = kwargs.get('host')
+                self.do_serialclient(port = self.port, speed = self.speed, parity = self.parity)
+                #from pymodbus.client.sync import ModbusSerialClient as ModbusClient
+                #self.client = ModbusClient(method='rtu', stopbits=1, bytesize=8, parity='E', baudrate=19200, timeout=0.5, port=kwargs.get('host'))
+                #log.info('CommModbus() init2: created CommModbus instance for ModbusRTU over RS485 using params '+str(kwargs))
                 
             elif ('port' in kwargs): # both host and port - must be tcp, but possibly rtu over tcp
                 self.port = kwargs.get('port')
@@ -108,7 +90,6 @@ class CommModbus(Comm):
                     except:
                         log.warning('failed to create CommModbus instance for ModbusRTU over TCP using params '+str(kwargs))
                         traceback.print_exc()
-                        #print('failed to create CommModbus instance for ModbusRTU over TCP using params '+str(kwargs))
                         
                 else: # normal modbustcp
                     self.type='' # normal modbus
@@ -116,19 +97,46 @@ class CommModbus(Comm):
                             host = self.host,
                             port = self.port )
                     log.info('CommModbus() init4: created CommModbus instance for ModbusTCP over TCP using params '+str(kwargs))
-                    #print('CommModbus() init4: created CommModbus instance for ModbusTCP over TCP using params '+str(kwargs))
-        else:
+            
+        else: # serial - siin port COM...?
             try:
-                port = kwargs.get('port')
-                from pymodbus.client.sync import ModbusSerialClient as ModbusClient
-                self.client = ModbusClient(method='rtu', stopbits=1, bytesize=8, parity='E', baudrate=19200, timeout=0.5, port=port)
+                self.port = kwargs.get('port')
+                self.do_serialclient(port = self.port, speed = self.speed, parity = self.parity) # change params later if needed via set_serial()
+                #from pymodbus.client.sync import ModbusSerialClient as ModbusClient
+                #self.client = ModbusClient(method='rtu', stopbits=1, bytesize=8, parity='E', baudrate=19200, timeout=0.5, port=port)
                 #print('CommModbus() init5: created CommModbus instance for ModbusRTU over RS485 using params '+str(kwargs))
-                log.info('CommModbus() init5: created CommModbus instance for ModbusRTU over RS485 using using params '+str(kwargs))
+                #log.info('CommModbus() init5: created CommModbus instance for ModbusRTU over RS485 using using params '+str(kwargs))
             except:
                 log.warning('failed to create CommModbus instance for ModbusRTU over RS485using params '+str(kwargs))
                 traceback.print_exc()
-                #print('failed to create CommModbus instance for ModbusRTU over RS485using params '+str(kwargs))
+                
 
+    def do_serialclient(self, port, speed=19200, parity='E', timeout=0.5, bytesize=8, stopbits=1):
+        ''' create self.client of correct type for serial connections only '''
+        from pymodbus.client.sync import ModbusSerialClient as ModbusClient
+        self.port = port
+        self.speed = speed
+        self.parity = parity
+        self.timeout = timeout
+        self.timeout = bytesize
+        self.stopbits = stopbits
+        self.bytesize = bytesize
+        self.client = ModbusClient(method='rtu', stopbits=stopbits, bytesize=bytesize, parity=parity, baudrate=speed, timeout=timeout, port=port)
+        log.info('serial ModbusClient (re)created with params '+str(self.port)+', '+str(self.speed)+' '+str(bytesize)+parity+str(stopbits))
+                
+
+    def set_serial(self, port='/dev/ttyAPP0', speed=19200, parity = 'E', timeout = 0.5,  bytesize=8, stopbits=1):
+        ''' to change the speed and other params '''
+        # FIXME / kontrolli et host jms alusel ikka serial...
+        self.do_serialclient(port, speed, parity, timeout, bytesize, stopbits)
+        
+        
+    def get_serial(self):
+        ''' returns serial params like port 8N1 '''
+        params = str(self.port)+' '+str(self.speed)+' '+str(self.bytesize)+self.parity+str(self.stopbits)
+        return params
+        
+        
     def get_mba_keepalive(self):
         ''' returns mba to keep accessible by recreating mb instance by dcannels or acchannels ''' 
         return self.mba_keepalive # by default 1
