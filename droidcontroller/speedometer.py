@@ -23,19 +23,23 @@ class SpeedoMeter():
 
     def start(self):
         ''' Starts counting '''
-        self.counting = True
-        self.ts_up = time.time()
+        if not self.counting:
+            self.counting = True
+            self.ts_up = time.time()
+            log.info('speedometer (re)started')
+            
         if self.ts_dn:
             skiptime = self.ts_up - self.ts_dn
             for i in range(len(self.window)):
                 self.window[i] += skiptime
-        log.info('speedometer (re)started')
+            log.info('skipped the time stopped')
 
     def stop(self):
         ''' Stops counting, window time is not increased '''
-        self.counting = False
-        self.ts_dn = time.time()
-        log.info('speedometer stopped')
+        if self.counting:
+            self.counting = False
+            self.ts_dn = time.time()
+            log.info('speedometer stopped')
 
 
     def get_state(self):
