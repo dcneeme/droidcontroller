@@ -131,7 +131,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                                 # dichannels table update with new bit values and change flags. no status change here. no update if not changed!
                                 Cmd = "UPDATE "+self.in_sql+" set value='"+str(value)+"', chg='"+str(chg)+"', ts='"+str(self.ts)+"' where mba='"+str(mba)+"' and regadd='"+str(regadd+i)+"' and mbi="+str(mbi)+" and bit='"+str(bit)+"'" 
                                 # uus bit value ja chg lipp, 2 BITTI!
-                            else: # just update the timestamp!
+                            else: # no value change, just update the timestamp!
                                 chg = 0
                                 Cmd = "UPDATE "+self.in_sql+" set ts='"+str(self.ts)+"', chg='"+str(chg)+"' where mba='"+str(mba)+"' and mbi="+str(mbi)+" and regadd='"+str(regadd+i)+"' and bit='"+str(bit)+"'" # old value unchanged, use ts_CHG AS TS!
                             log.debug('dichannels ts udpdate: '+Cmd) 
@@ -140,11 +140,14 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                             log.debug('dichannels table update problem')
                             traceback.print_exc()
                 #time.sleep(0.05)
-                return 0
+                if chg > 0:
+                    return 0
+                else:
+                    return 1
             except:
                 traceback.print_exc()
                 time.sleep(0.2)
-                return 1
+                return 2
         else:
             #failure, recreate mb[mbi]
             
@@ -218,7 +221,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                     else: # a new group started, make a query for previous
                         #print('di group end detected at regadd',blast,'bcount',bcount) # debugb
                         #print('going to read di registers from',bmba,bfirst,'to',blast,'regcount',bcount) # debug
-                        res = res+self.read_di_grp(bmba,bfirst,bcount,bmbi,bregtype) # reads and updates table with previous data
+                        res = (res | self.read_di_grp(bmba,bfirst,bcount,bmbi,bregtype)) # reads and updates table with previous data. res = bitmap
                         bfirst = regadd # new grp starts immediately
                         blast = regadd
                         bcount = 1
@@ -230,18 +233,13 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             if bfirst != -1: # last group yet unread
                 #print('di group end detected at regadd',blast) # debugb
                 #print('2going to read di registers from',bmba,bfirst,'to',blast,'regcount',bcount) # debug
-                res = res+self.read_di_grp(bmba,bfirst,bcount,bmbi,bregtype) # reads and updates table
+                res = (res | self.read_di_grp(bmba,bfirst,bcount,bmbi,bregtype)) # last read / update. res = bitmap
 
             #  bit values updated for all dichannels
 
             conn.commit()  # dichannel-bits transaction end
-            if res == 0:
-                #print('.',) # debug, to mark di polling interval
-                log.debug('d')
-                #sys.stdout.flush()
-                return 0
-            else:
-                return res
+            
+            return res # can be 3 if some grp changed, some got error! 0 is no change, 1 is change, 2 error
 
         except: # Exception,err:  # python3 ei taha seda viimast
             msg = 'there was a problem with dichannels data reading or processing! '+str(sys.exc_info()[1])
@@ -249,7 +247,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             log.warning(msg)
             traceback.print_exc()
             time.sleep(1)
-            return 1
+            return 2
 
     # sync_di() end. FRESHENED DICHANNELS TABLE VALUES AND CGH BITS (0 TO SEND, 1 TO PROCESS)
 
@@ -278,7 +276,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         cur = conn.cursor()
         sendtuple = []
         chg_dict = {} # svc:[member,value] after the change. short lifetime!
-        
+        svccount = 0 # to be reported
         try:
             Cmd="BEGIN IMMEDIATE TRANSACTION" # transaction, dichannels
             conn.execute(Cmd) # dichannels
@@ -297,6 +295,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 cur.execute(Cmd)
 
                 for row in cur: # services to be processed. either just changed or to be resent
+                    svccount += 1
                     log.debug('processing row '+str(repr(row))) ## 
                     val_reg = ''
                     sta_reg = ''
@@ -338,7 +337,10 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             # ilmselt ei ole muutnud ega aeg korrata veel kaes    
                 
             conn.commit() # dichannels transaction end
-            return 0
+            if svccount > 0:
+                return 1
+            else:
+                return 0
 
         except:
             traceback.print_exc()
@@ -346,7 +348,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             msg='there was a problem with make_dichannels()! '+str(sys.exc_info()[1])
             log.warning(msg)
             #syslog(msg)
-            return 1
+            return 2
 
     #make_dichannels() lopp
 
@@ -472,6 +474,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         #Cmd4=''
         ts_created=self.ts # selle loeme teenuse ajamargiks
         cur=conn.cursor()
+        res = 0 # returncode 0 1 2 = nochg chg error
 
         # coils not handled yet
 
@@ -488,17 +491,17 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             reg_dict={} # {reg:bit_dict}
             mba_dict={} # {mba:reg_dict)
             mbi_dict={} # {mbi: mba_dict}
-
+            
             for row in cur: # for every bit, sorted by mbi, mba, regadd, bit
                 tmp_array = [] # do,di bits together
-                #print('got row about change needed from dochannels-dichannels left join',row) # debug
+                log.debug('got row about change needed from dochannels-dichannels left join',row)
                 regadd = 0
                 mba = 0
                 bit = 0
                 di_value = 0
                 do_value = 0
                 mbi = 0
-                #udp.syslog('change in output needed for mba,regadd,bit '+str(int(eval(row[0])))+", "+str(int(eval(row[1])))+", "+str(int(eval(row[2])))+' from value '+str(int(eval(row[4])))+' to '+str(int(eval(row[3]))))
+                log.debug('do change mba,regadd,bit '+str(int(eval(row[0])))+", "+str(int(eval(row[1])))+", "+str(int(eval(row[2])))+' from '+str(int(eval(row[4])))+' to '+str(int(eval(row[3]))))
                 try:
                     mbi = row[5] if row[5] != '' else 0 # num
                     mba = int(eval(row[0])) # must be number
@@ -510,8 +513,10 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                     reg_dict.update({regadd : bit_dict})
                     mba_dict.update({mba : reg_dict})
                     mbi_dict.update({mbi : mba_dict})
+                    
                 except:
                     msg = 'failure in creating tmp_array '+repr(tmp_array)+' '+str(sys.exc_info()[1])
+                    res = (res | 2)# add error bit
                     log.warning(msg)
                     #udp.syslog(msg)
                     traceback.print_exc()
@@ -536,33 +541,33 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
                         for bit in bit_dict.keys():
                             #print('do di bit,[do,di]',bit,bit_dict[bit]) # debug
-                            word2=s.bit_replace(word,bit,bit_dict[bit][0]) # changed the necessary bit. can't reuse / change word directly!
-                            word=word2
+                            word2 = s.bit_replace(word,bit,bit_dict[bit][0]) # changed the necessary bit. can't reuse / change word directly!
+                            word = word2
 
-                        respcode=mb[mbi].write(mba, regadd, value=word) # do not give type, npe may need something else then h
+                        respcode = mb[mbi].write(mba, regadd, value=word) 
                         if respcode == 0:
-                            msg='output written - mbi mba regadd value '+str(mbi)+' '+str(mba)+' '+str(regadd)+' '+format("%04x" % word)
+                            msg = 'output written - mbi mba regadd value '+str(mbi)+' '+str(mba)+' '+str(regadd)+' '+format("%04x" % word)
                             log.debug(msg)
+                            res = (res | 1) # change bit
                         else:
-                            msg='FAILED writing register '+str(mba)+'.'+str(regadd)+' '+str(sys.exc_info()[1])
+                            msg = 'FAILED writing register '+str(mba)+'.'+str(regadd)+' '+str(sys.exc_info()[1])
                             log.warning(msg)
+                            res = (res | 2) # error bit
 
 
         except:
-            msg='problem with dichannel grp select in write_do_channels! '+str(sys.exc_info()[1])
+            msg = 'problem with dichannel grp select in write_do_channels! '+str(sys.exc_info()[1])
             log.warning(msg)
             traceback.print_exc() # debug
             sys.stdout.flush()
             time.sleep(1)
-            return 1
+            return 2
 
         conn.commit() # transaction end, perhaps not even needed - 2 reads, no writes...
-        msg='do sync done'
-        #print(msg) # debug
-        #syslog(msg) # debug
-        return 0
-        # write_dochannels() end.
-
+        msg = 'do sync done'
+        log.debug(msg)
+        return res
+        
 
     def parse_udp(self,data_dict): # search for setup or set di remote control signals
         ''' Setup change for variables in sql for modbus di channels. Ignore invalid parameters, not defined in self.in_sql! '''
@@ -703,14 +708,14 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
     
     def doall(self): # do this regularly, blocks for the time of socket timeout!
         ''' Does everything on time if executed regularly '''
-        res=0 # returncode
+        res = [2, 2, 2] # returncodes list
         self.ts = round(time.time(),1)
         if self.ts - self.ts_read>self.readperiod:
             self.ts_read = self.ts
             try:
-                res = res + self.sync_di() #
-                res = res + self.sync_do() # writes output registers to be changed via modbus, based on feedback on di bits
-                res = res + self.make_dichannels() # compile services and send away on change or based on ts_last regular basis
+                res[0] = self.sync_di() # 0 1 2 = nochg, dichg, error
+                res[1] = self.sync_do() # 0 1 2 = nochg, dochg, error  
+                res[2] = self.make_dichannels() # 0 1 2 = nobuff, somebuff, error
             except:
                 traceback.print_exc()
-        return res
+        return res # list of what was done
