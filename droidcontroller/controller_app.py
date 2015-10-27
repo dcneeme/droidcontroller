@@ -188,20 +188,24 @@ class ControllerApp(object): # default modbus address of io in controller = 1
             ac.parse_udp(got) # chk if setup or counters need to be changed
             d.parse_udp(got) # chk if setup ot toggle for di
             todo = p.parse_udp(got) # any commands or setup variables from server?
-            log.info('todo '+todo)
-            p.todo_proc(todo) # execute possible commands
+            if todo != '':
+                log.info('todo '+todo)
+                p.todo_proc(todo) # execute possible commands
 
     def di_reader(self): # DI reader
-        #print('reading di channels')
-        sys.stdout.write('D') # dot without newline
-        sys.stdout.flush()
+        self.spm.count() # di speed metering via speedometer
         reslist = d.doall() # returns di, do , svc signals 0 1 2 = nochg chg err
-        self.spm.count() # di speed calc
-        #if len(di_dict) > 0: #di_dict != {}: # change in di services
+        di_dict = d.get_chg_dict()
+        if reslist == [0, 0, 0]:
+            sys.stdout.write('d') # no flush
+        else:
+            sys.stdout.write('D') 
+            sys.stdout.flush() # flush now, when something was changed
+        
         if (reslist[0] & 1):  # change in di services
             di_dict = d.get_chg_dict()
             log.info('di change detected: '+str(di_dict)) # mis siin on , chg voi svc?
-            self.app_main(sys._getframe().f_code.co_name, attentioncode = 1) # d, a attention bits
+            self.app(sys._getframe().f_code.co_name, attentioncode = 1) # d, a attention bits
         if (reslist[2] & 1):  # change in di services
             di_dict = d.get_chg_dict()
             log.info('di svc to send: '+str(di_dict))
@@ -213,7 +217,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         sys.stdout.write('A') # dot without newline
         sys.stdout.flush()
         ac.doall()
-        self.app_main(sys._getframe().f_code.co_name, attentioncode = 2) # d, a attention bits
+        self.app(sys._getframe().f_code.co_name, attentioncode = 2) # d, a attention bits
 
     
     def regular_svc(self): # FIXME - send on change too! pakkida?
@@ -234,13 +238,13 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         ##IOLoop.add_timeout(5000, self.udp_sender) # last line! recalls itself after timeout 5 s
 
 
-    def app_main(self, attentioncode): # application-specific app() in iomain_xxx.py
-        ''' ehk on vaja param anda mis muutus, may call udp_sender '''
-        ##print('app_main')
-        res = self.app(sys._getframe().f_code.co_name, attentioncode) # self selleks, et vahet teha erinevatel kaivitustel, valjakutsutavale lisaparam
-        #attentioncode on = bitmap d, a muutuste/tootlusvajaduste kohta
-        # if res... # saab otsustada kas saata vms.
-        self.udp_comm() # self.udp_sender()
+    #def app_main(self, attentioncode=0): # application-specific app() in iomain_xxx.py
+    #    ''' ehk on vaja param anda mis muutus, may call udp_sender '''
+    #   ##print('app_main')
+    #    res = self.app(sys._getframe().f_code.co_name, attentioncode) # self selleks, et vahet teha erinevatel kaivitustel, valjakutsutavale lisaparam
+    #    #attentioncode on = bitmap d, a muutuste/tootlusvajaduste kohta
+    #    # if res... # saab otsustada kas saata vms.
+    #    self.udp_comm() ## kas on vaja siin?
 
     def commtest(self):
         ''' Use for testing from iomain_xxx, cua.ca.commtest() '''
@@ -263,7 +267,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
     #    ''' testing app part in the iomain script'''
     #    self.app(inspect.currentframe().f_code.co_name, attentioncode = 3)
         
-    def apptest(self): # kiireim, 
+    def apptest(self): # kiireim 
         #testides python -m timeit -s 'import inspect, sys' 'inspect.stack()[0][0].f_code.co_name'
         ''' testing app part in the iomain script'''
         self.app(sys._getframe().f_code.co_name, attentioncode = 2)
