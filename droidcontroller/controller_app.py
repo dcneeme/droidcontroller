@@ -194,20 +194,20 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         #print('reading di channels')
         sys.stdout.write('D') # dot without newline
         sys.stdout.flush()
-        d.doall()
-        di_dict = d.get_chg_dict()
+        res = d.doall()
         self.spm.count() # di speed calc
-        if len(di_dict) > 0: #di_dict != {}: # change in di services
-            #print('di change detected: '+str(di_dict))
+        #if len(di_dict) > 0: #di_dict != {}: # change in di services
+        if (res & 1):  # change in di services
+            di_dict = d.get_chg_dict()
             log.info('di change detected: '+str(di_dict))
-            self.app_main()
+            self.app_main(1) # d, a attention bits
 
     def ai_reader(self): # AICO reader
         #print('reading ai, co')
         sys.stdout.write('A') # dot without newline
         sys.stdout.flush()
         ac.doall()
-        self.app_main()
+        self.app_main(2) # d, a attention bits
 
     def udp_sender(self): # UDP sender / not in use, see udp_comm using udp.iocomm
         #print('sending udp')
@@ -232,10 +232,11 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         ##IOLoop.add_timeout(5000, self.udp_sender) # last line! recalls itself after timeout 5 s
 
 
-    def app_main(self): # application-specific app() in iomain_xxx.py
+    def app_main(self, attentioncode): # application-specific app() in iomain_xxx.py
         ''' ehk on vaja param anda mis muutus, may call udp_sender '''
         ##print('app_main')
-        res = self.app(self) # self selleks, et vahet teha erinevatel kaivitustel, valjakutsutavale lisa param
+        res = self.app(self, attentioncode) # self selleks, et vahet teha erinevatel kaivitustel, valjakutsutavale lisaparam
+        #attentioncode on = bitmap d, a muutuste/tootlusvajaduste kohta
         # if res... # saab otsustada kas saata vms.
         self.udp_comm() # self.udp_sender()
 
