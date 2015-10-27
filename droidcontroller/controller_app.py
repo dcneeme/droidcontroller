@@ -76,7 +76,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         self.loop = tornado.ioloop.IOLoop.instance()
         udp.add_reader_callback(self.udp_reader)
 
-        self.udpcomm_scheduler = tornado.ioloop.PeriodicCallback(self.udp_comm, 1500, io_loop = self.loop) # send udp every 1.5s
+        self.udpcomm_scheduler = tornado.ioloop.PeriodicCallback(self.udp_comm, 2000, io_loop = self.loop) # do not send udp more often than once in 2 sec
         self.regular_scheduler = tornado.ioloop.PeriodicCallback(self.regular_svc, 60000, io_loop = self.loop) # send regular svc
         self.di_scheduler = tornado.ioloop.PeriodicCallback(self.di_reader, 10, io_loop = self.loop) # read DI asap. was 50 ms
         self.ai_scheduler = tornado.ioloop.PeriodicCallback(self.ai_reader, 10000, io_loop = self.loop) # ai 10 s
@@ -120,16 +120,17 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         # chk for udb receive ability
         send_state = udp.sk_send.get_state()
         receive_state = udp.sk.get_state()
+        #self.reset_sender_timeout() # FIXME
         if send_state[0] == 1 and send_state[1] > 30 and receive_state[0] == 0 and receive_state[1] > 30: ## receive problem
-            log.warning('** udp send ok but no answer. read buffer until empty! **') # if read buff not empty then no event from new data!
+            log.warning('** udp send ok but no answer. reading buffer until empty! **') # if read buff not empty then no event from new data!
             udp.sk.up()
             udp.sk.dn() # to restart timer
             got = udp.udpread()
             while got != None and got != {}:
                 self.got_parse(got)
                 got = udp.udpread()
-            log.info('*** read buffer done we IOLoop!!!')
-            time.sleep(1)
+            log.debug('*** read buffer until empty done wo IOLoop!!!')
+            #time.sleep(1)
             
 
     def udp_reader(self, udp, fd, events): # no timer! on event!
@@ -194,26 +195,27 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         #print('reading di channels')
         sys.stdout.write('D') # dot without newline
         sys.stdout.flush()
-        res = d.doall()
+        reslist = d.doall() # returns di, do , svc signals 0 1 2 = nochg chg err
         self.spm.count() # di speed calc
         #if len(di_dict) > 0: #di_dict != {}: # change in di services
-        if (res & 1):  # change in di services
+        if (reslist[0] & 1):  # change in di services
             di_dict = d.get_chg_dict()
-            log.info('di change detected: '+str(di_dict))
-            self.app_main(1) # d, a attention bits
+            log.info('di change detected: '+str(di_dict)) # mis siin on , chg voi svc?
+            self.app_main(sys._getframe().f_code.co_name, attentioncode = 1) # d, a attention bits
+        if (reslist[2] & 1):  # change in di services
+            di_dict = d.get_chg_dict()
+            log.info('di svc to send: '+str(di_dict))
+            self.udp_comm() # should reset timer too!
+            
 
     def ai_reader(self): # AICO reader
         #print('reading ai, co')
         sys.stdout.write('A') # dot without newline
         sys.stdout.flush()
         ac.doall()
-        self.app_main(2) # d, a attention bits
+        self.app_main(sys._getframe().f_code.co_name, attentioncode = 2) # d, a attention bits
 
-    def udp_sender(self): # UDP sender / not in use, see udp_comm using udp.iocomm
-        #print('sending udp')
-        udp.buff2server() # ainult saadab!!! ei dumbi jne, kasuta parem udp.comm
-        self.reset_sender_timeout()
-
+    
     def regular_svc(self): # FIXME - send on change too! pakkida?
         sys.stdout.write('R') #
         sys.stdout.flush()
@@ -226,7 +228,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         print('FIXME cal sync')
 
 
-    def reset_sender_timeout(self):
+    def reset_sender_timeout(self): # FIXME
         ''' Resetting ioloop timer '''
         ##print('FIXME timer reset')
         ##IOLoop.add_timeout(5000, self.udp_sender) # last line! recalls itself after timeout 5 s
@@ -235,7 +237,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
     def app_main(self, attentioncode): # application-specific app() in iomain_xxx.py
         ''' ehk on vaja param anda mis muutus, may call udp_sender '''
         ##print('app_main')
-        res = self.app(self, attentioncode) # self selleks, et vahet teha erinevatel kaivitustel, valjakutsutavale lisaparam
+        res = self.app(sys._getframe().f_code.co_name, attentioncode) # self selleks, et vahet teha erinevatel kaivitustel, valjakutsutavale lisaparam
         #attentioncode on = bitmap d, a muutuste/tootlusvajaduste kohta
         # if res... # saab otsustada kas saata vms.
         self.udp_comm() # self.udp_sender()
@@ -256,6 +258,12 @@ class ControllerApp(object): # default modbus address of io in controller = 1
             if udp.sk.get_state()[3] == 1: # firstup
                 self.firstup()
 
-    def apptest(self):
-        ''' testing app part in the calling iomain script'''
-        self.app('test')
+       
+    #def apptest(self):
+    #    ''' testing app part in the iomain script'''
+    #    self.app(inspect.currentframe().f_code.co_name, attentioncode = 3)
+        
+    def apptest(self): # kiireim, 
+        #testides python -m timeit -s 'import inspect, sys' 'inspect.stack()[0][0].f_code.co_name'
+        ''' testing app part in the iomain script'''
+        self.app(sys._getframe().f_code.co_name, attentioncode = 2)
