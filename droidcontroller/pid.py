@@ -22,19 +22,20 @@
 # pid: fixing onLimit value 1 to zero!
 # pid: fixing onLimit value -1 to zero!
 # OCT 2015  added noint variable to output() in order to fight dead-time reset windup (use this whenever the if inner loop is saturated)
- 
+
 import time
 import logging
 log = logging.getLogger(__name__)
 
 class PID:
     ''' Simple PID control.
-        This class implements a simplistic PID control algorithm 
+        This class implements a simplistic PID control algorithm
     '''
-        
+
     def __init__(self, setpoint = 0, P = 1.0, I = 0.01, D = 0.0, min = None, max = None, outmode = 'nolist', name='undefined', dead_time = 0):
         self.outmode = outmode # remove later, temporary help to keep list output for some installations
         self.error = 0
+        self.name = name
         self.vars = {} # to be returned with almost all internal variables
         self.tsLimit = 0 # timestamp of reaching the saturation
         self.actual = None
@@ -47,10 +48,10 @@ class PID:
         self.setMax(max)
         self.setName(name)
         self.dead_time = dead_time # time for reaction start for the controlled object
-        self.noint = 0 # from outside, on output()
+        self.extnoint = 0 # from outside, on output()
         self.Initialize()
 
-    
+
     def setSetpoint(self, invar):
         ''' Set the goal for the actual value '''
         if invar != None:
@@ -64,8 +65,8 @@ class PID:
 
     def get_extnoint(self):
         ''' returns the externally given via output() integration enable flag, usually from innner loop '''
-        return self.noint
-    
+        return self.extnoint
+
     def setKp(self, invar):
         ''' Sets proportional gain  '''
         if invar != None:
@@ -121,8 +122,8 @@ class PID:
             age = 0
             noint = 0
         return self.onLimit, age, noint # noint on sama plaarsusega kui onlimit, kehtides deadzone pikkuses
-           
-        
+
+
     def getvars(self, filter = None):
         ''' Returns internal variables as dictionary '''
         self.vars.update({'Kp' : self.Kp, \
@@ -153,8 +154,8 @@ class PID:
     def setDeadTime(self, invar):
         '''' Sets the dead time in s. Used to suggest non integration for outer loop '''
         self.dead_time = invar # seconds
-    
-    
+
+
     def setPrevErr(self, invar):
         ''' Set previous self.error value    '''
         self.prev_err = invar
@@ -198,7 +199,7 @@ class PID:
 
     def setName(self, invar):
         ''' Sets the descriptive name for the instance '''
-        self.Name = invar
+        self.name = invar
 
     def Initialize(self):
         ''' initialize delta t variables  '''
@@ -228,14 +229,15 @@ class PID:
             age = 0
             noint = 0
         return self.onLimit, age, noint # noint on sama plaarsusega kui onlimit, kehtides deadzone pikkuses
-       
+
 
     def output(self, invar, noint = 0): # actual as parameter for PID control
         ''' Performs PID computation and returns a control value and it's components (and self.error and saturation)
             based on the elapsed time (dt) and the difference between actual value and setpoint.
-            Added oct 2015: noint value other than 0 will stop integration in both directions. 
+            Added oct 2015: noint value other than 0 will stop integration in both directions.
         '''
         self.actual = invar
+        self.extnoint = noint
         dir=['down','','up'] # up or down / FIXME use enum here! add Limit class! reusable for everybody...
         try:
             self.error = self.setPoint - invar            # self.error value
@@ -249,15 +251,15 @@ class PID:
 
         self.Cp = self.Kp * self.error               # proportional term
         if self.Ki > 0:
-            if (self.onLimit == 0 or 
-                (self.onLimit == -1 and self.error > 0 and self.noint != -1) or 
-                (self.onLimit == 1 and self.error < 0 and self.noint != 1)): # ok to integrate
+            if ((self.onLimit == 0 and self.extnoint == 0) or
+                (self.onLimit == -1 and self.error > 0) or
+                (self.onLimit == 1 and self.error < 0)): # ok to integrate
                 #integration is only allowed if Ki not zero and no limit reached or when output is moving away from limit
                 self.onLimit = 0
                 self.Ci += self.error * dt                   # integral term
             else:
                 #pass
-                log.info('pid: integration '+dir[self.onLimit+1]+' forbidden, onLimit '+str(self.onLimit)+', noint '+str(self.noint)) # debug
+                log.info(self.name+' integration '+dir[self.onLimit+1]+' forbidden, onLimit '+str(self.onLimit)+', extnoint '+str(self.extnoint))
 
         self.Cd = 0
         if dt > 0:                              # no div by zero
@@ -270,7 +272,7 @@ class PID:
 
         if self.outMax is not None and self.outMin is not None:
             if not self.outMax > self.outMin: # avoid faulty limits
-                log.warning('pid: illegal outmin, outmax values:'+str(self.outMin)+', '+str(self.outMax)) # important notice!
+                log.warning(self.name+' illegal outmin, outmax values:'+str(self.outMin)+', '+str(self.outMax)) # important notice!
 
         if self.outMax is not None:
             if out > self.outMax:
@@ -278,7 +280,8 @@ class PID:
                 if self.onLimit != 1:
                     self.onLimit = 1 # reached hi limit
                     self.tsLimit = self.currtime
-                
+                    log.info('loop '+self.name+' reached hi limit')
+
 
         if self.outMin is not None:
             if out < self.outMin:
@@ -286,42 +289,43 @@ class PID:
                 if self.onLimit != -1:
                     self.onLimit = -1 # reached lo limit
                     self.tsLimit = self.currtime
-                
+
 
         if self.outMin is not None and self.outMax is not None: # to be sure about onLimit, double check
             if out > self.outMin and out < self.outMax:
                 if self.onLimit != 0:
-                    log.debug('pid: fixing onLimit value '+str(self.onLimit)+' to zero!')
+                    log.warning(self.name+' fixing onLimit value '+str(self.onLimit)+' to zero!')
                     self.onLimit = 0 # fix possible self.error
                     self.tsLimit = 0
 
         if out == self.outMax and self.onLimit == -1: # swapped min/max and onlimit values for some reason?
-            log.warning('pid: hi out and onlimit values do not match! out='+str(out)+', outMax='+str(self.outMax)+', onlimit='+str(self.onLimit))
+            log.warning(self.name+' hi out and onlimit values do not match! out='+str(out)+', outMax='+str(self.outMax)+', onlimit='+str(self.onLimit))
             self.onLimit = 1 # fix possible self.error
         elif out == self.outMin and self.onLimit == 1:
-            log.warning('pid: lo out and onlimit values do not match! out='+str(out)+', outMin='+str(self.outMin)+', onlimit='+str(self.onLimit))
+            log.warning(self.name+' lo out and onlimit values do not match! out='+str(out)+', outMin='+str(self.outMin)+', onlimit='+str(self.onLimit))
             self.onLimit = -1 # fix possible self.error
 
-        log.debug('pid sp '+str(round(self.setPoint))+', actual '+str(invar)+', out'+str(round(out))+', p '+str(round(self.Cp))+', i '+str(round(self.Ki * self.Ci))+', d '+str(round(self.Kd * self.Cd)),', onlimit'+str(self.onLimit))
-        
+        log.debug(self.name+' sp '+str(round(self.setPoint))+', actual '+str(invar)+', out'+str(round(out))+', p '+str(round(self.Cp))+', i '+str(round(self.Ki * self.Ci))+', d '+str(round(self.Kd * self.Cd)),', onlimit'+str(self.onLimit))
+
         self.out = out
         if self.outmode == 'list':
             return out, self.Cp, (self.Ki * self.Ci), (self.Kd * self.Cd), self.error, self.onLimit
         else:
-            return out # this will be the only way 
-            
+            return out # this will be the only way
+
 
 class ThreeStep:
     ''' Three-step motor control.
-        Outputs pulse length to run the motor in one or another direction. 
-        Another pulse may not start before runperiod is over. 
-        State is usable for level control, output returns pulse length. 
+        Outputs pulse length to run the motor in one or another direction.
+        Another pulse may not start before runperiod is over.
+        State is usable for level control, output returns pulse length.
         onlimit is active (not zero) if abs(runtime) reaches motortime.
         No output to sstart a new pulse if error is below minerror (usable for dead zone setting).
     '''
     def __init__(self, setpoint = 0, motortime = 100, maxpulse = 10, maxerror = 100, \
             minpulse =1 , minerror = 1, runperiod = 20, outmode = 'nolist', name = 'undefined', dead_time = 0):
         self.outmode = outmode # remove later, temporary help to keep list output for some installations
+        self.name = name
         self.error = 0
         self.vars = {} # to be returned with almost all internal variables
         self.state= 0 # level output in parallel to returned by output() length, use with caution (less precise)
@@ -337,7 +341,7 @@ class ThreeStep:
         self.setName(name)
         self.dead_time = dead_time
         self.Initialize()
-  
+
 
     def getvars(self, filter = None):
         ''' Returns internal variables as dictionary '''
@@ -360,7 +364,7 @@ class ThreeStep:
             if filter in self.vars:
                 return self.vars.get(filter)
 
-      
+
     def setSetpoint(self, invar):
         """ Set the setpoint for the actual value to follow """
         self.Setpoint = invar
@@ -369,7 +373,7 @@ class ThreeStep:
     def setDeadTime(self, invar):
         '''' Sets the dead time in s. Used to suggest non integration for outer loop '''
         self.dead_time = invar # seconds
-        
+
     def getSetpoint(self):
         """ Returns the setpoint for the actual value to follow """
         return self.Setpoint
@@ -411,7 +415,7 @@ class ThreeStep:
 
     def setName(self, invar):
         ''' Sets the descriptive name for the instance '''
-        self.Name = invar
+        self.name = invar
 
     def Initialize(self):
         """ initialize time dependant variables
@@ -449,8 +453,8 @@ class ThreeStep:
         else:
             age = 0
         return self.onLimit, age, noint
-        
-        
+
+
     def setLimit(self, invar):
         ''' Sets the 3step instance into saturated state based on external signal (limit switch for example) '''
         try:
@@ -459,13 +463,13 @@ class ThreeStep:
                 if self.onLimit != 0:
                     self.runtime = self.onLimit * self.MotorTime # to keep the limit active and runtime logical
                     self.tsLimit = time.time() # timestamp  of new state begin
-                    log.info('threestep onlimit set to '+str(self.onLimit))
-                
+                    log.info(self.name+' onlimit set to '+str(self.onLimit))
+
             else:
-                log.debug('invalid value for set_onlimit or no need for state change')
+                log.debug(self.name+' invalid value for set_onlimit or no need for state change')
         except:
-            log.warning('invalid value for set_onlimit: '+str(invar))
-        
+            log.warning(self.name+' invalid value for set_onlimit: '+str(invar))
+
 
     def output(self, invar): # actual as parameter or 3T control
         ''' Performs pulse generation if needed and if no previous pulse is currently active.
@@ -478,12 +482,12 @@ class ThreeStep:
             self.error=self.Setpoint - invar            # self.error value
         except:
             self.error = 0 # for the case of invalid actual
-            msg=self.Name+' invalid actual '+repr(invar)+' for 3step self.error calculation, self.error zero used!'
+            msg=self.name+' invalid actual '+repr(invar)+' for 3step self.error calculation, self.error zero used!'
             log.warning(msg)
 
         #self.error=self.Setpoint - invar            # current self.error value
         self.currtime = time.time()               # get current time
-        
+
         #current state, need to stop? level control happens by calling only!
         if self.currtime > self.last_start + abs(self.last_length) and self.state != 0: # need to stop ##########  STOP ##############
             #print('need to stop ongoing pulse due to pulse time (',abs(self.last_length),') s out') # debug
@@ -491,28 +495,28 @@ class ThreeStep:
             #    self.runtime = self.runtime + self.last_state*(self.currtime - self.last_start) # sign via state is important
             self.state = 0 # stop the run
             #self.last_state = self.state
-            log.debug('3step: stopped pulse, cumulative travel time',round(self.runtime))
+            log.debug('loop '+self.name+'  stopped pulse, cumulative travel time',round(self.runtime))
 
         if self.runtime > self.MotorTime: # limit
             self.runtime = self.MotorTime
             if self.onLimit != 1:
                 self.onLimit = 1 # reached hi limit
                 self.tsLimit = self.currtime
-                log.debug('reached hi limit') # debug
+                log.info('loop '+self.name+' reached hi limit') # debug
 
         if self.runtime < -self.MotorTime: # limit
             self.tsLimit = self.currtime
             if self.onLimit != -1:
                 self.onLimit = -1 # reached lo limit
                 self.runtime = -self.MotorTime
-                log.debug('reached lo limit') # debug
+                log.info('loop'+self.name+' reached lo limit') # debug
 
         #need to start a new pulse? chk runPeriod
         #if self.currtime > self.last_start + self.RunPeriod and self.last_state == 0: # free to start next pulse (no ongoing)
         if self.currtime > self.last_start + self.RunPeriod and self.state == 0: # free to start next pulse (no ongoing)
             log.debug('no ongoing pulse, time from previous pulse start '+str(int(self.currtime - self.last_start)))
             if abs(self.error) > self.MinpulseError: # pulse is needed
-                log.debug('3step: new pulse needed due to self.error vs MinpulseError',self.error,self.MinpulseError) 
+                log.debug('3step: new pulse needed due to self.error vs MinpulseError',self.error,self.MinpulseError)
                 if self.error > 0 and self.error > self.MinpulseError: # pulse to run higher needed
                     length = self.interpolate(self.error, self.MinpulseError, self.MinpulseLength, self.MaxpulseError, self.MaxpulseLength)
                     if length > self.MaxpulseLength:
@@ -520,7 +524,7 @@ class ThreeStep:
                     self.last_length = length
                     self.last_start = self.currtime
                     self.state = 1
-                
+
                 elif self.error < 0 and self.error < -self.MinpulseError: # pulse to run lower needed
                     length = self.interpolate(self.error, -self.MinpulseError, -self.MinpulseLength, -self.MaxpulseError, -self.MaxpulseLength)
                     if length < -self.MaxpulseLength:
@@ -528,18 +532,18 @@ class ThreeStep:
                     self.last_length = length
                     self.last_start = self.currtime
                     self.state = -1
-                
-                log.debug(self.Name+': STARTED PULSE w len '+str(length))
+
+                log.debug(self.name+': STARTED PULSE w len '+str(length))
                 self.runtime = self.runtime+length # new cumulative
             else: # no need for a new pulse
                 length = 0
-                
+
         else: # no new pulse yet or pulse already active
             length = 0
             #self.state = self.last_state
-            msg='3step: waiting for runperiod end to start a new pulse'
+            msg=selfname+' waiting for runperiod end to start a new pulse'
             log.debug(msg)
-            
+
 
         #if abs(self.error) < self.MinpulseError and state != 0: # stop the ongoing pulse - not strictly needed, level output hardly in use anyway
         #    state = 0 # if the actual drive to the motor happens via timer controlled by length previously output, this does not have any effect
@@ -547,15 +551,15 @@ class ThreeStep:
 
         pulseleft=int(self.last_start + abs(self.last_length) - self.currtime)
         if self.state != 0 and pulseleft > 0:
-            log.debug(self.Name+' ongoing pulse time left '+str(pulseleft)+', state (direction) '+str(self.state))
-    
-        msg='3step self.error '+str(round(self.error))+', minself.error '+str(self.MinpulseError)+', maxself.error '+str(self.MaxpulseError)+', LENGTH '+str(round(length))+', minpulse '+str(self.MinpulseLength)+', maxpulse '+str(self.MaxpulseLength) # debug
+            log.debug(self.name+' ongoing pulse time left '+str(pulseleft)+', state (direction) '+str(self.state))
+
+        msg=self.name+' error '+str(round(self.error))+', minpulseError '+str(self.MinpulseError)+', maxpulseError '+str(self.MaxpulseError)+', LENGTH '+str(round(length))+', minpulse '+str(self.MinpulseLength)+', maxpulse '+str(self.MaxpulseLength) # debug
         log.debug(msg)
-  
+
         self.out = length
         if self.outmode == 'list':
             return length, self.state, self.onLimit, int(self.runtime)
         else:
-            return length # this will be the only way 
-            
+            return length # this will be the only way
+
         #END
