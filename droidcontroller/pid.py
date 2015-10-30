@@ -47,11 +47,9 @@ class PID:
         self.setMax(max)
         self.setName(name)
         self.dead_time = dead_time # time for reaction start for the controlled object
-        self.noint = 0 # on value other than 0 no integration allowed
+        self.noint = 0 # from outside, on output()
         self.Initialize()
 
-    def get_noint(self):
-        return self.noint
     
     def setSetpoint(self, invar):
         ''' Set the goal for the actual value '''
@@ -64,7 +62,10 @@ class PID:
         ''' Returns the setpoint for the actual value to follow '''
         return self.Setpoint
 
-
+    def get_extnoint(self):
+        ''' returns the externally given via output() integration enable flag, usually from innner loop '''
+        return self.noint
+    
     def setKp(self, invar):
         ''' Sets proportional gain  '''
         if invar != None:
@@ -111,14 +112,15 @@ class PID:
 
     def getLimit(self):
         ''' Returns the limit state and the saturation age as list. Also asuggestion not to integrate for outer loop id age < deadtime. '''
-        noint = 0
+        noint = 0 # recalculated every time based on age and onLimit
         if self.onLimit != 0:
             age = int(time.time() - self.tsLimit)
             if self.dead_time > age:
-                noint = 1
+                noint = self.onLimit
         else:
             age = 0
-        return self.onLimit, age, noint
+            noint = 0
+        return self.onLimit, age, noint # noint on sama plaarsusega kui onlimit, kehtides deadzone pikkuses
            
         
     def getvars(self, filter = None):
@@ -215,14 +217,18 @@ class PID:
         log.debug('pid: initialized')
 
 
-    def get_onlimit(self):
-        ''' Returns the limit state and the saturation age as list '''
+    def getLimit(self):
+        ''' Returns the limit state and the saturation age as list. Also asuggestion not to integrate for outer loop id age < deadtime. '''
+        noint = 0
         if self.onLimit != 0:
-            age = int(self.currtime - self.tsLimit)
+            age = int(time.time() - self.tsLimit)
+            if self.dead_time > age:
+                noint = self.onLimit
         else:
             age = 0
-        return self.onLimit, age
-
+            noint = 0
+        return self.onLimit, age, noint # noint on sama plaarsusega kui onlimit, kehtides deadzone pikkuses
+       
 
     def output(self, invar, noint = 0): # actual as parameter for PID control
         ''' Performs PID computation and returns a control value and it's components (and self.error and saturation)
@@ -230,7 +236,6 @@ class PID:
             Added oct 2015: noint value other than 0 will stop integration in both directions. 
         '''
         self.actual = invar
-        self.noint = noint # needed for get_Limit()
         dir=['down','','up'] # up or down / FIXME use enum here! add Limit class! reusable for everybody...
         try:
             self.error = self.setPoint - invar            # self.error value
@@ -292,10 +297,10 @@ class PID:
 
         if out == self.outMax and self.onLimit == -1: # swapped min/max and onlimit values for some reason?
             log.warning('pid: hi out and onlimit values do not match! out='+str(out)+', outMax='+str(self.outMax)+', onlimit='+str(self.onLimit))
-            #self.onLimit = 1 # fix possible self.error
+            self.onLimit = 1 # fix possible self.error
         elif out == self.outMin and self.onLimit == 1:
             log.warning('pid: lo out and onlimit values do not match! out='+str(out)+', outMin='+str(self.outMin)+', onlimit='+str(self.onLimit))
-            #self.onLimit = -1 # fix possible self.error
+            self.onLimit = -1 # fix possible self.error
 
         log.debug('pid sp '+str(round(self.setPoint))+', actual '+str(invar)+', out'+str(round(out))+', p '+str(round(self.Cp))+', i '+str(round(self.Ki * self.Ci))+', d '+str(round(self.Kd * self.Cd)),', onlimit'+str(self.onLimit))
         
@@ -332,7 +337,7 @@ class ThreeStep:
         self.setName(name)
         self.dead_time = dead_time
         self.Initialize()
-
+  
 
     def getvars(self, filter = None):
         ''' Returns internal variables as dictionary '''
