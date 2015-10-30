@@ -21,7 +21,8 @@
 # starmanis 5.11.2014 (appd.log failis)
 # pid: fixing onLimit value 1 to zero!
 # pid: fixing onLimit value -1 to zero!
-
+# OCT 2015  added noint variable to output() in order to fight dead-time reset windup (use this whenever the if inner loop is saturated)
+ 
 import time
 import logging
 log = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ class PID:
         This class implements a simplistic PID control algorithm 
     '''
         
-    def __init__(self, setpoint = 0, P = 1.0, I = 0.01, D = 0.0, min = None, max = None, outmode = 'nolist', name='undefined'):
+    def __init__(self, setpoint = 0, P = 1.0, I = 0.01, D = 0.0, min = None, max = None, outmode = 'nolist', name='undefined', dead_time = 0):
         self.outmode = outmode # remove later, temporary help to keep list output for some installations
         self.error = 0
         self.vars = {} # to be returned with almost all internal variables
@@ -45,8 +46,13 @@ class PID:
         self.setMin(min)
         self.setMax(max)
         self.setName(name)
+        self.dead_time = dead_time # time for reaction start for the controlled object
+        self.noint = 0 # on value other than 0 no integration allowed
         self.Initialize()
 
+    def get_noint(self):
+        return self.noint
+    
     def setSetpoint(self, invar):
         ''' Set the goal for the actual value '''
         if invar != None:
@@ -212,24 +218,26 @@ class PID:
         return self.onLimit, age
 
 
-    def output(self, invar): # actual as parameter for PID control
+    def output(self, invar, noint = 0): # actual as parameter for PID control
         ''' Performs PID computation and returns a control value and it's components (and self.error and saturation)
             based on the elapsed time (dt) and the difference between actual value and setpoint.
+            Added oct 2015: noint value other than 0 will stop integration in both directions. 
         '''
         self.actual = invar
+        self.noint = noint
         dir=['down','','up'] # up or down / FIXME use enum here! add Limit class! reusable for everybody...
         try:
-            self.error=self.setPoint - invar            # self.error value
+            self.error = self.setPoint - invar            # self.error value
         except:
-            self.error=0 # for the case of invalid actual
-            msg='invalid actual '+repr(invar)+' for pid self.error calculation, self.error zero used!'
+            self.error = 0 # for the case of invalid actual
+            msg = 'invalid actual '+repr(invar)+' for pid self.error calculation, self.error zero used!'
 
         self.currtime = time.time()               # get t
         dt = self.currtime - self.prevtm          # get delta t
         de = self.error - self.prev_err              # get delta self.error
 
         self.Cp = self.Kp * self.error               # proportional term
-        if self.Ki > 0:
+        if self.Ki > 0 and noint == 0:
             if (self.onLimit == 0 or (self.onLimit == -1 and self.error > 0) or (self.onLimit == 1 and self.error < 0)):
                 #integration is only allowed if Ki not zero and no limit reached or when output is moving away from limit
                 self.onLimit = 0
@@ -277,7 +285,7 @@ class PID:
             log.warning('pid: lo out and onlimit values do not match! out='+str(out)+', outMin='+str(self.outMin)+', onlimit='+str(self.onLimit))
             #self.onLimit = -1 # fix possible self.error
 
-        log.debug('pid sp',round(self.setPoint),', actual',invar,', out',round(out),', p i d',round(self.Cp), round(self.Ki * self.Ci), round(self.Kd * self.Cd),', onlimit',self.onLimit) # debug
+        log.debug('pid sp '+str(round(self.setPoint))+', actual '+str(invar)+', out'+str(round(out))+', p '+str(round(self.Cp))+', i '+str(round(self.Ki * self.Ci))+', d '+str(round(self.Kd * self.Cd)),', onlimit'+str(self.onLimit))
         
         self.out = out
         if self.outmode == 'list':
@@ -295,7 +303,7 @@ class ThreeStep:
         No output to sstart a new pulse if error is below minerror (usable for dead zone setting).
     '''
     def __init__(self, setpoint = 0, motortime = 100, maxpulse = 10, maxerror = 100, \
-            minpulse =1 , minerror = 1, runperiod = 20, outmode = 'nolist', name='undefined'):
+            minpulse =1 , minerror = 1, runperiod = 20, outmode = 'nolist', name = 'undefined', dead_time = 0):
         self.outmode = outmode # remove later, temporary help to keep list output for some installations
         self.error = 0
         self.vars = {} # to be returned with almost all internal variables
@@ -310,6 +318,7 @@ class ThreeStep:
         self.setMinpulseError(minerror)
         self.setRunPeriod(runperiod)
         self.setName(name)
+        self.dead_time = dead_time
         self.Initialize()
 
 
@@ -340,6 +349,10 @@ class ThreeStep:
         self.Setpoint = invar
 
 
+    def setDeadTime(self, invar):
+        '''' Sets the dead time in s. Used to suggest non integration for outer loop '''
+        self.dead_time = invar # seconds
+        
     def getSetpoint(self):
         """ Returns the setpoint for the actual value to follow """
         return self.Setpoint
@@ -410,12 +423,15 @@ class ThreeStep:
 
 
     def get_onlimit(self):
-        ''' Returns the limit state and the saturation age as list '''
+        ''' Returns the limit state and the saturation age as list. Also asuggestion not to integrate for outer loop id age < deadtime. '''
+        noint = 0
         if self.onLimit != 0:
             age = int(time.time() - self.tsLimit)
+            if self.dead_time > age:
+                noint = 1
         else:
             age = 0
-        return self.onLimit, age
+        return self.onLimit, age, noint
         
         
     def set_onlimit(self, invar):
