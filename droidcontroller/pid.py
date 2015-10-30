@@ -148,7 +148,11 @@ class PID:
         ''' reset integral part  '''
         self.Ci = 0
 
-
+    def setDeadTime(self, invar):
+        '''' Sets the dead time in s. Used to suggest non integration for outer loop '''
+        self.dead_time = invar # seconds
+    
+    
     def setPrevErr(self, invar):
         ''' Set previous self.error value    '''
         self.prev_err = invar
