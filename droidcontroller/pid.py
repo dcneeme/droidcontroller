@@ -226,28 +226,29 @@ class PID:
             Added oct 2015: noint value other than 0 will stop integration in both directions. 
         '''
         self.actual = invar
-        self.noint = noint
+        self.noint = noint # needed for get_Limit()
         dir=['down','','up'] # up or down / FIXME use enum here! add Limit class! reusable for everybody...
         try:
             self.error = self.setPoint - invar            # self.error value
         except:
             self.error = 0 # for the case of invalid actual
-            msg = 'invalid actual '+repr(invar)+' for pid self.error calculation, self.error zero used!'
+            log.warning('invalid actual '+repr(invar)+' for pid self.error calculation, self.error zero used!')
 
         self.currtime = time.time()               # get t
         dt = self.currtime - self.prevtm          # get delta t
         de = self.error - self.prev_err              # get delta self.error
 
         self.Cp = self.Kp * self.error               # proportional term
-        if self.Ki > 0 and noint == 0:
-            if (self.onLimit == 0 or (self.onLimit == -1 and self.error > 0) or (self.onLimit == 1 and self.error < 0)):
+        if self.Ki > 0:
+            if (self.onLimit == 0 or 
+                (self.onLimit == -1 and self.error > 0 and self.noint != -1) or 
+                (self.onLimit == 1 and self.error < 0 and self.noint != 1)): # ok to integrate
                 #integration is only allowed if Ki not zero and no limit reached or when output is moving away from limit
                 self.onLimit = 0
                 self.Ci += self.error * dt                   # integral term
-                #print('pid: integration done, new Ci='+str(round(self.Ci)))
             else:
-                pass
-                log.debug('pid: integration '+dir[self.onLimit+1]+' forbidden due to saturation, onLimit '+str(self.onLimit)+', self.error '+str(self.error)) # debug
+                #pass
+                log.info('pid: integration '+dir[self.onLimit+1]+' forbidden, onLimit '+str(self.onLimit)+', noint '+str(self.noint)) # debug
 
         self.Cd = 0
         if dt > 0:                              # no div by zero
@@ -264,21 +265,26 @@ class PID:
 
         if self.outMax is not None:
             if out > self.outMax:
-                self.onLimit = 1 # reached hi limit
-                self.tsLimit = self.currtime
                 out = self.outMax
+                if self.onLimit != 1:
+                    self.onLimit = 1 # reached hi limit
+                    self.tsLimit = self.currtime
+                
 
         if self.outMin is not None:
             if out < self.outMin:
-                self.onLimit = -1 # reached lo limit
-                self.tsLimit = self.currtime
                 out = self.outMin
+                if self.onLimit != -1:
+                    self.onLimit = -1 # reached lo limit
+                    self.tsLimit = self.currtime
+                
 
         if self.outMin is not None and self.outMax is not None: # to be sure about onLimit, double check
             if out > self.outMin and out < self.outMax:
                 if self.onLimit != 0:
                     log.debug('pid: fixing onLimit value '+str(self.onLimit)+' to zero!')
                     self.onLimit = 0 # fix possible self.error
+                    self.tsLimit = 0
 
         if out == self.outMax and self.onLimit == -1: # swapped min/max and onlimit values for some reason?
             log.warning('pid: hi out and onlimit values do not match! out='+str(out)+', outMax='+str(self.outMax)+', onlimit='+str(self.onLimit))
@@ -424,7 +430,7 @@ class ThreeStep:
             return y1+(y2-y1)*(x-x1)/(x2-x1)
 
 
-    def get_onlimit(self):
+    def getLimit(self):
         ''' Returns the limit state and the saturation age as list. Also asuggestion not to integrate for outer loop id age < deadtime. '''
         noint = 0
         if self.onLimit != 0:
@@ -436,7 +442,7 @@ class ThreeStep:
         return self.onLimit, age, noint
         
         
-    def set_onlimit(self, invar):
+    def setLimit(self, invar):
         ''' Sets the 3step instance into saturated state based on external signal (limit switch for example) '''
         try:
             if invar <2 and invar > -2 and int(invar) != self.onLimit:
@@ -479,16 +485,18 @@ class ThreeStep:
             log.debug('3step: stopped pulse, cumulative travel time',round(self.runtime))
 
         if self.runtime > self.MotorTime: # limit
-            self.onLimit = 1 # reached hi limit
-            self.tsLimit = self.currtime
             self.runtime = self.MotorTime
-            log.debug('reached hi limit') # debug
+            if self.onLimit != 1:
+                self.onLimit = 1 # reached hi limit
+                self.tsLimit = self.currtime
+                log.debug('reached hi limit') # debug
 
         if self.runtime < -self.MotorTime: # limit
-            self.onLimit = -1 # reached lo limit
             self.tsLimit = self.currtime
-            self.runtime = -self.MotorTime
-            log.debug('reached lo limit') # debug
+            if self.onLimit != -1:
+                self.onLimit = -1 # reached lo limit
+                self.runtime = -self.MotorTime
+                log.debug('reached lo limit') # debug
 
         #need to start a new pulse? chk runPeriod
         #if self.currtime > self.last_start + self.RunPeriod and self.last_state == 0: # free to start next pulse (no ongoing)
