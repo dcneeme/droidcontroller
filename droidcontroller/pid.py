@@ -239,7 +239,7 @@ class PID:
         '''
         self.actual = invar
         self.extnoint = noint
-        dir=['down','','up'] # up or down / FIXME use enum here! add Limit class! reusable for everybody...
+        direction = ['down','','up'] # up or down / FIXME use enum here! add Limit class! reusable for everybody...
         try:
             self.error = self.setPoint - invar            # self.error value
         except:
@@ -254,13 +254,13 @@ class PID:
         if self.Ki > 0:
             if ((self.onLimit == 0 and self.extnoint == 0) or
                 (self.onLimit == -1 and self.error > 0) or
-                (self.onLimit == 1 and self.error < 0)): # ok to integrate
+                (self.onLimit == 1 and self.error < 0)): # ok to integrate both, up, down
                 #integration is only allowed if Ki not zero and no limit reached or when output is moving away from limit
                 self.onLimit = 0
                 self.Ci += self.error * dt                   # integral term
             else:
                 #pass
-                log.info(self.name+' integration '+dir[self.onLimit+1]+' forbidden, onLimit '+str(self.onLimit)+', extnoint '+str(self.extnoint))
+                log.info(self.name+' integration '+direction[self.onLimit+1]+' forbidden, onLimit '+str(self.onLimit)+', extnoint '+str(self.extnoint)+', error '+str(self.error))
 
         self.Cd = 0
         if dt > 0:                              # no div by zero
@@ -293,12 +293,15 @@ class PID:
 
 
         if self.outMin is not None and self.outMax is not None: # to be sure about onLimit, double check
-            if out > self.outMin and out < self.outMax:
+            hyst = 0.01 * (self.Max - self.Min) # 1 %
+            if out > self.outMin + hyst and out < self.outMax - hyst: # lubatud piires
                 if self.onLimit != 0:
-                    log.warning(self.name+' fixing onLimit value '+str(self.onLimit)+' to zero!')
+                    log.warning(self.name+' onLimit value '+str(self.onLimit)+' dropped to zero!')
                     self.onLimit = 0 # fix possible self.error
-                    self.tsLimit = 0
-
+                    
+        else:
+            log.warning('one of the required limits missing! outMin '+str(self.outMin)+', outMax '+str(self.outMin))
+            
         if out == self.outMax and self.onLimit == -1: # swapped min/max and onlimit values for some reason?
             log.warning(self.name+' hi out and onlimit values do not match! out='+str(out)+', outMax='+str(self.outMax)+', onlimit='+str(self.onLimit))
             self.onLimit = 1 # fix possible self.error
