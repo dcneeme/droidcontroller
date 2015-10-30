@@ -541,7 +541,7 @@ class ThreeStep:
         else: # no new pulse yet or pulse already active
             length = 0
             #self.state = self.last_state
-            msg=selfname+' waiting for runperiod end to start a new pulse'
+            msg=self.name+' waiting for runperiod end to start a new pulse'
             log.debug(msg)
 
 
