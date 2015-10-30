@@ -139,7 +139,7 @@ class PID:
             'error' : self.error, \
             'actual' : self.actual, \
             'out' : self.out, \
-            'name': self.Name })
+            'name': self.name })
         if filter is None:
             return self.vars
         else:
