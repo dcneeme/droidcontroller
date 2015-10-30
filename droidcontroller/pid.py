@@ -110,13 +110,15 @@ class PID:
 
 
     def getLimit(self):
-        ''' Returns the limit state and the saturation age as list '''
+        ''' Returns the limit state and the saturation age as list. Also asuggestion not to integrate for outer loop id age < deadtime. '''
+        noint = 0
         if self.onLimit != 0:
-            age = int(self.currtime - self.tsLimit)
+            age = int(time.time() - self.tsLimit)
+            if self.dead_time > age:
+                noint = 1
         else:
             age = 0
-        return self.onLimit, age
-
+        return self.onLimit, age, noint
            
         
     def getvars(self, filter = None):
