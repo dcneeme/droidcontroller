@@ -293,7 +293,7 @@ class PID:
 
 
         if self.outMin is not None and self.outMax is not None: # to be sure about onLimit, double check
-            hyst = 0.01 * (self.outMax - self.outMin) # 1 %
+            hyst = 0.03 * (self.outMax - self.outMin) # 3 %
             if out > self.outMin + hyst and out < self.outMax - hyst: # lubatud piires
                 if self.onLimit != 0:
                     log.warning(self.name+' onLimit value '+str(self.onLimit)+' dropped to zero!')
