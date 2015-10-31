@@ -36,15 +36,15 @@ class MyBasenSend(object):
                     value = values2basen[key] / self.channels2basen[key][2]
                 else:
                     value = int(values2basen[key])
-            #log.info('4basen '+str(channels2basen[key][0:2])+' '+str(value))
-            row = "{"
-            row += "\"channel\":\"" + str(self.channels2basen[key][0]) + "\","
-            row += "\"" + str(self.channels2basen[key][1]) + "\":" + str(value) # + ","
-            #row += "\"comment\":\"" + str(self.comment) + "\","
-            #row += "\"unit\":\"" + str(self.unit) + "\""
-            row += "}"
-            log.info(row)
-            rows.append(row)
+                #log.info('4basen '+str(channels2basen[key][0:2])+' '+str(value))
+                row = "{"
+                row += "\"channel\":\"" + str(self.channels2basen[key][0]) + "\","
+                row += "\"" + str(self.channels2basen[key][1]) + "\":" + str(value) # + ","
+                #row += "\"comment\":\"" + str(self.comment) + "\","
+                #row += "\"unit\":\"" + str(self.unit) + "\""
+                row += "}"
+                log.info(row)
+                rows.append(row)
         return rows
 
 
