@@ -49,6 +49,7 @@ class PID:
         self.setName(name)
         self.dead_time = dead_time # time for reaction start for the controlled object
         self.extnoint = 0 # from outside, on output()
+        self.noint = 0 # internal saturation-initiated dead time signal to prevent outer loop integration in one direction
         self.Initialize()
 
 
@@ -219,17 +220,36 @@ class PID:
         log.debug('pid: initialized')
 
 
-    def getLimit(self):
-        ''' Returns the limit state and the saturation age as list. Also asuggestion not to integrate for outer loop id age < deadtime. '''
-        noint = 0
-        if self.onLimit != 0:
-            age = int(time.time() - self.tsLimit)
-            if self.dead_time > age:
-                noint = self.onLimit
-        else:
-            age = 0
-            noint = 0
-        return self.onLimit, age, noint # noint on sama plaarsusega kui onlimit, kehtides deadzone pikkuses
+    def getLimit(self, onlimit=None):
+        ''' Returns the limit state and the saturation age as list. 
+            Also asuggestion not to integrate for outer loop id age < deadtime. 
+            If noint is finished, then no new noint with the same value during deadzone! 
+            noint cannot be restarted!
+        '''
+        if onlimit != None:
+            self.onLimit = onlimit # for testing
+
+        age = time.time() - self.tsLimit
+        if age > self.dead_time: # time over for noint or noint restart protection
+            if self.noint == 0: # no noint currently
+                if self.onLimit != 0: # saturated
+                    self.noint = self.onLimit
+                    self.tsLimit = time.time() # start time
+                    log.info('started noint '+str(self.noint)+' for '+self.name)
+                else:
+                    log.debug('no reason for noint starting...')
+            else: # ongoing noint
+                if self.noint != 0:
+                    self.noint = 0
+                    self.tsLimit = time.time() # stop time
+                    log.info('stopped noint at age '+str(int(age))+' for '+self.name)
+        else: 
+            if self.noint != 0:
+                log.info('noint '+str(self.noint)+' ongoing, age '+str(int(age))+'s for '+self.name)
+            else:
+                log.info('noint protection time lasting '+str(int(age))+'s ongoing for '+self.name)
+            
+        return self.onLimit, age, self.noint # noint on sama plaarsusega kui onlimit, kehtides deadzone pikkuses
 
 
     def output(self, invar, noint = 0): # actual and external integration prevention (signed, 1 = no upwards)
