@@ -252,12 +252,14 @@ class PID:
 
         self.Cp = self.Kp * self.error               # proportional term
         if self.Ki > 0:
-            if ((self.onLimit == 0 and self.extnoint == 0) or
-                (self.onLimit == -1 and self.error > 0) or
-                (self.onLimit == 1 and self.error < 0)): # ok to integrate both, up, down
+            if ((self.onLimit == 0 and 
+                    ((self.extnoint == 0) or
+                    (self.extnoint == -1 and self.error > 0) or
+                    (self.extnoint == 1 and self.error > 0))) or
+                    (self.onLimit == -1 and self.error > 0) or
+                    (self.onLimit == 1 and self.error < 0)): # ok to integrate both, up, down
                 #integration is only allowed if Ki not zero and no limit reached or when output is moving away from limit
-                self.onLimit = 0
-                self.Ci += self.error * dt                   # integral term
+                self.Ci += self.error * dt   # integral term
             else:
                 #pass
                 log.info(self.name+' integration '+direction[self.onLimit+1]+' forbidden, onLimit '+str(self.onLimit)+', extnoint '+str(self.extnoint)+', error '+str(self.error))
