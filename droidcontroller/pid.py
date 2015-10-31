@@ -252,7 +252,7 @@ class PID:
 
         self.Cp = self.Kp * self.error               # proportional term
         if self.Ki > 0:
-            if ((self.onLimit == 0 and 
+            if ((self.onLimit == 0 and
                     ((self.extnoint == 0) or
                     (self.extnoint == -1 and self.error > 0) or
                     (self.extnoint == 1 and self.error < 0))) or
@@ -300,10 +300,10 @@ class PID:
                 if self.onLimit != 0:
                     log.warning(self.name+' onLimit value '+str(self.onLimit)+' dropped to zero!')
                     self.onLimit = 0 # fix possible self.error
-                    
+
         else:
             log.warning('one of the required limits missing! outMin '+str(self.outMin)+', outMax '+str(self.outMin))
-            
+
         if out == self.outMax and self.onLimit == -1: # swapped min/max and onlimit values for some reason?
             log.warning(self.name+' hi out and onlimit values do not match! out='+str(out)+', outMax='+str(self.outMax)+', onlimit='+str(self.onLimit))
             self.onLimit = 1 # fix possible self.error
