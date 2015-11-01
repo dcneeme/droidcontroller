@@ -252,19 +252,21 @@ class PID:
         return self.onLimit, age, self.noint # noint on sama plaarsusega kui onlimit, kehtides deadzone pikkuses
 
 
-    def output(self, invar, noint = 0): # actual and external integration prevention (signed, 1 = no upwards)
+    def output(self, actual, setpoint = None, noint = 0): # actual and external integration prevention (signed, 1 = no upwards)
         ''' Performs PID computation and returns a control value and it's components (and self.error and saturation)
             based on the elapsed time (dt) and the difference between actual value and setpoint.
             Added oct 2015: noint value other than 0 will stop integration in both directions.
         '''
-        self.actual = invar
+        if setpoint != None:
+            self.setPoint = setpoint # replacing setpoint
+        self.actual = actual
         self.extnoint = noint
         direction = ['down','','up'] # up or down / FIXME use enum here! add Limit class! reusable for everybody...
         try:
-            self.error = self.setPoint - invar            # self.error value
+            self.error = self.setPoint - actual            # self.error value  oli invar
         except:
             self.error = 0 # for the case of invalid actual
-            log.warning('invalid actual '+repr(invar)+' for pid self.error calculation, self.error zero used!')
+            log.warning('invalid actual '+repr(actual)+' for pid self.error calculation, self.error zero used!')
 
         self.currtime = time.time()               # get t
         dt = self.currtime - self.prevtm          # get delta t
@@ -282,7 +284,7 @@ class PID:
                 self.Ci += self.error * dt   # integral term
             else:
                 #pass
-                log.info(self.name+' integration '+direction[self.onLimit+1]+' forbidden, onLimit '+str(self.onLimit)+', extnoint '+str(self.extnoint)+', error '+str(self.error))
+                log.info(self.name+' integration '+direction[self.onLimit+1]+' forbidden, onLimit '+str(self.onLimit)+', extnoint '+str(self.extnoint)+', dead_time '+str(self.dead_time))
 
         self.Cd = 0
         if dt > 0:                              # no div by zero
@@ -331,7 +333,7 @@ class PID:
             log.warning(self.name+' lo out and onlimit values do not match! out='+str(out)+', outMin='+str(self.outMin)+', onlimit='+str(self.onLimit))
             self.onLimit = -1 # fix possible self.error
 
-        log.debug(self.name+' sp '+str(round(self.setPoint))+', actual '+str(invar)+', out'+str(round(out))+', p '+str(round(self.Cp))+', i '+str(round(self.Ki * self.Ci))+', d '+str(round(self.Kd * self.Cd)),', onlimit'+str(self.onLimit))
+        log.debug(self.name+' sp '+str(round(self.setPoint))+', actual '+str(actual)+', out'+str(round(out))+', p '+str(round(self.Cp))+', i '+str(round(self.Ki * self.Ci))+', d '+str(round(self.Kd * self.Cd)),', onlimit'+str(self.onLimit))
 
         self.out = out
         if self.outmode == 'list':
@@ -365,7 +367,7 @@ class ThreeStep:
         self.setMinpulseError(minerror)
         self.setRunPeriod(runperiod)
         self.setName(name)
-        self.dead_time = dead_time
+        self.dead_time = dead_time # not used here yet
         self.Initialize()
 
 
@@ -481,6 +483,10 @@ class ThreeStep:
         return self.onLimit, age, noint
 
 
+    def set_onlimit(self, invar):
+        self.setLimit(invar) # starman main_rescue jaoks ajutine abi
+        
+        
     def setLimit(self, invar):
         ''' Sets the 3step instance into saturated state based on external signal (limit switch for example) '''
         try:
