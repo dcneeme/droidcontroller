@@ -3,7 +3,7 @@
 # FIXME + regular svc and cmd ERV send out of historical queue!
 
 import subprocess
-import os, sys
+import os, sys, time
 import socket, struct, fcntl
 import logging
 log = logging.getLogger(__name__)
@@ -28,8 +28,11 @@ class Commands(SQLgeneral): # p
         self.todocode = 0 # todo_proc() retries
         self.vpn_start = '/root/d4c/vpnon'
         self.vpn_stop = '/root/d4c/vpnoff'
-
-
+        if udp:
+            log.info('SQLgeneral instance created, udp available')
+        else:
+            log.warning('SQLgeneral instance created, udp NOT available')
+            time.sleep(1)
 
     def free(path='./'): #returns free MB and percentage of given fs (can be current fs './' as well) # FIXME!
         #shold return free MB both for RAM and filesystem (with home dir included)
@@ -162,6 +165,7 @@ class Commands(SQLgeneral): # p
                 print(msg)
                 udp.syslog(msg)
                 sys.stdout.flush()
+                udp.dump_buffer() # save unsent buffer into buff2server.sql
                 time.sleep(1)
                 sys.exit()  # STOPPING THE APPLICATION.
 
@@ -492,12 +496,18 @@ class RegularComm(SQLgeneral): # r
                     valuestring = self.get_host_ip() # ip address in use from a list starting with tun0
 
                 elif svc == 'mfV': # free memory
-                    valuestring = str(psutil.phymem_usage()[2]) # free memory in bytes
-
+                    try:
+                        valuestring = str(psutil.phymem_usage()[2]) # free memory in bytes
+                    except:
+                        log.warning('psutil.phymem_usage failed')
+                        #traceback.print_exc()
                 elif svc == 'cpV': # cpu load %
-                    self.cpV = (self.cpV + psutil.cpu_percent())/2.0
-                    valuestring = str(int(round(self.cpV,0))) # cpu load %
-
+                    try:
+                        self.cpV = (self.cpV + psutil.cpu_percent())/2.0
+                        valuestring = str(int(round(self.cpV,0))) # cpu load %
+                    except:
+                        log.warning('psutil.cpu_percent failed')
+                        #traceback.print_exc()
                 else:
                     valuestring = 'regular service '+svc+' not yet supported'
 
