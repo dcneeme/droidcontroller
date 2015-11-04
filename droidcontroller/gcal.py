@@ -1,6 +1,6 @@
 import os, traceback, sqlite3, time
 from droidcontroller.sqlgeneral import * # SQLgeneral
-s=SQLgeneral()
+s = SQLgeneral()
 
 import logging
 log = logging.getLogger(__name__)
@@ -21,19 +21,21 @@ class Gcal:
         self.host_id = host_id
         self.days = days
         s.sqlread('calendar')
-        self.cur=conn.cursor()
+        self.cur = conn.cursor()
 
-    def sync(self): # query to SUPPORTHOST, returning all events
+    def sync(self, cal_id=None): # query to SUPPORTHOST, returning all events. cal_id may be different from host_id (several cals)...
         ''' Updates the local event buffer for days ahead. Should happen in background according to some interval... '''
         # example:   http://www.itvilla.ee/cgi-bin/gcal.cgi?mac=000101000001&days=10
-        req = 'http://www.itvilla.ee/cgi-bin/gcal.cgi?mac='+self.host_id+'&days='+str(self.days)+'&format=json'
-        headers={'Authorization': 'Basic YmFyaXg6Y29udHJvbGxlcg=='} # Base64$="YmFyaXg6Y29udHJvbGxlcg==" ' barix:controller
-        msg='starting gcal query '+req
+        if not cal_id:
+            cal_id = self.host_id
+        req = 'http://www.itvilla.ee/cgi-bin/gcal.cgi?mac='+cal_id+'&days='+str(self.days)+'&format=json'
+        headers = {'Authorization': 'Basic YmFyaXg6Y29udHJvbGxlcg=='} # Base64$="YmFyaXg6Y29udHJvbGxlcg==" ' barix:controller
+        msg = 'starting gcal query '+req
         print(msg) # debug
         try:
             response = requests.get(req, headers = headers)
         except:
-            msg='gcal query '+req+' failed!'
+            msg = 'gcal query '+req+' failed!'
             log.warning(msg)
             traceback.print_exc()
             print(msg)
@@ -49,7 +51,7 @@ class Gcal:
                 events = eval(response.content) # string to list
             
         except:
-            msg='getting calendar events failed for host_id '+self.host_id
+            msg = 'getting calendar events failed for host_id '+self.host_id
             print(msg)
             #log.warning(msg)
             traceback.print_exc() # debug
@@ -59,22 +61,22 @@ class Gcal:
         Cmd = "BEGIN IMMEDIATE TRANSACTION"
         try:
             conn.execute(Cmd)
-            Cmd="delete from calendar"
+            Cmd = "delete from calendar"
             conn.execute(Cmd)
             for event in events:
                 #print('event',event) # debug
-                columns=str(list(event.keys())).replace('[','(').replace(']',')')
-                values=str(list(event.values())).replace('[','(').replace(']',')')
+                columns = str(list(event.keys())).replace('[','(').replace(']',')')
+                values = str(list(event.values())).replace('[','(').replace(']',')')
                 Cmd = "insert into calendar"+columns+" values"+values
                 #print(Cmd) # debug
                 conn.execute(Cmd)
             conn.commit()
-            msg='calendar table updated'
+            msg = 'calendar table updated'
             print(msg)
             #log.warning(msg)
             return 0
         except:
-            msg='delete + insert to calendar table failed!'
+            msg = 'delete + insert to calendar table failed!'
             log.warning(msg)
             traceback.print_exc() # debug
             return 1 # kui insert ei onnestu, siis ka delete ei toimu
@@ -83,14 +85,14 @@ class Gcal:
     def check(self, title): # set a new setpoint if found in table calendar (sharing database connection with setup)
         ''' Returns the current value for the event with title from the local event buffer '''
         tsnow = int(time.time())
-        value='' # local string value
+        value = '' # local string value
         if title == '':
             return None
 
         Cmd = "BEGIN IMMEDIATE TRANSACTION"
         try:
             conn.execute(Cmd)
-            Cmd="select value,timestamp from calendar where title='"+title+"' and timestamp+0<"+str(tsnow)+" order by timestamp asc" # find the last passed event value
+            Cmd = "select value,timestamp from calendar where title='"+title+"' and timestamp+0<"+str(tsnow)+" order by timestamp asc" # find the last passed event value
             self.cur.execute(Cmd)
             for row in self.cur:
                 value = row[0] # overwrite with the last value before now
