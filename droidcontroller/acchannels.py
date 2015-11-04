@@ -607,7 +607,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             ts_created = int(eval(row[1])) if row[1] != '' and row[1] != None else 0 # will be stalled
             regtype= row[2]
             found = 1
-            if (self.ts - ts_created < maxage and row[1] != '' and row[1] != None) or (regtype[0] == 's'):
+            if ((self.ts - ts_created < maxage and row[1] != '' and row[1] != None) or (regtype[0] == 's')) and row[0] != None :
                 values.append(int(row[0]))
             else:
                 values.append(None)
