@@ -69,7 +69,7 @@ except:
 
 
 
-class SQLgeneral(UDPchannel): # parent class for Achannels, Dchannels, Counters, ACchannels
+class SQLgeneral(UDPchannel): # parent class for ACchannels, Dchannels
     ''' Access to io by modbus slave/register addresses and also via services. modbus client must be opened before.
         able to sync input and output channels and accept changes to service members by their sta_reg code
     '''
