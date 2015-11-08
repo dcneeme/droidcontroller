@@ -23,12 +23,8 @@ class IT5888pwm(object):
         self.values = [] # values for bit channels. do1..do8 = bit8..bit15  (reg 108..115)
         for i in range(len(self.bits)):
             self.values.append(None) # initially no change to the existing values in registers
-            if len(phases) == len(self.bits):
-                self.phases = phases # repeating
-            else:
-                self.phases.append(0) # first phase
-                log.warning('using default phase 0 for bit '+str(self.bits[i]))
-                
+            self.set_phases(phases)
+       
             if len(self.bits) == len(periodics): # must be list then
                 self.periodics = periodics # kordub aga mis teha
             else:
@@ -41,12 +37,24 @@ class IT5888pwm(object):
             if res == 0:
                 log.info(self.name+' successfully created')
             else:
-                log.warning(self.name+' possible I/O-problem, could not write into the period register '+str(self.per_reg)+' value '+str(self.period))
+                log.warning(self.name+' possible I/O-problem on mbi '+str(self.mbi)+', mba '+str(self.mba)+': could not write period '+str(self.period)+' into the register '+str(self.per_reg))
         except:
-            log.warning(self.name+' possible I/O-problem, could not write into the period register '+str(self.per_reg)+' value '+str(self.period))
+            log.warning(self.name+' possible I/O-problem on mbi '+str(self.mbi)+', mba '+str(self.mba)+': could not write period '+str(self.period)+' into the register '+str(self.per_reg))
             traceback.print_exc()
 
 
+    def set_phases(self, phases):
+        ''' Set the phases list '''
+        if len(phases) == len(self.bits):
+            self.phases = phases # repeating
+        else:
+            self.phases = []
+            for i in range(len(self.bits)):
+                self.phases.append(0) # first phase
+            log.warning('using default phase 0 for bit '+str(self.bits[i]))
+        log.info('phases set to '+str(self.phases))
+        
+    
     def set_period(self, invar):
         ''' set new period '''
         if invar > 4095:
@@ -57,7 +65,7 @@ class IT5888pwm(object):
         self.fix_period()
         
 
-    def fix_period():
+    def fix_period(self):
         '''  Restores the correct period value in IO register (150) '''
         if self.mb[self.mbi].read(self.mba, self.per_reg, 1) != self.period:
             self.mb[self.mbi].write(self.mba, self.per_reg, value = self.period) # restore the period register value in IO        
