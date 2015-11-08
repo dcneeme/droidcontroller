@@ -107,7 +107,7 @@ class IT5888pwm(object):
         chg = 0
         try:
             if len(values) == len(self.bits):
-                if values != self.values:  # change
+                if values != self.values or self.phaseset:  # change, refresh need in IO!
                     #self.values = values # tehakse set_value() sees
                     for i in range(len(self.bits)):
                         self.set_value(self.bits[i], values[i])
