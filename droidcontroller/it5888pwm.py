@@ -20,9 +20,13 @@ class IT5888pwm(object):
         self.period = period # ms
         self.periodics = periodics # True, False list
         self.phases = phases # 0..3
-        self.values = [] # values for bit channels. do1..do8 = bit8..bit15  (reg 108..115)
+        self.values = []
+        self.fullvalues = [] # together with phase etc codes for pwm channel
+        self.phaseset = False
+        # values for bit channels. do1..do8 = bit8..bit15  (reg 108..115)
         for i in range(len(self.bits)):
             self.values.append(None) # initially no change to the existing values in registers
+            self.fullvalues.append(None) # initially no change to the existing values in registers
             self.set_phases(phases)
        
             if len(self.bits) == len(periodics): # must be list then
@@ -44,7 +48,7 @@ class IT5888pwm(object):
 
 
     def set_phases(self, phases):
-        ''' Set the phases list '''
+        ''' Set the phases list. Used with value sending '''
         if len(phases) == len(self.bits):
             self.phases = phases # repeating
         else:
@@ -52,6 +56,7 @@ class IT5888pwm(object):
             for i in range(len(self.bits)):
                 self.phases.append(0) # first phase
             log.warning('using default phase 0 for bit '+str(self.bits[i]))
+        self.phaseset = True
         log.info('phases set to '+str(self.phases))
         
     
@@ -82,11 +87,12 @@ class IT5888pwm(object):
             if bit in self.bits:
                 gen = (i for i,x in enumerate(self.bits) if x == bit)
                 for i in gen: pass # should find one i only if bits correctly!
-                if self.values[i] == None or (self.values[i] != None and value != (self.values[i] & 0x0FFF)):
-                    self.values[i] = value + self.periodics[i] * 0x8000+ self.periodics[i] * 0x4000 + (self.phases[i] << 12) # phase lock needed for periodic...
+                if self.values[i] == None or (self.values[i] != None and value != (self.fullvalues[i] & 0x0FFF)) or self.phaseset:
+                    self.values[i] = value
+                    self.fullvalues[i] = value + self.periodics[i] * 0x8000+ self.periodics[i] * 0x4000 + (self.phases[i] << 12) # phase lock needed for periodic...
                     # the separate bit for phase lock seems unnecessary! 
-                    self.mb[self.mbi].write(self.mba, 100 + bit, value=self.values[i])
-                    log.info('new pwm value '+str(value)+' set for channel bit '+str(bit)+', phase '+str(self.phases[i])+', periodic '+str(self.periodics[i]))
+                    self.mb[self.mbi].write(self.mba, 100 + bit, value=self.fullvalues[i])
+                    log.info('new pwm value '+str(value)+', fullvalue '+str(hex(self.fullvalues[i]))+' set for channel bit '+str(bit)+', phase '+str(self.phases[i])+', periodic '+str(self.periodics[i]))
             else:
                 log.warning('invalid (not defined in bits) bit '+str(bit)+' used ! bits='+str(self.bits))
                 return 1
@@ -102,9 +108,9 @@ class IT5888pwm(object):
         try:
             if len(values) == len(self.bits):
                 if values != self.values:  # change
-                    self.values = values
+                    #self.values = values # tehakse set_value() sees
                     for i in range(len(self.bits)):
-                        self.set_value(self.bits[i], self.values[i])
+                        self.set_value(self.bits[i], values[i])
                 log.info('all changed PWM values sent to IO')
             else:
                 log.warning('invalid length for values list:'+str(len(values))+', values '+str(values)+', bits '+str(self.bits))
@@ -117,9 +123,12 @@ class IT5888pwm(object):
 
 
     def get_values(self):
-        ''' Returns the value list for bits '''
+        ''' Returns the pwm pulse length value list for bits '''
         return self.values # these contain also periodic and phase information! use (values[i] & 0x0FFF) to see the length
 
+    def get_fullvalues(self):
+        ''' Returns the full pwm value list (periodics, phase, length) for bits '''
+        return self.fullvalues # these contain also periodic and phase information! use (values[i] & 0x0FFF) to see the length
 
     def get_phases(self):
         ''' Returns the phase list for bits '''
