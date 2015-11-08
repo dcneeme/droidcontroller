@@ -67,8 +67,8 @@ class IT5888pwm(object):
 
     def fix_period(self):
         '''  Restores the correct period value in IO register (150) '''
-        if self.mb[self.mbi].read(self.mba, self.per_reg, 1) != self.period:
-            self.mb[self.mbi].write(self.mba, self.per_reg, value = self.period) # restore the period register value in IO        
+        if self.mb[self.mbi].read(self.mba, self.per_reg, 1)[0] != (self.period << 2): # period stored in 0,25 ms units in fw 616 dec!
+            self.mb[self.mbi].write(self.mba, self.per_reg, value = self.period << 2) # restore the period register value in IO        
             log.info(self.name+' pwm period fixed to '+str(self.period)+' ms')
     
 
@@ -83,7 +83,8 @@ class IT5888pwm(object):
                 gen = (i for i,x in enumerate(self.bits) if x == bit)
                 for i in gen: pass # should find one i only if bits correctly!
                 if self.values[i] == None or (self.values[i] != None and value != (self.values[i] & 0x0FFF)):
-                    self.values[i] = value + self.periodics[i] * 0x8000 + (self.phases[i] << 12)
+                    self.values[i] = value + self.periodics[i] * 0x8000+ self.periodics[i] * 0x4000 + (self.phases[i] << 12) # phase lock needed for periodic...
+                    # the separate bit for phase lock seems unnecessary! 
                     self.mb[self.mbi].write(self.mba, 100 + bit, value=self.values[i])
                     log.info('new pwm value '+str(value)+' set for channel bit '+str(bit)+', phase '+str(self.phases[i])+', periodic '+str(self.periodics[i]))
             else:
