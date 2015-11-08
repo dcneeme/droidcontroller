@@ -10,7 +10,7 @@ log = logging.getLogger(__name__)
 class IT5888pwm(object):
     ''' Takes new periodical PWM values and resends them if changed '''
 
-    def __init__(self, mb, mbi=0, mba=1, name='IT5888', period=1000, bits=[8, 9, 10, 11, 12, 13, 14, 15], phases=None, periodics=None, per_reg=150):
+    def __init__(self, mb, mbi=0, mba=1, name='IT5888', period=1000, bits=[8, 9, 10, 11, 12, 13, 14, 15], phases=[], periodics=[], per_reg=150):
         ''' One instance per I/O-module. Define the PWM channels via the bits list. '''
         self.mb = mb
         self.bits = bits # channel list
@@ -23,16 +23,16 @@ class IT5888pwm(object):
         self.values = [] # values for bit channels. do1..do8 = bit8..bit15  (reg 108..115)
         for i in range(len(self.bits)):
             self.values.append(None) # initially no change to the existing values in registers
-            if phases != None and len(phases) == len(self.bits):
+            if len(phases) == len(self.bits):
                 self.phases = phases # repeating
             else:
                 self.phases.append(0) # first phase
                 log.warning('using default phase 0 for bit '+str(self.bits[i]))
                 
-            if periodics != None and len(self.bits) == len(periodics): # must be list then
+            if len(self.bits) == len(periodics): # must be list then
                 self.periodics = periodics # kordub aga mis teha
             else:
-                self.periodics.append(True) # periodical by default
+                self.periodics.append(True) # all periodical by default
 
         self.name = name
         self.period = period # generation starts with value writing
@@ -53,9 +53,16 @@ class IT5888pwm(object):
             invar = 4095
             log.warning(self.name+' limited pwm period to max allowed 4095 ms')
         self.period = invar
-        self.mb[self.mbi].write(self.mba, self.per_reg, value = self.period)
         log.info(self.name+' new pwm period '+str(self.period)+' ms set')
+        self.fix_period()
+        
 
+    def fix_period():
+        '''  Restores the correct period value in IO register (150) '''
+        if self.mb[self.mbi].read(self.mba, self.per_reg, 1) != self.period:
+            self.mb[self.mbi].write(self.mba, self.per_reg, value = self.period) # restore the period register value in IO        
+            log.info(self.name+' pwm period fixed to '+str(self.period)+' ms')
+    
 
     def set_value(self, bit, value):
         ''' Set one channel to the new PWM value. Will be sent to modbus register if differs from the previous '''
