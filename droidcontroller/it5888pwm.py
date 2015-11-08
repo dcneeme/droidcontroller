@@ -10,15 +10,16 @@ log = logging.getLogger(__name__)
 class IT5888pwm(object):
     ''' Takes new periodical PWM values and resends them if changed '''
 
-    def __init__(self, mb, mbi = 0, mba = 1, name='IT5888', period = 1000, bits = [8, 9, 10, 11, 12, 13, 14, 15], phases = None, periodics = None):
+    def __init__(self, mb, mbi=0, mba=1, name='IT5888', period=1000, bits=[8, 9, 10, 11, 12, 13, 14, 15], phases=None, periodics=None, per_reg=150):
         ''' One instance per I/O-module. Define the PWM channels via the bits list. '''
         self.mb = mb
         self.bits = bits # channel list
         self.mbi = mbi # modbus comm instance
         self.mba = mba # modbus address
+        self.per_reg = per_reg # 150 
         self.period = period # ms
-        self.periodics = [] # True, False list
-        self.phases = [] # 0..3
+        self.periodics = periodics # True, False list
+        self.phases = phases # 0..3
         self.values = [] # values for bit channels. do1..do8 = bit8..bit15  (reg 108..115)
         for i in range(len(self.bits)):
             self.values.append(None) # initially no change to the existing values in registers
@@ -26,6 +27,8 @@ class IT5888pwm(object):
                 self.phases = phases # repeating
             else:
                 self.phases.append(0) # first phase
+                log.warning('using default phase 0 for bit '+str(self.bits[i]))
+                
             if periodics != None and len(self.bits) == len(periodics): # must be list then
                 self.periodics = periodics # kordub aga mis teha
             else:
@@ -34,13 +37,13 @@ class IT5888pwm(object):
         self.name = name
         self.period = period # generation starts with value writing
         try:
-            res = self.mb[self.mbi].write(self.mba, 150, value=self.period) # needs to be resent after io board reset
+            res = self.mb[self.mbi].write(self.mba, self.per_reg, value=self.period) # needs to be resent after io board reset
             if res == 0:
                 log.info(self.name+' successfully created')
             else:
-                log.warning(self.name+' possible I/O-problem, could not write into the period register 150 value '+str(self.period))
+                log.warning(self.name+' possible I/O-problem, could not write into the period register '+str(self.per_reg)+' value '+str(self.period))
         except:
-            log.warning(self.name+' possible I/O-problem, could not write into the period register 150 value '+str(self.period))
+            log.warning(self.name+' possible I/O-problem, could not write into the period register '+str(self.per_reg)+' value '+str(self.period))
             traceback.print_exc()
 
 
@@ -48,9 +51,10 @@ class IT5888pwm(object):
         ''' set new period '''
         if invar > 4095:
             invar = 4095
-            log.warning(self.name+' limited pwm period to max allowed 4095 s')
+            log.warning(self.name+' limited pwm period to max allowed 4095 ms')
         self.period = invar
-        log.info(self.name+' new pwm period '+str(self.period)+' s set')
+        self.mb[self.mbi].write(self.mba, self.per_reg, value = self.period)
+        log.info(self.name+' new pwm period '+str(self.period)+' ms set')
 
 
     def set_value(self, bit, value):
