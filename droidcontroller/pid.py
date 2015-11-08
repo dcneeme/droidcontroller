@@ -51,6 +51,8 @@ class PID:
         self.extnoint = 0 # from outside, on output()
         self.noint = 0 # internal saturation-initiated dead time signal to prevent outer loop integration in one direction
         self.Initialize()
+        msg=str(self.getvars())
+        log.info(msg)
 
 
     def setSetpoint(self, invar):
@@ -142,7 +144,7 @@ class PID:
             'out' : self.out, \
             'extnoint' : self.extnoint, \
             'name': self.name })
-        if filter is None:
+        if filter is None: # return everythong
             return self.vars
         else:
             if filter in self.vars:
@@ -168,7 +170,7 @@ class PID:
         try:
             #print('pid: trying to set new outMin '+str(invar)+' while outMax='+str(self.outMax)) # debug
             if self.Ki > 0 and invar != None  and self.outMin != invar:
-                log.info('pid: setMin with initialize')
+                log.info('pid: setMin with initialize to '+str(invar))
                 self.outMin = invar
                 self.Initialize()
             else:
@@ -186,7 +188,7 @@ class PID:
         try:
             #print('pid: trying to set new outMax '+str(invar)+' while outMin='+str(self.outMin)) # debug
             if self.Ki > 0 and invar != None  and self.outMax != invar:
-                log.info('pid: setMax with initialize')
+                log.info('pid: setMax with initialize '+str(invar))
                 self.outMax = invar
                 self.Initialize()
             else:
@@ -324,7 +326,7 @@ class PID:
                     self.onLimit = 0 # fix possible self.error
 
         else:
-            log.warning('one of the required limits missing! outMin '+str(self.outMin)+', outMax '+str(self.outMin))
+            log.warning('one of the required limits '+self.name+' missing! outMin '+str(self.outMin)+', outMax '+str(self.outMin))
 
         if out == self.outMax and self.onLimit == -1: # swapped min/max and onlimit values for some reason?
             log.warning(self.name+' hi out and onlimit values do not match! out='+str(out)+', outMax='+str(self.outMax)+', onlimit='+str(self.onLimit))

@@ -339,7 +339,7 @@ class UDPchannel():
     #    return self.last
 
 
-    def unsent(self, maxage=86400):   # 24 hours max history to be kept
+    def unsent(self, maxage=400):   # 24 hours max history to be kept 86400 s
         ''' Counts the non-acknowledged messages and removes older than maxage seconds (24h by default).
             If no more lines in buffer, dump empty table into sql file to avoid rows de ja vue on next start
         '''
@@ -418,7 +418,7 @@ class UDPchannel():
         sendstring = ''
         cur = self.conn.cursor()
         cur2 = self.conn.cursor()
-        limit = self.sk.get_state()[0] * 49 + 1  ## 1 key:value to try if conn down, 5 if up. 100 is too much, above 1 kB ##
+        limit = self.sk.get_state()[0] * 29 + 1  ## 1 key:value to try if conn down, 5 if up. 100 is too much, above 1 kB ##
         age = 0 # the oldest, will be self.age later
         #log.info('...trying to select and send max '+str(limit)+' buffer lines')
 
