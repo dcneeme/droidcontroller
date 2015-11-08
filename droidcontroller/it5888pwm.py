@@ -104,7 +104,7 @@ class IT5888pwm(object):
                 if values != self.values:  # change
                     self.values = values
                     for i in range(len(self.bits)):
-                        self.set_value(self.bit[i], self.value[i])
+                        self.set_value(self.bits[i], self.value[i])
                 log.info('all changed PWM values sent to IO')
             else:
                 log.warning('invalid length for values list:'+str(len(values))+', values '+str(values)+', bits '+str(self.bits))
