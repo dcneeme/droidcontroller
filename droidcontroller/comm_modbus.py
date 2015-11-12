@@ -59,8 +59,8 @@ class CommModbus(Comm):
         self.type = '' # normal modbus, may be changed to n or u for npe
         self.port = None # only for tcp or rtu over tcp, numeric not com port name!
         self.host = None # can be com port name or ip address
-        self.speed = 19200 # default speed
-        self.parity = 'E' # default
+        self.speed = kwargs.get('speed','19200') # default speed 19200
+        self.parity = kwargs.get('parity','E') # default EVEN
         
         self.mba_keepalive = kwargs.get('mba_keepalive',1) # this address must work, recreates mb[] if not
         #print(kwargs) # debug
