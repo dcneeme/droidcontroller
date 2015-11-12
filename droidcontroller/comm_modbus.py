@@ -348,23 +348,24 @@ class CommModbus(Comm):
         '''
         res = 0
 
-        if self.type == 'n' or self.type == 'u':  # type switch for npe_io
-            type=self.type  # this instance does not use modbus at all! for npe_io!
+        #if self.type == 'n' or self.type == 'u':  # type switch for npe_io
+        #    type=self.type  # this instance does not use modbus at all! for npe_io!
 
-        try:
-            values = kwargs['values']
-            count = len(values)
-        except:
-            try:
-                value = kwargs['value']
-                count = 1
-            except:
-                #traceback.print_exc() # debug
-                log.warning('write parameters problem, no value or values given, params '+str(kwargs))
-                return 2
+        value = kwargs.get('value', None)
+        values = kwargs.get('values', None)
+        #try:
+        #    values = kwargs['values', None]
+        #    #count = len(values)
+        #except:
+        #    try:
+        #        value = kwargs['value', None]
+        #    except:
+        #        #traceback.print_exc() # debug
+        #        log.warning('write parameters problem, no value or values given, params '+str(kwargs))
+        #        return 2
 
         if type == 'h': # holding
-            if count == 1: # single register write
+            if value:
                 try:
                     res = self.client.write_register(address=reg, value=value, unit=mba)
                     if isinstance(res, WriteSingleRegisterResponse): # ok
@@ -384,9 +385,9 @@ class CommModbus(Comm):
                     self.errorcount += 1
                     self.add_error(mba, 1)
                     return 1
-            else: # multiple register write
+            elif values: # multiple register write
                 try:
-                    res = self.client.write_registers(address=reg, count=count, unit=mba, values = values)
+                    res = self.client.write_registers(address=reg, count=len(values), unit=mba, values = values)
                     if isinstance(res, WriteMultipleRegistersResponse): # ok
                         self.errorcount = 0
                         self.add_error(mba, 0)
@@ -404,6 +405,8 @@ class CommModbus(Comm):
                     self.errorcount += 1
                     self.add_error(mba, 1)
                     return 1
+            else:
+                log.warning('FAILED write, neither value or values given!')
 
         elif type == 'c': # coil
             try:
