@@ -89,7 +89,7 @@ class IT5888pwm(object):
                 for i in gen: pass # should find one i only if bits correctly!
                 if self.values[i] == None or (self.values[i] != None and value != (self.fullvalues[i] & 0x0FFF)) or self.phaseset:
                     self.values[i] = value
-                    self.fullvalues[i] = value + self.periodics[i] * 0x8000+ self.periodics[i] * 0x4000 + (self.phases[i] << 12) # phase lock needed for periodic...
+                    self.fullvalues[i] = int(value + self.periodics[i] * 0x8000+ self.periodics[i] * 0x4000 + (self.phases[i] << 12)) # phase lock needed for periodic...
                     # the separate bit for phase lock seems unnecessary! 
                     self.mb[self.mbi].write(self.mba, 100 + bit, value=self.fullvalues[i])
                     log.info('new pwm value '+str(value)+', fullvalue '+str(hex(self.fullvalues[i]))+' set for channel bit '+str(bit)+', phase '+str(self.phases[i])+', periodic '+str(self.periodics[i]))
@@ -107,7 +107,7 @@ class IT5888pwm(object):
         chg = 0
         try:
             if len(values) == len(self.bits):
-                if values != self.values or self.phaseset:  # change, refresh need in IO!
+                if values != self.values or self.phaseset:  # change, refresh need in IO!   
                     #self.values = values # tehakse set_value() sees
                     for i in range(len(self.bits)):
                         self.set_value(self.bits[i], values[i])
