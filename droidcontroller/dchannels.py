@@ -2,7 +2,7 @@
 # 03.04.2014 neeme
 # 04.04.2014
 # 06.04.2014 seguential register read for optimized reading
-# 14.6.2015 mingi jama mone teenusega mis ei tekita sendtuple... 
+# 14.6.2015 mingi jama mone teenusega mis ei tekita sendtuple...
 # 11.9.2015 lisatud chg_dict, aga mingi jama
 
 ''' mb[mbi].read(mba, reg, count = 1, type = 'h'):  # modbus read example
@@ -129,12 +129,12 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                                 log.info(msg) ## debug
                                 #udp.syslog(msg)
                                 # dichannels table update with new bit values and change flags. no status change here. no update if not changed!
-                                Cmd = "UPDATE "+self.in_sql+" set value='"+str(value)+"', chg='"+str(chg)+"', ts='"+str(self.ts)+"' where mba='"+str(mba)+"' and regadd='"+str(regadd+i)+"' and mbi="+str(mbi)+" and bit='"+str(bit)+"'" 
+                                Cmd = "UPDATE "+self.in_sql+" set value='"+str(value)+"', chg='"+str(chg)+"', ts='"+str(self.ts)+"' where mba='"+str(mba)+"' and regadd='"+str(regadd+i)+"' and mbi="+str(mbi)+" and bit='"+str(bit)+"'"
                                 # uus bit value ja chg lipp, 2 BITTI!
                             else: # no value change, just update the timestamp!
                                 chg = 0
                                 Cmd = "UPDATE "+self.in_sql+" set ts='"+str(self.ts)+"', chg='"+str(chg)+"' where mba='"+str(mba)+"' and mbi="+str(mbi)+" and regadd='"+str(regadd+i)+"' and bit='"+str(bit)+"'" # old value unchanged, use ts_CHG AS TS!
-                            log.debug('dichannels ts udpdate: '+Cmd) 
+                            log.debug('dichannels ts udpdate: '+Cmd)
                             conn.execute(Cmd) # write
                         except:
                             log.warning('dichannels table update problem')
@@ -150,7 +150,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 return 2
         else:
             #failure, recreate mb[mbi]
-            
+
             if mba == mb[mbi].get_mba_keepalive(): # recreate mb[] on access failure to this address only
                 port = mb[mbi].get_port() # None if not tcp
                 host = mb[mbi].get_host() # always exists, ip or /dev/tty
@@ -238,7 +238,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             #  bit values updated for all dichannels
 
             conn.commit()  # dichannel-bits transaction end
-            
+
             return res # can be 3 if some grp changed, some got error! 0 is no change, 1 is change, 2 error
 
         except: # Exception,err:  # python3 ei taha seda viimast
@@ -254,7 +254,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
     def get_chg_dict(self):
         return self.chg_dict # {svc:[chgmap,valmap]}
-        
+
 
     def make_dichannels(self, svc = ''): # chk all if svc empty
         ''' Send di svc with changed member or (lapsed sendperiod AND
@@ -291,12 +291,12 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 # take into account cfg! not all changes are to be reported immediately!
                 # cfg is also for application needs, not only monitoring!
 
-                log.debug('Cmd: '+Cmd) ## 
+                log.debug('Cmd: '+Cmd) ##
                 cur.execute(Cmd)
 
                 for row in cur: # services to be processed. either just changed or to be resent
                     svccount += 1
-                    log.info('processing di row '+str(repr(row))) ## 
+                    log.info('processing di row '+str(repr(row))) ##
                     val_reg = ''
                     sta_reg = ''
                     sumstatus = 0 # at first
@@ -313,30 +313,30 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                         else:
                             msg='DI service '+val_reg+' unchanged: '
                         log.debug(msg)
-                        
+
                         sendtuple = self.make_dichannel_svc(val_reg) # for each service
                         udp.send(sendtuple)
                         msg = 'buffered for reporting all '+str(sendtuple) ####
                         log.info(msg)
                     else:
                         log.warning('FAILED to select row for '+val_reg)
-                
+
                 self.chg_dict = chg_dict
-                
+
             else:
                 sendtuple = self.make_dichannel_svc(svc)
                 udp.send(sendtuple)
                 msg = 'buffered for reporting single '+str(sendtuple) ####
                 log.info(msg)
-                
+
             #if sendtuple != None and sendtuple != []:
             #    udp.send(sendtuple)
             #    msg += str(sendtuple)
             #    log.info(msg)
             #else:
             #    log.warning('empty sendtuple '+str(sendtuple)+' for svc '+svc)
-            # ilmselt ei ole muutnud ega aeg korrata veel kaes    
-                
+            # ilmselt ei ole muutnud ega aeg korrata veel kaes
+
             conn.commit() # dichannels transaction end
             if svccount > 0:
                 return 1
@@ -404,7 +404,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             #if srow[11] != '':  # desc not needed
             if srow[12] != '':
                 regtype = srow[12] # change flag 0..3
-                
+
             #print 'make_dichannel_svc():',val_reg,'member',member,'value before status proc',value,', lisa',lisa  # temporary debug
 
             #if ots < self.ts + self.sendperiod: # stalled!
@@ -412,10 +412,10 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 if self.ts > ots + self.sendperiod: # stalled / but not for regtype s!
                     rowproblem = 1 # do not send this svc
                     log.warning('svc '+val_reg+' member '+str(member)+' stalled for '+str(int(self.ts - ots))+' s!')
-            if value == None: 
+            if value == None:
                     rowproblem = 1 # do not send this svc
                     log.warning('svc '+val_reg+' member '+str(member)+' value None!')
-            else:        
+            else:
                 if lisa != "": # not the first member any more
                     lisa = lisa+" "
 
@@ -433,8 +433,8 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 if (cfg&2): # status critical if value 1
                     status = 2 * value
 
-                  
-                
+
+
                 if status > sumstatus: # summary status is defined by the biggest member sstatus
                     sumstatus = status # suurem jaab kehtima
 
@@ -495,7 +495,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             reg_dict={} # {reg:bit_dict}
             mba_dict={} # {mba:reg_dict)
             mbi_dict={} # {mbi: mba_dict}
-            
+
             for row in cur: # for every bit, sorted by mbi, mba, regadd, bit
                 tmp_array = [] # do,di bits together
                 log.debug('got row about change needed from dochannels-dichannels left join',row)
@@ -517,7 +517,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                     reg_dict.update({regadd : bit_dict})
                     mba_dict.update({mba : reg_dict})
                     mbi_dict.update({mbi : mba_dict})
-                    
+
                 except:
                     msg = 'failure in creating tmp_array '+repr(tmp_array)+' '+str(sys.exc_info()[1])
                     res = (res | 2)# add error bit
@@ -548,7 +548,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                             word2 = s.bit_replace(word,bit,bit_dict[bit][0]) # changed the necessary bit. can't reuse / change word directly!
                             word = word2
 
-                        respcode = mb[mbi].write(mba, regadd, value=word) 
+                        respcode = mb[mbi].write(mba, regadd, value=word)
                         if respcode == 0:
                             msg = 'output written - mbi mba regadd value '+str(mbi)+' '+str(mba)+' '+str(regadd)+' '+format("%04x" % word)
                             log.debug(msg)
@@ -571,7 +571,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         msg = 'do sync done'
         log.debug(msg)
         return res
-        
+
 
     def parse_udp(self,data_dict): # search for setup or set di remote control signals
         ''' Setup change for variables in sql for modbus di channels. Ignore invalid parameters, not defined in self.in_sql! '''
@@ -591,7 +591,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                     Cmd="select mba,regadd,val_reg,member,value,regtype from "+self.in_sql+" where val_reg='"+key+"' and member='"+str(valmember+1)+"'"
                     cur.execute(Cmd)
                     #conn.commit()
-                    for row in cur: 
+                    for row in cur:
                         found += 1
                         #print('srow:',row) # debug
                         sqlvalue=int(row[4]) if row[4] != '' else 0 # eval(row[4]) if row[4] != '' else 0 #
@@ -677,7 +677,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         cur = conn.cursor()
         cur.execute(Cmd)
         value = None
-        found = 0    
+        found = 0
         for row in cur: # should be one row only
             log.debug('get_divalue row: '+str(repr(row))) # debug
             found = 1
@@ -685,10 +685,10 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         if found == 0:
             msg = 'get_divalue failure, no member '+str(member)+' for '+svc+' found!'
             log.warning(msg)
-            
+
         conn.commit()
         return value # also state and value should be important! like ac.get_aivalue does...
-    
+
     def get_divalues(self,svc): # returns values based on di service name as []
         ''' Returns di channel values as integer list '''
         #Cmd3="BEGIN IMMEDIATE TRANSACTION" # conn3, et ei saaks muutuda lugemise ajal
@@ -697,7 +697,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         cur = conn.cursor()
         cur.execute(Cmd)
         values = []
-        found = 0    
+        found = 0
         for row in cur: # should be one row only
             log.debug('get_divalue row: '+str(repr(row))) # debug
             found = 1
@@ -705,11 +705,11 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         if found == 0:
             msg = 'get_divalue failure, no member values  for '+svc+' found!'
             log.warning(msg)
-            
+
         conn.commit()
-        return values 
-        
-    
+        return values
+
+
     def doall(self): # do this regularly, blocks for the time of socket timeout!
         ''' Does everything on time if executed regularly '''
         res = [2, 2, 2] # returncodes list
@@ -718,7 +718,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             self.ts_read = self.ts
             try:
                 res[0] = self.sync_di() # 0 1 2 = nochg, dichg, error
-                res[1] = self.sync_do() # 0 1 2 = nochg, dochg, error  
+                res[1] = self.sync_do() # 0 1 2 = nochg, dochg, error
                 res[2] = self.make_dichannels() # 0 1 2 = nobuff, somebuff, error
             except:
                 traceback.print_exc()
