@@ -29,7 +29,7 @@ except:
 
 try:
     if conn:
-        print('sqlite connection already existing')
+        log.debug('sqlite connection already existing')
 except:
     conn = sqlite3.connect(':memory:')
     log.info('created sqlite connection')
@@ -37,18 +37,18 @@ except:
 
 try:
     if mb:
-        print('modbus connection(s) already existing')
+        log.debug('modbus connection(s) already existing')
 except:
     # several connections may be needed, tuple of modbus connections! also direct rtu, rtu via tcp-serial or tcp-modbustcp
     for file in ['devices.sql','setup.sql']: # channel tables opened by dchannels or acchannels
         sql = open(file).read() # (num integer,rtuaddr integer,tcpaddr)
-        print('reading',file)
+        log.debug('reading file ' + file)
         try:
             conn.executescript(sql) # read table into database
             conn.commit()
-            print('created table from file',file)
+            log.info('created table from file ' + file)
         except:
-            print('creating table from file',file,'FAILED!')
+            log.warning('creating table from file ' + file + ' FAILED!')
             traceback.print_exc()
 
     mb = [] # modbus comm instance
@@ -58,13 +58,15 @@ except:
     cur.execute(Cmd)
     conn.commit()
     for row in cur:
-        #print('sqlgeneral debug:',row) # debug
-        if ':' in row[1]:
+        if ':' in row[1]: # over tcp
             mb.append(CommModbus(host=row[1].split(':')[0], port=int(row[1].split(':')[1]))) # modbustcp over tcp
-            #mbhost.append(row[1])
-        else:
-            mb.append(CommModbus(host=row[1])) # probably olinuxino serial. speed, parity in comm_modbus
-            #mbhost.append(row[1]) # to be used in recreation in dchannels or acchannels / not any more, apr 2015
+        elif '|' in row[1]: # serial with speed and parity defined
+            parity = 'E'
+            if len(row[1]) == 3:
+                parity = row[1].split('|')[2] if row[1].split('|')[2] == 'N' or row[1].split('|')[2] == 'O' else 'E' # must be N or E or O
+            mb.append(CommModbus(host=row[1].split('|')[0], speed=int(row[1].split('|')[1])), parity = parity) # modbustcp over tcp
+        else: # serial in default configuration 19k2 8E1
+            mb.append(CommModbus(host=row[1], speed=19200)) # probably olinuxino serial. speed, parity in comm_modbus
     log.info('opened setup, devices tables and created '+str(len(mb))+' modbus connection(s)')
 
 
@@ -84,14 +86,14 @@ class SQLgeneral(UDPchannel): # parent class for ACchannels, Dchannels
             import BeautifulSoup # ? 
             import termios
             msg = 'running on android, current directory '+os.getcwd()
-            print(msg)
+            log.info(msg)
             udp.syslog(msg)
 
         except: # some linux
             import os
             if 'ARCH' in os.environ: # uname()[2]:  # olinuxino
                 self.OSTYPE='archlinux'
-                print('running on archlinux')
+                log.info('running on archlinux')
                 #os.chdir('/root/d4c') # OLINUXINO
                 #from droidcontroller.webserver import WebServer
 
@@ -101,7 +103,7 @@ class SQLgeneral(UDPchannel): # parent class for ACchannels, Dchannels
 
             else: # ei ole ei android, arch ega techbase
                 self.OSTYPE='linux' # generic
-                print('running on generic linux')   # sql failid olgu jooksvas kataloogis
+                log.info('running on generic linux')   # sql failid olgu jooksvas kataloogis
 
 
 
@@ -153,7 +155,7 @@ class SQLgeneral(UDPchannel): # parent class for ACchannels, Dchannels
             log.info(msg)
         except:
             msg = 'FAILURE in opening '+filename+': '+str(sys.exc_info()[1])
-            print(msg)
+            log.warning(msg)
             #udp.syslog(msg)
             traceback.print_exc()
             time.sleep(1)
@@ -223,7 +225,7 @@ class SQLgeneral(UDPchannel): # parent class for ACchannels, Dchannels
 
                 val_reg=row[0] # muutuja  nimi
                 value=row[1] # string even if number!
-                print(' setup row: ',val_reg,value)
+                log.info(' setup row: '+ val_reg +str(value))
 
                 #if val_reg[0] == 'W' and '272' in value: # power up value for do (setup register W1.272 and so on)
                 #    W272_dict.update({int(float(val_reg[1])) : int(float(value))}) # {mba:272value}
@@ -244,7 +246,7 @@ class SQLgeneral(UDPchannel): # parent class for ACchannels, Dchannels
                         else:
                             msg='linux syslog redirection to '+loghost+' FAILED!'
                         udp.syslog(msg)
-                        print(msg)
+                        log.info(msg)
 
                 sta_reg = '' # configuration data
                 status = -1 # configuration data
@@ -281,7 +283,7 @@ class SQLgeneral(UDPchannel): # parent class for ACchannels, Dchannels
         try:
             #conn.execute(Cmd) # setup transaction start
             Cmd="update "+table+" set value='"+str(value)+"', ts='"+str(int(ts))+"' where register='"+register+"'" # update only, no insert here!
-            print(Cmd)
+            log.debug(Cmd)
             udp.syslog(Cmd) # debug
             conn.execute(Cmd) # table asetup/setup
             conn.commit() # end transaction
@@ -290,7 +292,7 @@ class SQLgeneral(UDPchannel): # parent class for ACchannels, Dchannels
 
         except: #if not succcessful, then not a valid setup message - NO INSERT here, UPDATE ONLY!
             msg='setup change problem, the assumed setup register '+register+' not found in setup table! '+str(sys.exc_info()[1])
-            print(msg)
+            log.warning(msg)
             udp.syslog(msg)
 
             return 1
@@ -336,7 +338,7 @@ class SQLgeneral(UDPchannel): # parent class for ACchannels, Dchannels
                             else:
                                 msg='empty value for register '+register+', assuming 0!'
                                 value=0
-                                print(msg)
+                                log.warning(msg)
                                 udp.syslog(msg)
 
                             result = client.read_holding_registers(address=regadd, count=1, unit=mba) # actual value currently in slave modbus register
@@ -372,7 +374,7 @@ class SQLgeneral(UDPchannel): # parent class for ACchannels, Dchannels
 
                             else: # readable only
                                 msg='updating setup with read-only configuration data from mba.reg '+str(mba)+'.'+str(regadd)
-                                print(msg)
+                                log.info(msg)
                                 udp.syslog(msg)
                                 Cmd="update setup set value='"+str(tcpdata)+"' where register='"+register+"'"
                                 conn.execute(Cmd)
@@ -381,7 +383,7 @@ class SQLgeneral(UDPchannel): # parent class for ACchannels, Dchannels
 
                         except:
                             msg=' - could not read the modbus register mba.reg '+str(mba)+'.'+str(regadd)+' '+str(sys.exc_info()[1])
-                            print(msg)
+                            log.warning(msg)
                             udp.syslog(msg)
                             #traceback.print_exc()
                             #syslog('err: '+repr(err))
@@ -441,7 +443,7 @@ class SQLgeneral(UDPchannel): # parent class for ACchannels, Dchannels
             value.append(membervalue)  # make a value tuple
         if len(value) == 0: # got nothing
             msg='get_value() failure for '+svc+' from table '+table
-            print(msg)
+            log.info(msg)
             udp.syslog(msg)
 
         conn.commit()
@@ -564,7 +566,7 @@ class SQLgeneral(UDPchannel): # parent class for ACchannels, Dchannels
                 return 1
             except:
                 msg='setbit_dochannels failed for bit '+str(bit)+': '+str(sys.exc_info()[1])
-                print(msg)
+                log.warning(msg)
                 udp.syslog(msg)
                 traceback.print_exc() # debug
                 return 1
