@@ -64,7 +64,7 @@ except:
             parity = 'E'
             if len(row[1]) == 3:
                 parity = row[1].split('|')[2] if row[1].split('|')[2] == 'N' or row[1].split('|')[2] == 'O' else 'E' # must be N or E or O
-            mb.append(CommModbus(host=row[1].split('|')[0], speed=int(row[1].split('|')[1])), parity = parity) # modbustcp over tcp
+            mb.append(CommModbus(host=row[1].split('|')[0], speed=int(row[1].split('|')[1]), parity = parity)) # modbustcp over tcp
         else: # serial in default configuration 19k2 8E1
             mb.append(CommModbus(host=row[1], speed=19200)) # probably olinuxino serial. speed, parity in comm_modbus
     log.info('opened setup, devices tables and created '+str(len(mb))+' modbus connection(s)')
