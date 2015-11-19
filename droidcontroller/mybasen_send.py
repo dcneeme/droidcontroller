@@ -1,4 +1,9 @@
-''' Send to mybasen '''
+''' Send data into mybasen server.
+    Needs the data to be arranged in arrays of self.values2basen, 
+    configured in dictionary self.channels2basen like {0:['TempSauna','double',10]} # name, type, divisor
+    where key is the self.values2basen index
+'''
+
 import sys, traceback
 import tornado.httpclient
 import json
@@ -8,11 +13,11 @@ log = logging.getLogger(__name__)
 
 
 class MyBasenSend(object):
-    ''' Sends away the messages, combining different key:value pairs and adding host id and time.
+    ''' Sends away the messages, combining different key:value pairs and adding host id and time (time not yet).
         Listens for response, non-blocking, relies on tornado IOLoop.
     '''
 
-    def __init__(self, aid = 'itvilla', uid = b'itvilla', passwd = b'MxPZcbkjdFF5uEF9', path= 'tutorial/testing/test_async'):
+    def __init__(self, aid = '', uid = b'', passwd = b'', path= 'tutorial/testing'):
         ''' Sender to mybase '''
         self.url = 'https://mybasen.pilot.basen.com/_ua/'+aid+'/v0.1/data'
         self.uid = uid # binary!
@@ -27,7 +32,7 @@ class MyBasenSend(object):
 
 
     def mybasen_rows(self, values2basen):
-        ''' Create datta rows for mybasen '''
+        ''' Create data rows for mybasen '''
         rows = []
         for key in values2basen: # some channels may be without value in the beginning. add time?
             # show chan, type, value
