@@ -5,8 +5,8 @@
 from droidcontroller.comm import Comm
 from pymodbus import *
 from pymodbus.exceptions import *
-#from pymodbus.transaction import * # needed for ModbusRtuFramer
-from pymodbus.transaction import ModbusRtuFramer
+from pymodbus.transaction import * # needed for ModbusRtuFramer but also ModbusTcpFramer?
+#from pymodbus.transaction import ModbusRtuFramer
 from pymodbus.register_read_message import ReadHoldingRegistersResponse, ReadInputRegistersResponse
 from pymodbus.register_write_message import WriteMultipleRegistersResponse, WriteSingleRegisterResponse
 import traceback
@@ -248,7 +248,7 @@ class CommModbus(Comm):
                     self.add_error(mba, 0)
                     return res.registers
                 else:
-                    log.warning('modbus read (h) failed from mba '+str(mba)+', reg '+str(reg)+', count '+str(count))
+                    log.warning('got no response to read (h) from mba '+str(mba)+', reg '+str(reg)+', count '+str(count))
                     self.errorcount += 1
                     self.add_error(mba, 1)
                     return None
@@ -267,7 +267,7 @@ class CommModbus(Comm):
                     self.add_error(mba, 0)
                     return res.registers
                 else:
-                    log.warning('modbus read (i) failed from mba '+str(mba)+', reg '+str(reg)+', count '+str(count))
+                    log.warning('got no response to read (i) from mba '+str(mba)+', reg '+str(reg)+', count '+str(count))
                     self.errorcount += 1
                     self.add_error(mba, 1)
                     return None
