@@ -386,7 +386,8 @@ class RegularComm(SQLgeneral): # r
         self.ts = self.app_start
         self.uptime = [0,0,0]
         self.host_ip = 'unknown' # controller ip
-        self.cpV = 0 # cpu load
+        self.cpV = 0 # cpu load d%
+        self.duV = 0 # disk usage d%
 
         try:
             self.sync_uptime() # sys apptime to uptime[0]
@@ -453,7 +454,7 @@ class RegularComm(SQLgeneral): # r
         log.debug('uptimes sys, app, app_start_uptime '+str(self.uptime))
 
 
-    def regular_svc(self, svclist = ['UPW','TCW','ipV','cpV','mfV']): # , 'd2W']): # baV (buffer age) is always sent, omitting buffer!
+    def regular_svc(self, svclist = ['UPW','TCW','ipV','cpV','mfV', 'duV']): # , 'd2W']): # baV (buffer age) is always sent, omitting buffer!
         ''' sends regular service messages that are not related to aichannels, dichannels or counters.
             Returns number of bytes sent, None if send queue was not appended at this time.
         '''
@@ -497,16 +498,24 @@ class RegularComm(SQLgeneral): # r
 
                 elif svc == 'mfV': # free memory
                     try:
-                        valuestring = str(psutil.phymem_usage()[2]) # free memory in bytes
+                        valuestring = str(int(psutil.virtual_memory()[4]/1000.0))
+                        #valuestring = str(psutil.phymem_usage()[2]) # free memory in bytes
                     except:
-                        log.warning('psutil.phymem_usage failed')
+                        log.warning('psutil.virtual_memory failed')
                         #traceback.print_exc()
                 elif svc == 'cpV': # cpu load %
                     try:
-                        self.cpV = (self.cpV + psutil.cpu_percent())/2.0
-                        valuestring = str(int(round(self.cpV,0))) # cpu load %
+                        self.cpV = (self.cpV + psutil.cpu_percent())/2.0 # averaging
+                        valuestring = str(int(10 * round(self.cpV,1))) # cpu load %
                     except:
                         log.warning('psutil.cpu_percent failed')
+                        #traceback.print_exc()
+                elif svc == 'duV': # disk usage % /root
+                    try:
+                        self.duV = (psutil.disk_usage('/root')[3])
+                        valuestring = str(int(10 * round(self.duV,1))) # disk usage % %
+                    except:
+                        log.warning('psutil.disk_usage failed')
                         #traceback.print_exc()
                 else:
                     valuestring = 'regular service '+svc+' not yet supported'
