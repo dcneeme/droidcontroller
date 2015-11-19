@@ -68,7 +68,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
 
     def read_di_grp(self,mba,regadd,count,mbi=0, regtype='h'): # using self,in_sql as the table to store in.
-        ''' Read sequential register group and store raw into table self.in_sql. Inside transaction! '''
+        ''' Read sequential register group and store raw into table self.in_sql. Inside transaction! return 1 if change, 0- no chg, 2 error '''
         if self.ts == 0:
             self.ts=int(round(time.time())) # for debugging time is needed
 
@@ -80,7 +80,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 if mb[mbi]:
                     result = mb[mbi].read(mba, regadd, count=count, type=regtype)
                     msg += ' OK, raw '+str(result)
-                    log.debug(msg)
+                    log.info(msg) ##
                 else:
                     msg += ' -- FAIL, no mb[] for '+str(mbi)
                     log.warning(msg)
@@ -115,10 +115,10 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                         #print('old value for mbi, mba, regadd, bit',mbi,mba,regadd+i,bit,'was',ovalue) # debug
 
                         try:
-                            value = int((result[i]&2**bit)>>bit) # new bit value
+                            value = int((result[i] & 2**bit) >> bit) # new bit value
                             #print('decoded new value for mbi, mba, regadd, bit',mbi,mba,regadd+i,bit,'is',value,'was',ovalue) # debug
                         except:
-                            log.warning('read_di_grp problem: result, i, bit',result,i,bit)
+                            log.warning('read_di_grp problem: result '+str(result)+', i'+str(i)+', bit'+str(bit))
                             traceback.print_exc()
 
                         # check if outputs must be written
@@ -137,13 +137,13 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                             log.debug('dichannels ts udpdate: '+Cmd) 
                             conn.execute(Cmd) # write
                         except:
-                            log.debug('dichannels table update problem')
+                            log.warning('dichannels table update problem')
                             traceback.print_exc()
                 #time.sleep(0.05)
-                if chg > 0:
+                if chg == 0: # no change
                     return 0
                 else:
-                    return 1
+                    return 1 # there was change
             except:
                 traceback.print_exc()
                 time.sleep(0.2)
@@ -163,7 +163,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
 
     def sync_di(self): # binary input readings to sqlite, to be executed regularly.
-        #global MBerr
+        ''' Modbus DI registers contebt to dichannels.sql, return 0 if ok. '''
         res = 0 # returncode
         mba = 0
         val_reg = ''
@@ -296,7 +296,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
                 for row in cur: # services to be processed. either just changed or to be resent
                     svccount += 1
-                    log.debug('processing row '+str(repr(row))) ## 
+                    log.info('processing di row '+str(repr(row))) ## 
                     val_reg = ''
                     sta_reg = ''
                     sumstatus = 0 # at first
@@ -309,6 +309,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                         if chg > 0: # message due to bichannel state change
                             msg='DI service '+val_reg+' needs to be notified, change bitmap '+str(hex(chg))
                             chg_dict.update({val_reg : [chg, val]})  #### FIXME / kahtlane , 1 asemel 3, 2 asemel 6 jne
+                            log.info(msg)
                         else:
                             msg='DI service '+val_reg+' unchanged: '
                         log.debug(msg)
@@ -393,7 +394,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 cfg=int(srow[5]) # configuration byte
             # block?? to prevent sending service with errors. to be added!
             if srow[7] != '':
-                value=int(eval(srow[7])) # new value
+                value = int(eval(srow[7])) if srow[7] != '' else None  # new value. 0 or 1
             if srow[8] != '':
                 ostatus=int(eval(srow[8])) # old status
             if srow[9] != '':
@@ -411,30 +412,33 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 if self.ts > ots + self.sendperiod: # stalled / but not for regtype s!
                     rowproblem = 1 # do not send this svc
                     log.warning('svc '+val_reg+' member '+str(member)+' stalled for '+str(int(self.ts - ots))+' s!')
+            if value == None: 
+                    rowproblem = 1 # do not send this svc
+                    log.warning('svc '+val_reg+' member '+str(member)+' value None!')
+            else:        
+                if lisa != "": # not the first member any more
+                    lisa = lisa+" "
+
+                # status and inversions according to configuration byte
+                status = 0 # initially for each member
+                if (cfg&4): # value2value inversion
+                    value = (1^value) # possible member values 0 voi 1
+                lisa=lisa + str(value) # adding possibly inverted member value to multivalue string
+
+                if (cfg&8): # value2status inversion
+                    value = (1^value) # member value not needed any more
+
+                if (cfg&1): # status warning if value 1
+                    status = value #
+                if (cfg&2): # status critical if value 1
+                    status = 2 * value
+
+                  
                 
-            if lisa != "": # not the first member any more
-                lisa = lisa+" "
+                if status > sumstatus: # summary status is defined by the biggest member sstatus
+                    sumstatus = status # suurem jaab kehtima
 
-            # status and inversions according to configuration byte
-            status = 0 # initially for each member
-            if (cfg&4): # value2value inversion
-                value = (1^value) # possible member values 0 voi 1
-            lisa=lisa + str(value) # adding possibly inverted member value to multivalue string
-
-            if (cfg&8): # value2status inversion
-                value = (1^value) # member value not needed any more
-
-            if (cfg&1): # status warning if value 1
-                status = value #
-            if (cfg&2): # status critical if value 1
-                status = 2 * value
-
-              
-            
-            if status > sumstatus: # summary status is defined by the biggest member sstatus
-                sumstatus = status # suurem jaab kehtima
-
-            log.debug(val_reg+'.'+str(member)+' value after status proc '+str(value)+', sumstatus '+str(sumstatus)+', lisa '+str(lisa))
+                log.debug(val_reg+'.'+str(member)+' value after status proc '+str(value)+', sumstatus '+str(sumstatus)+', lisa '+str(lisa))
 
 
             #dichannels table update with new chg and status values. no changes for values! chg bit 0 off! set ts_msg!
