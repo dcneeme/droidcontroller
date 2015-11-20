@@ -135,7 +135,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                             else: # no value change, just update the timestamp!
                                 chg = 0
                                 Cmd = "UPDATE "+self.in_sql+" set ts='"+str(self.ts)+"', chg='"+str(chg)+"' where mba='"+str(mba)+"' and mbi="+str(mbi)+" and regadd='"+str(regadd+i)+"' and bit='"+str(bit)+"'" # old value unchanged, use ts_CHG AS TS!
-                            log.info('dichannels udpdate cmd: '+Cmd)
+                            log.debug('dichannels update cmd: '+Cmd)
                             conn.execute(Cmd) # write
                         except:
                             log.warning('dichannels table update problem')
@@ -211,7 +211,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                     bmba = mba
                     bmbi = mbi
                     bregtype = regtype
-                    print('di first group mba '+str(bmba)+' start from reg ',bfirst) # debug, count yet unknown
+                    #print('di first group mba '+str(bmba)+' start from reg ',bfirst) # debug, count yet unknown
 
                 else: # not the first
                     if mbi == bmbi and mba == bmba and regadd == blast+1: # next regadd found, sequential group still growing
@@ -220,7 +220,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                         #print('di group starting from '+str(bfirst)+': end shifted to',blast) # debug
                     else: # a new group started, make a query for previous
                         #print('di group end detected at regadd',blast,'bcount',bcount) # debugb
-                        print('going to read di registers from',bmba,bfirst,'to',blast,'regcount',bcount) # debug
+                        #print('going to read di registers from',bmba,bfirst,'to',blast,'regcount',bcount) # debug
                         res = (res | self.read_di_grp(bmba,bfirst,bcount,bmbi,bregtype)) # reads and updates table with previous data. res = bitmap
                         bfirst = regadd # new grp starts immediately
                         blast = regadd
@@ -232,7 +232,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
             if bfirst != -1: # last group yet unread
                 #print('di group end detected at regadd',blast) # debugb
-                print('2going to read di registers from',bmba,bfirst,'to',blast,'regcount',bcount) # debug
+                #print('2going to read di registers from',bmba,bfirst,'to',blast,'regcount',bcount) # debug
                 res = (res | self.read_di_grp(bmba,bfirst,bcount,bmbi,bregtype)) # last read / update. res = bitmap
 
             #  bit values updated for all dichannels
@@ -316,7 +316,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
                         sendtuple = self.make_dichannel_svc(val_reg) # for each service
                         udp.send(sendtuple)
-                        msg = 'buffered for reporting all '+str(sendtuple) ####
+                        msg = 'buffered within reporting all '+str(sendtuple) ####
                         log.info(msg)
                     else:
                         log.warning('FAILED to select row for '+val_reg)
@@ -327,7 +327,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 sendtuple = self.make_dichannel_svc(svc)
                 if sendtuple:
                     udp.send(sendtuple)
-                    msg = 'buffered for reporting single '+str(sendtuple) ####
+                    msg = 'buffered due to reporting single '+str(sendtuple) ####
                     log.info(msg)
 
             #if sendtuple != None and sendtuple != []:
