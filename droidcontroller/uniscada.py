@@ -308,8 +308,8 @@ class UDPchannel():
         ''' Adds service components into buffer table to be sent as a string message
             the components are sta_reg = '', status = 0, val_reg = '', value = ''
         '''
-        if servicetuple == None:
-            log.warning('ignored servicetuple with value None')
+        if servicetuple == None or len(servicetuple) != 4:
+            log.warning('send() ignored INVALID servicetuple (with value None or length other than 4): '+str(servicetuple))
             return 2
 
         try:
@@ -330,7 +330,7 @@ class UDPchannel():
             self.makebuffer()
             #syslog(msg) # incl syslog
             log.warning(msg)
-            #traceback.print_exc()
+            traceback.print_exc()
             return 1
 
 
