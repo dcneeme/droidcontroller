@@ -291,7 +291,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 # take into account cfg! not all changes are to be reported immediately!
                 # cfg is also for application needs, not only monitoring!
 
-                log.info('Cmd: '+Cmd) ##
+                log.debug('Cmd: '+Cmd) ##
                 cur.execute(Cmd)
 
                 for row in cur: # services to be processed. either just changed or to be resent

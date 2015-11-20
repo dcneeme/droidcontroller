@@ -508,7 +508,7 @@ class Mbus:
         return res
         
 
-    def get_volumes(self): # cyble only so far, multiple (3) volumes, 
+    def get_volumes(self): # DOES NOT WORK, ERRORS
         ''' Return water volume readings. 
             testing
             m.mb_decode(69,'0413',1.0,'vol',length=4,hex=0)
@@ -517,7 +517,7 @@ class Mbus:
         key = ['','','']
         coeff = [1.0, 1.0, 1.0]
         length = [4, 4, 4] # bytes
-        hex = 1
+        hex = None # 1
         if self.model == 'cyble_v2': # itron cyble v2, 32bit var, the first is the normal reading
             ''' 69  0413   00000000
                 75  0493   7F000000 

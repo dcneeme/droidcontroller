@@ -145,17 +145,15 @@ class ControllerApp(object): # default modbus address of io in controller = 1
                 got = udp.udpread()
 
             if udp.sk.get_state()[3] == 1: # firstup
-                    self.firstup()
+                self.firstup()
 
     def firstup(self):
         ''' Things to do on the first connectivity establisment after startup '''
         udp.udpsend(self.AVV) # AVV only, the rest go via buffer
         udp.send(['TCS',1,'TCW','?']) # restore via buffer
-        for i in range(3):
-            udp.send(['H'+str(i+1)+'CS',1,'H'+str(i+1)+'CW','?']) # cumulative heat energy restoration via buffer
-
         ac.ask_counters() # restore values from server
-        log.info('******* uniscada connectivity up, sent AVV and tried to restore counters and some variables ********')
+        log.info('******* uniscada connectivity up, sent AVV and tried to restore counters ********')
+        self.app(sys._getframe().f_code.co_name, attentioncode = 1) # app() should ask some more variables?
 
     def powerbreak(self):
         # age and neverup taken into account from udp.sk statekeeper instance
@@ -194,21 +192,26 @@ class ControllerApp(object): # default modbus address of io in controller = 1
 
     def di_reader(self): # DI reader
         self.spm.count() # di speed metering via speedometer
-        reslist = d.doall() # returns di, do , svc signals 0 1 2 = nochg chg err
+        reslist = d.doall() # returns di, do, svc signals 0 1 2 = nochg chg err
         di_dict = d.get_chg_dict()
         if reslist == [0, 0, 0]:
             sys.stdout.write('d') # no flush
+            sys.stdout.flush() # debugging flush on no chg as well
         else:
-            sys.stdout.write('D') 
+            sys.stdout.write('D') # some change
             sys.stdout.flush() # flush now, when something was changed
         
         if (reslist[0] & 1):  # change in di services
             di_dict = d.get_chg_dict()
-            log.info('di change detected: '+str(di_dict)) # mis siin on , chg voi svc?
+            log.info('di change detected: '+str(di_dict)+', reslist '+str(reslist)) # mis siin on , chg voi svc?
+            self.app(sys._getframe().f_code.co_name, attentioncode = 1) # d, a attention bits
+        if (reslist[1] & 1):  # change in do services
+            di_dict = d.get_chg_dict()
+            log.info('do change detected: '+str(di_dict)+', reslist '+str(reslist)) # mis siin on , chg voi svc?
             self.app(sys._getframe().f_code.co_name, attentioncode = 1) # d, a attention bits
         if (reslist[2] & 1):  # change in di services
             di_dict = d.get_chg_dict()
-            log.info('di svc to send: '+str(di_dict))
+            log.info('svc to send: '+str(di_dict)+', reslist '+str(reslist))
             self.udp_comm() # should reset timer too!
             
 

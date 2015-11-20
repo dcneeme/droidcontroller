@@ -418,7 +418,7 @@ class UDPchannel():
         sendstring = ''
         cur = self.conn.cursor()
         cur2 = self.conn.cursor()
-        limit = self.sk.get_state()[0] * 29 + 1  ## 1 key:value to try if conn down, 5 if up. 100 is too much, above 1 kB ##
+        limit = self.sk.get_state()[0] * 9 + 1  ## 1 key:value to try if conn down, 5 if up. 100 is too much, above 1 kB ##
         age = 0 # the oldest, will be self.age later
         #log.info('...trying to select and send max '+str(limit)+' buffer lines')
 
@@ -430,8 +430,8 @@ class UDPchannel():
             log.debug('using shorter retrysend_delay, conn ok') ##
             timetoretry = int(self.ts_udpsent + self.retrysend_delay)
         else:
-            log.debug('using longer retrysend_delay, conn NOT ok') ##
-            timetoretry = int(self.ts_udpunsent + 3 * self.retrysend_delay) # longer retry delay with no conn
+            log.warning('using longer retrysend_delay, conn NOT ok') ##
+            timetoretry = int(self.ts_udpunsent + 10 * self.retrysend_delay) # longer retry delay with no conn
 
         if self.ts < timetoretry: # too early to send again
             log.debug('conn state '+str(self.sk.get_state()[0])+'. wait with buff2server until timetoretry '+str(int(timetoretry))) ##
@@ -491,7 +491,7 @@ class UDPchannel():
             if svc_count > 0: # there is something to be sent!
                 #sendstring = "in:" + str(self.inum) + ","+str(ts_created)+"\n" + sendstring # in alusel vastuses toimub puhvrist kustutamine
                 sendstring = "id:" + str(self.host_id) + "\n" + sendstring # alustame sellega datagrammi
-                log.info('going to udpsend from buff2server, svc_count '+str(svc_count)+', row limit: '+str(limit)+', retry in '+str(timetoretry - self.ts)+' s') ##
+                log.debug('going to udpsend from buff2server, svc_count '+str(svc_count)+', row limit: '+str(limit)) ##
                 self.udpsend(sendstring, self.age) # sending away
             return 0
 
