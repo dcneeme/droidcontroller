@@ -47,7 +47,7 @@ class UDPchannel():
         self.receive_timeout = receive_timeout
         self.sk.dn() # initially no comm success registered
         self.sk_send.dn()
-        
+
         self.set_copynotifier(copynotifier) # parallel to uniscada notification in another format
         self.host_id = id # controller ip as tun0 wlan0 eth0 127.0.0.1
         self.ip = ip # monitoring server
