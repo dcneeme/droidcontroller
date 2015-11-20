@@ -80,7 +80,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 if mb[mbi]:
                     result = mb[mbi].read(mba, regadd, count=count, type=regtype)
                     msg += ' OK, raw '+str(result)
-                    log.info(msg) ##
+                    log.debug(msg) ##
                 else:
                     msg += ' -- FAIL, no mb[] for '+str(mbi)
                     log.warning(msg)
@@ -110,12 +110,13 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                         #mba and regadd are known
                         if srow[0] != '':
                             bit = int(srow[0]) # bit 0..15
-                        if srow[1] != '':
-                            ovalue = int(eval(srow[1])) # bit 0..15, old bit value
+                        else:
+                            warning('INVALID bit in dchannels read result '+str(srow))
+                        ovalue = int(eval(srow[1])) if srow[1] != '' else None # bit 0..15 old value
                         #print('old value for mbi, mba, regadd, bit',mbi,mba,regadd+i,bit,'was',ovalue) # debug
 
                         try:
-                            value = int((result[i] & 2**bit) >> bit) # new bit value
+                            value = int((result[i] & (2 ** bit)) >> bit) # new bit value
                             #print('decoded new value for mbi, mba, regadd, bit',mbi,mba,regadd+i,bit,'is',value,'was',ovalue) # debug
                         except:
                             log.warning('read_di_grp problem: result '+str(result)+', i'+str(i)+', bit'+str(bit))
@@ -134,7 +135,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                             else: # no value change, just update the timestamp!
                                 chg = 0
                                 Cmd = "UPDATE "+self.in_sql+" set ts='"+str(self.ts)+"', chg='"+str(chg)+"' where mba='"+str(mba)+"' and mbi="+str(mbi)+" and regadd='"+str(regadd+i)+"' and bit='"+str(bit)+"'" # old value unchanged, use ts_CHG AS TS!
-                            log.debug('dichannels ts udpdate: '+Cmd)
+                            log.info('dichannels udpdate cmd: '+Cmd)
                             conn.execute(Cmd) # write
                         except:
                             log.warning('dichannels table update problem')
@@ -148,9 +149,8 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 traceback.print_exc()
                 time.sleep(0.2)
                 return 2
-        else:
-            #failure, recreate mb[mbi]
-
+        else: #failure, recreate mb[mbi]
+            
             if mba == mb[mbi].get_mba_keepalive(): # recreate mb[] on access failure to this address only
                 port = mb[mbi].get_port() # None if not tcp
                 host = mb[mbi].get_host() # always exists, ip or /dev/tty
@@ -211,7 +211,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                     bmba = mba
                     bmbi = mbi
                     bregtype = regtype
-                    #print('di first group mba '+str(bmba)+' start from reg ',bfirst) # debug, count yet unknown
+                    print('di first group mba '+str(bmba)+' start from reg ',bfirst) # debug, count yet unknown
 
                 else: # not the first
                     if mbi == bmbi and mba == bmba and regadd == blast+1: # next regadd found, sequential group still growing
@@ -220,7 +220,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                         #print('di group starting from '+str(bfirst)+': end shifted to',blast) # debug
                     else: # a new group started, make a query for previous
                         #print('di group end detected at regadd',blast,'bcount',bcount) # debugb
-                        #print('going to read di registers from',bmba,bfirst,'to',blast,'regcount',bcount) # debug
+                        print('going to read di registers from',bmba,bfirst,'to',blast,'regcount',bcount) # debug
                         res = (res | self.read_di_grp(bmba,bfirst,bcount,bmbi,bregtype)) # reads and updates table with previous data. res = bitmap
                         bfirst = regadd # new grp starts immediately
                         blast = regadd
@@ -232,7 +232,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
             if bfirst != -1: # last group yet unread
                 #print('di group end detected at regadd',blast) # debugb
-                #print('2going to read di registers from',bmba,bfirst,'to',blast,'regcount',bcount) # debug
+                print('2going to read di registers from',bmba,bfirst,'to',blast,'regcount',bcount) # debug
                 res = (res | self.read_di_grp(bmba,bfirst,bcount,bmbi,bregtype)) # last read / update. res = bitmap
 
             #  bit values updated for all dichannels
@@ -291,7 +291,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 # take into account cfg! not all changes are to be reported immediately!
                 # cfg is also for application needs, not only monitoring!
 
-                log.debug('Cmd: '+Cmd) ##
+                log.info('Cmd: '+Cmd) ##
                 cur.execute(Cmd)
 
                 for row in cur: # services to be processed. either just changed or to be resent
@@ -299,7 +299,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                     log.info('processing di row '+str(repr(row))) ##
                     val_reg = ''
                     sta_reg = ''
-                    sumstatus = 0 # at first
+                    sumstatus = 0 # initially
 
                     if len(row) > 0:
                         val_reg = row[0] # service name
@@ -325,9 +325,10 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
             else:
                 sendtuple = self.make_dichannel_svc(svc)
-                udp.send(sendtuple)
-                msg = 'buffered for reporting single '+str(sendtuple) ####
-                log.info(msg)
+                if sendtuple:
+                    udp.send(sendtuple)
+                    msg = 'buffered for reporting single '+str(sendtuple) ####
+                    log.info(msg)
 
             #if sendtuple != None and sendtuple != []:
             #    udp.send(sendtuple)
@@ -393,8 +394,8 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             if srow[5] != '':
                 cfg=int(srow[5]) # configuration byte
             # block?? to prevent sending service with errors. to be added!
-            if srow[7] != '':
-                value = int(eval(srow[7])) if srow[7] != '' else None  # new value. 0 or 1
+            #if srow[7] != '':
+            value = int(eval(srow[7])) if srow[7] != '' else None  # None, 0 or 1
             if srow[8] != '':
                 ostatus=int(eval(srow[8])) # old status
             if srow[9] != '':
@@ -413,8 +414,8 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                     rowproblem = 1 # do not send this svc
                     log.warning('svc '+val_reg+' member '+str(member)+' stalled for '+str(int(self.ts - ots))+' s!')
             if value == None:
-                    rowproblem = 1 # do not send this svc
-                    log.warning('svc '+val_reg+' member '+str(member)+' value None!')
+                rowproblem = 1 # do not send this svc
+                log.warning('svc '+val_reg+' member '+str(member)+' value None!')
             else:
                 if lisa != "": # not the first member any more
                     lisa = lisa+" "
@@ -455,7 +456,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             return [sta_reg, sumstatus, val_reg, lisa]  # returns tuple to send. to be send to udp.send([])
         else:
             log.warning('no sendtuple due to rowproblem')
-            return []
+            return None
 
 
 
