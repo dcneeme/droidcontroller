@@ -24,6 +24,7 @@ class MyBasenSend(object):
         self.passwd = passwd # binary!
         self.path = path
         self.ts = int(time.time())
+        self.ts_send = 0
 
     def set_channels(self, in_dict):
         ''' channel configuration as dictionary {id:[name,type,coeff]} '''
@@ -58,6 +59,7 @@ class MyBasenSend(object):
         # [{"dstore":{"path":"tutorial/testing/unit1","rows":[{"channels":[{"channel":"temp","double":23.3},{"channel":"weather","string":"Balmy"}]}]}}] # naide
         # [{"dstore":{"path":"tutorial/testing/sauna","rows":[{"channels":[{"channel":"TempSauna","double":0.1},{"channel":"TempBath","double":0.2}]}]}}] # tekib ok
         self.ts = int(time.time())
+        self.ts_send = self.ts
         
         msg = '[{\"dstore\":{\"path\":'
         msg += '\"' + self.path + '\",'
@@ -90,8 +92,10 @@ class MyBasenSend(object):
     def _async_handle_request(self, response):
         ''' event of https put response '''
         #log.info('response received')
+        self.ts = int(time.time())
+        delay = self.ts - self.ts_send
         if response.error:
             log.error('response error: %s', str(response.error))
         else:
-            log.info('response: %s', response.body)
+            log.info('response (delay '+str(delay)+' s): %s', response.body)
 
