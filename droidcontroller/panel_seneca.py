@@ -94,7 +94,7 @@ class PanelSeneca(object): # parameetriks mb
                         self.ready = 0
                         return 2
             else:
-                log.info('panel not powered')
+                log.debug('panel not powered')
                 return 1
         else: # still checking readiness
             log.debug('no linedict change, no send') ##
@@ -123,4 +123,3 @@ class PanelSeneca(object): # parameetriks mb
         except:
             log.debug('panel not ready, tested linereg '+str(line))
             return 1
-        
