@@ -48,7 +48,7 @@ class MyBasenSend(object):
                 #row += "\"comment\":\"" + str(self.comment) + "\","
                 #row += "\"unit\":\"" + str(self.unit) + "\""
                 row += "}"
-                log.info(row)
+                log.debug(row)
                 rows.append(row)
         return rows
 
@@ -82,7 +82,7 @@ class MyBasenSend(object):
     def mybasen_send(self, message):
         ''' Actually sending '''
         headers = { "Content-Type": "application/json; charset=utf-8" }
-        log.info('sending PUT request, body '+str(message))
+        log.debug('sending PUT request, body '+str(message))
         tornado.httpclient.AsyncHTTPClient().fetch(self.url, self._async_handle_request, method='PUT', headers=headers,
             body=message, auth_username=self.uid, auth_password=self.passwd, auth_mode="basic")
 
