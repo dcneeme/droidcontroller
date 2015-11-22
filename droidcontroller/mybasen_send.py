@@ -4,7 +4,7 @@
     where key is the self.values2basen index
 '''
 
-import sys, traceback
+import sys, traceback, time
 import tornado.httpclient
 import json
 
@@ -23,7 +23,7 @@ class MyBasenSend(object):
         self.uid = uid # binary!
         self.passwd = passwd # binary!
         self.path = path
-
+        self.ts = int(time.time())
 
     def set_channels(self, in_dict):
         ''' channel configuration as dictionary {id:[name,type,coeff]} '''
@@ -57,6 +57,8 @@ class MyBasenSend(object):
         ''' Create json message for the given subpath and uid+password '''
         # [{"dstore":{"path":"tutorial/testing/unit1","rows":[{"channels":[{"channel":"temp","double":23.3},{"channel":"weather","string":"Balmy"}]}]}}] # naide
         # [{"dstore":{"path":"tutorial/testing/sauna","rows":[{"channels":[{"channel":"TempSauna","double":0.1},{"channel":"TempBath","double":0.2}]}]}}] # tekib ok
+        self.ts = int(time.time())
+        
         msg = '[{\"dstore\":{\"path\":'
         msg += '\"' + self.path + '\",'
         msg += '\"rows\":[{"channels":['
@@ -71,7 +73,7 @@ class MyBasenSend(object):
 
     def basen_send(self, values2basen):
         ''' the whole sending process with ioloop timer '''
-        log.info('sending values '+str(values2basen))
+        log.info('sending at '+str(self.ts)+' values '+str(values2basen))
         if len(values2basen) > 0: # initially empty
             rows = self.mybasen_rows(values2basen)
             self.mybasen_send(self.domessage(rows))
