@@ -357,10 +357,18 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             if mba == mb[mbi].get_mba_keepalive(): # recreate mb[] on access failure to this address only
                 port = mb[mbi].get_port() # None if not tcp
                 host = mb[mbi].get_host() # always exists, ip or /dev/tty
-                #type = mb[mbi].get_type() # always exists, not needed, defined by host
-
-                #mb[mbi] = CommModbus(host=mbhost[mbi]) # open again
-                mb[mbi] = CommModbus(host=host, port=port) # open again
+                serial = 0
+                speed = 19200 # default
+                if mb[mbi].get_host() == mb[mbi].get_port():
+                    serialconf = mb[mbi].get_serial() # fails if not serial
+                    serial = 1
+                    speed = int(eval(serialconf.split(' ')[1])) # num needed
+                    
+                if serial == 0:
+                    mb[mbi] = CommModbus(host = host, port = port) # tcp
+                else:
+                    mb[mbi] = CommModbus(host = host, speed = speed) # serial
+                
                 msg = 'recreated mb['+str(mbi)+'] due to read FAILURE for mbi,mba,regadd,count '+str(mbi)+', '+str(mba)+', '+str(regadd)+', '+str(count)
                 if self.msg != msg:
                     self.msg = msg
@@ -625,16 +633,19 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         if isinstance(svc, str):
             pass
         else:
+            log.warning('servicename '+str(svc)+' NOT str!') # ?
             return 2
 
         Cmd = "BEGIN IMMEDIATE TRANSACTION" # conn3
         conn.execute(Cmd)
         try:
             for i in range(len(values)):
-                Cmd = "update "+self.in_sql+" set value='"+str(values[i])+"', ts='"+str(self.ts)+"' where val_reg='"+svc+"' and member = '"+str(i+1)+"'"
+                #Cmd = "update "+self.in_sql+" set value='"+str(values[i])+"', ts='"+str(self.ts)+"' where val_reg='"+svc+"' and member = '"+str(i+1)+"'"
+                Cmd = "update "+self.in_sql+" set value='"+str(int(values[i]))+"', ts='"+str(int(self.ts))+"' where val_reg='"+svc+"' and member = '"+str(i+1)+"'"
                 log.debug(Cmd) ##
                 conn.execute(Cmd)
             conn.commit()
+            log.info('aivalues update done for '+svc+' with '+str(values))
             return 0
         except:
             log.warning('FAILED to update svc '+svc+' with values '+str(values))

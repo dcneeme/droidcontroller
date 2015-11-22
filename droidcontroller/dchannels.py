@@ -151,13 +151,26 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 return 2
         else: #failure, recreate mb[mbi]
             
+            #log.warning('recreating modbus channel due to error on '+str(mbhost[mbi]))
             if mba == mb[mbi].get_mba_keepalive(): # recreate mb[] on access failure to this address only
                 port = mb[mbi].get_port() # None if not tcp
                 host = mb[mbi].get_host() # always exists, ip or /dev/tty
-                mb[mbi] = CommModbus(host=host, port=port) # open again
-                msg = 'recreated mb['+str(mbi)+'] due to di grp data read FAILED for mbi,mba,regadd,count '+str(mbi)+', '+str(mba)+', '+str(regadd)+', '+str(count)
-                log.warning(msg)
-                # should not be necessary with improved by cougar pymodbus is in use!!
+                serial = 0
+                speed = 19200 # default
+                if mb[mbi].get_host() == mb[mbi].get_port():
+                    serialconf = mb[mbi].get_serial() # fails if not serial
+                    serial = 1
+                    speed = int(eval(serialconf.split(' ')[1])) # num needed
+                    
+                if serial == 0:
+                    mb[mbi] = CommModbus(host = host, port = port) # tcp
+                else:
+                    mb[mbi] = CommModbus(host = host, speed = speed) # serial
+                
+                msg = 'recreated mb['+str(mbi)+'] due to read FAILURE for mbi,mba,regadd,count '+str(mbi)+', '+str(mba)+', '+str(regadd)+', '+str(count)
+                if self.msg != msg:
+                    self.msg = msg
+                    log.warning(msg)
                 time.sleep(0.5) # hopefully helps to avoid sequential error / recreations
             return 1
 

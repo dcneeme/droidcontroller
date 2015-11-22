@@ -134,6 +134,7 @@ class CommModbus(Comm):
     def get_serial(self):
         ''' returns serial params like port 8N1 '''
         params = str(self.port)+' '+str(self.speed)+' '+str(self.bytesize)+self.parity+str(self.stopbits)
+        # better to return the data directly usable by set_serial... FIXME
         return params
         
         

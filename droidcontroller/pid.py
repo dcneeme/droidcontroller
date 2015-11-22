@@ -144,7 +144,7 @@ class PID:
             'out' : self.out, \
             'extnoint' : self.extnoint, \
             'name': self.name })
-        if filter is None: # return everythong
+        if filter is None: # return everything
             return self.vars
         else:
             if filter in self.vars:
@@ -254,7 +254,7 @@ class PID:
         return self.onLimit, age, self.noint # noint on sama plaarsusega kui onlimit, kehtides deadzone pikkuses
 
 
-    def output(self, actual, setpoint = None, noint = 0): # actual and external integration prevention (signed, 1 = no upwards)
+    def output(self, actual, setpoint = None, noint = 0): # actual and external integration prevention via noint (signed, 1 = no upwards)
         ''' Performs PID computation and returns a control value and it's components (and self.error and saturation)
             based on the elapsed time (dt) and the difference between actual value and setpoint.
             Added oct 2015: noint value other than 0 will stop integration in both directions.
