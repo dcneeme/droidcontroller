@@ -3,7 +3,7 @@
 
 from droidcontroller.util_n import *
 from droidcontroller.pid import *
-from droidcontroller.IT5888pwm import *
+from droidcontroller.it5888pwm import *
 
 import traceback, logging
 #logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
