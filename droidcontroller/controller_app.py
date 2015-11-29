@@ -8,22 +8,17 @@ logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 log = logging.getLogger(__name__)
 
 from droidcontroller.acchannels import *
-ac = ACchannels(in_sql = 'aicochannels.sql', readperiod = 0, sendperiod = 25) # ai and counters
 from droidcontroller.dchannels import *
-d = Dchannels(readperiod = 0, sendperiod = 180) # di and do. immediate notification on change, read as often as possible
 # the previous block also generated sqlgeneral and uniscada instances, like s, udp, tcp
 from droidcontroller.speedometer import * # cycle speed
 
-OSTYPE='archlinux'
-print('OSTYPE',OSTYPE)
 
 from droidcontroller.udp_commands import * # sellega alusta, kaivitab ka SQlgeneral
-p = Commands(OSTYPE) # setup and commands from server
-r = RegularComm(interval=12) # interval needs to be below timer value!
 
 mac = ''
 filee = ''
 try:
+    mac = os.environ['ID'] # env variable ID
     mac = os.environ['ID'] # env variable ID
     filee = 'env var ID'
 except:
@@ -65,10 +60,15 @@ log = logging.getLogger(__name__)
 
 class ControllerApp(object): # default modbus address of io in controller = 1
     ''' '''
-    def __init__(self, app, mba = 1, mbi = 0):
+    def __init__(self, app, ostype='archlinux', mba=1, mbi=0):
         self.app = app # client-specific main script
         self.mba = mba # controller io modbus address if dc6888
         self.mbi = mbi # io channel for controller
+        self.ac = ACchannels(in_sql = 'aicochannels.sql', readperiod = 0, sendperiod = 25) # ai and counters
+        self.d = Dchannels(readperiod = 0, sendperiod = 180) # di and do. immediate notification on change, read as often as possible
+        self.p = Commands(ostype) # setup and commands from server
+        self.r = RegularComm(interval=12) # interval needs to be below timer value!
+
         self.running = 0 # 999 feed enabled if running only
         self.spm = SpeedoMeter(windowsize = 100) # to see di speed
         self.get_AVV(inspect.stack()[1]) # caller name and hw version
@@ -151,7 +151,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         ''' Things to do on the first connectivity establisment after startup '''
         udp.udpsend(self.AVV) # AVV only, the rest go via buffer
         udp.send(['TCS',1,'TCW','?']) # restore via buffer
-        ac.ask_counters() # restore values from server
+        self.ac.ask_counters() # restore values from server
         log.info('******* uniscada connectivity up, sent AVV and tried to restore counters ********')
         self.app(sys._getframe().f_code.co_name, attentioncode = 1) # app() should ask some more variables?
 
@@ -165,7 +165,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         with open("/root/d4c/appd.log", "a") as logfile:
             logfile.write(msg)
         try:
-            p.subexec('/usr/bin/sync', 0) # to make sure power will be cut in the end
+            self.p.subexec('/usr/bin/sync', 0) # to make sure power will be cut in the end
             time.sleep(1)
             mb[self.mbi].write(self.mba, 277, value = 9) # length of break in s
             time.sleep(1)
@@ -175,7 +175,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
             traceback.print_exc()
 
         try:
-            p.subexec('/root/d4c/killapp',0) # to make sure power will be cut in the end
+            self.p.subexec('/root/d4c/killapp',0) # to make sure power will be cut in the end
         except:
             log.warning('executing /root/d4c/killapp failed!')
 
@@ -183,17 +183,17 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         ''' check the ack or cmd from server '''
         if got != {} and got != None: # got something from monitoring server
             log.info('parsing got '+str(got)) # voimalik et mitu jarjest?
-            ac.parse_udp(got) # chk if setup or counters need to be changed
-            d.parse_udp(got) # chk if setup ot toggle for di
-            todo = p.parse_udp(got) # any commands or setup variables from server?
+            self.ac.parse_udp(got) # chk if setup or counters need to be changed
+            self.d.parse_udp(got) # chk if setup ot toggle for di
+            todo = self.p.parse_udp(got) # any commands or setup variables from server?
             if todo != '':
                 log.info('todo '+todo)
-                p.todo_proc(todo) # execute possible commands
+                self.p.todo_proc(todo) # execute possible commands
 
     def di_reader(self): # DI reader
         self.spm.count() # di speed metering via speedometer
-        reslist = d.doall() # returns di, do, svc signals 0 1 2 = nochg chg err
-        di_dict = d.get_chg_dict()
+        reslist = self.d.doall() # returns di, do, svc signals 0 1 2 = nochg chg err
+        di_dict = self.d.get_chg_dict()
         if reslist == [0, 0, 0]:
             sys.stdout.write('d') # no flush
             sys.stdout.flush() # debugging flush on no chg as well
@@ -202,15 +202,15 @@ class ControllerApp(object): # default modbus address of io in controller = 1
             sys.stdout.flush() # flush now, when something was changed
         
         if (reslist[0] & 1):  # change in di services
-            di_dict = d.get_chg_dict()
+            di_dict = self.d.get_chg_dict()
             log.info('di change detected: '+str(di_dict)+', reslist '+str(reslist)) # mis siin on , chg voi svc?
             self.app(sys._getframe().f_code.co_name, attentioncode = 1) # d, a attention bits
         if (reslist[1] & 1):  # change in do services
-            di_dict = d.get_chg_dict()
+            di_dict = self.d.get_chg_dict()
             log.info('do change detected: '+str(di_dict)+', reslist '+str(reslist)) # mis siin on , chg voi svc?
             self.app(sys._getframe().f_code.co_name, attentioncode = 1) # d, a attention bits
         if (reslist[2] & 1):  # change in di services
-            di_dict = d.get_chg_dict()
+            di_dict = self.d.get_chg_dict()
             log.info('svc to send: '+str(di_dict)+', reslist '+str(reslist))
             self.udp_comm() # should reset timer too!
             
@@ -219,14 +219,14 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         #print('reading ai, co')
         sys.stdout.write('A') # dot without newline
         sys.stdout.flush()
-        ac.doall()
+        self.ac.doall()
         self.app(sys._getframe().f_code.co_name, attentioncode = 2) # d, a attention bits
 
     
     def regular_svc(self): # FIXME - send on change too! pakkida?
         sys.stdout.write('R') #
         sys.stdout.flush()
-        r.regular_svc() # UPW, UTW, ipV, baV, cpV. mfV are default services.
+        self.r.regular_svc() # UPW, UTW, ipV, baV, cpV. mfV are default services.
         skstate = udp.sk.get_state() # udp conn statekeeper
         if self.running != 0 and skstate[0] == 0 and skstate[1] > 300 + skstate[2] * 300: # total 10 min down, cold reboot needed
             self.powerbreak() # 999 feed to restart via 5V break

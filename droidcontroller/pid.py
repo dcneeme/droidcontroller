@@ -260,7 +260,7 @@ class PID:
             Added oct 2015: noint value other than 0 will stop integration in both directions.
         '''
         if setpoint != None:
-            self.setPoint = setpoint # replacing setpoint
+            self.setPoint = setpoint # replacing setpoint if given
         self.actual = actual
         self.extnoint = noint
         direction = ['down','','up'] # up or down / FIXME use enum here! add Limit class! reusable for everybody...

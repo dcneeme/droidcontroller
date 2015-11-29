@@ -22,8 +22,8 @@ class MbusWaterMeter(object): # FIXME averaging
             volume = self.mbus.get_volume()
             log.info('got value from water meter: '+str(volume))
             ac.set_aivalue('self.svc_cum', 1, self.val2int(volume)) # to report only, in L
-            #return volume 
+            return 0 
         except:
             log.warning('mbus water meter reading or aicochannels register writing FAILED!')
             traceback.print_exc()
-            #return None
+            return 1
