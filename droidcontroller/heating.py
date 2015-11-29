@@ -1,8 +1,11 @@
 # room heating control with possibly several water heating loops in the room. neeme 2015
 #  class Cooler may be added....
 
-import droidcontroller.UN, droidcontroller.PID, droidcontroller.IT5888pwm, traceback
-import logging
+from droidcontroller.util_n import *
+from droidcontroller.pid import *
+from droidcontroller.IT5888pwm import *
+
+import traceback, logging
 #logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 #logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 log = logging.getLogger(__name__)
