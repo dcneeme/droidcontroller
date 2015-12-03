@@ -671,6 +671,10 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         ''' Setting holding registwer (like pwm channel for pulse or pwm) '''
         return mb[mbi].write(mba, regadd, value = value)
 
+    def get_doword(self,mba,regadd,count=1,mbi=0): # returns list!
+        ''' Returns holding register values as list '''
+        return mb[mbi].read(mba, regadd, count = 1, type='h')
+
     def set_dowords(self,mba,regadd,values,mbi=0): # sets holding register without services ivolvment
         ''' Setting holding registwer (like pwm channel for pulse or pwm) '''
         return mb[mbi].write(mba, regadd, values = values) # values must be list
