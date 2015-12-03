@@ -667,9 +667,13 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         ''' Setting member value using sqlgeneral set_membervalue. adding sql table below for that '''
         return s.setby_dimember_do(svc, member, value) # s.set_membervalue(svc,member,value,self.out_sql)
 
-    def set_doword(self,regadd,value,mbi=0, mba=0): # sets holding register without services ivolvment
-        ''' Setting holduing registwer (like pwm channel for pulse or pwm) '''
+    def set_doword(self,mba,regadd,value,mbi=0): # sets holding register without services ivolvment
+        ''' Setting holding registwer (like pwm channel for pulse or pwm) '''
         return mb[mbi].write(mba, regadd, value = value)
+
+    def set_dowords(self,mba,regadd,values,mbi=0): # sets holding register without services ivolvment
+        ''' Setting holding registwer (like pwm channel for pulse or pwm) '''
+        return mb[mbi].write(mba, regadd, values = values) # values must be list
 
     def ask_values(self): # from server, use on init and conn up, send ? to server if value type = 's!'
         ''' Queries last known service (multi)value from the server '''
