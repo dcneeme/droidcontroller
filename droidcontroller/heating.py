@@ -16,8 +16,17 @@ class Heater(object): # Junkers Euromaxx for now.
             svc_P='KGPW', svc_I='KGIW', svc_D='KGDW', 
             svc_pwm='PWW', svc_Gdebug='LGGW', svc_Hdebug='LGHW', svc_noint='NGIW',
             chn_gas=0, chn_onfloor=1):  # pwm chn 0 or 1
-        self.d = d
-        self.ac = ac
+        
+        self.pwm_gas = [] # 0 onfloor , 1 hot
+        self.pwm_gas.append(IT5888pwm(d, mbi = 0, mba = 1, name='hot water pwm control', period = 1000, bits = [13])) # do6, nupupinge regul, limits from svc
+        self.pwm_gas.append(IT5888pwm(d, mbi = 0, mba = 1, name='floor_onTemp pwm control', period = 1000, bits = [14])) # do7, termostaadi kyte
+        
+        self.pid_gas = [] 
+        self.pid_gas.append(PID(P=0.5, I=0.05, D=0, min=5, max=995, name = 'gasheater watertemp pwm setpoint'))
+        self.pid_gas.append(PID(P=0.5, I=0.05, D=0, min=5, max=995, name = 'flooron watertemp pwm setpoint'))
+        
+        self.d = d # binary channels modbus
+        self.ac = ac # ai modbus
         self.svc_hmode = svc_hmode
         self.svc_Gtemp = svc_Gtemp
         self.svc_Htemp = svc_Htemp
