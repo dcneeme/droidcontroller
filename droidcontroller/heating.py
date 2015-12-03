@@ -76,7 +76,7 @@ class Heater(object): # Junkers Euromaxx for now.
                 
             self.read_svcs() # refresh TGW, THW, KPPW, KGIW, KGDW values
             
-            self.pwm_values = [ UN.val2int(self.pid_gas[0].output(self.TGW[2],self.TGW[0],noint=noint)), UN.val2int(self.pid_gas[1].output(THW[2], elf.THW[0], noint=noint)) ]
+            self.pwm_values = [ UN.val2int(self.pid_gas[0].output(self.TGW[2],self.TGW[0],noint=noint)), UN.val2int(self.pid_gas[1].output(THW[2], self.THW[0], noint=noint)) ]
             
             self.write_svcs()  # outputs setting, incl pwm
             
