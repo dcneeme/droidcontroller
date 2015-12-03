@@ -10,12 +10,12 @@ log = logging.getLogger(__name__)
 class IT5888pwm(object):
     ''' Takes new periodical PWM values and resends them if changed '''
 
-    def __init__(self, mb, mbi=0, mba=1, name='IT5888', period=1000, bits=[8, 9, 10, 11, 12, 13, 14, 15], phases=[], periodics=[], per_reg=150):
+    def __init__(self, d, mbi=0, mba=1, name='IT5888', period=1000, bits=[8, 9, 10, 11, 12, 13, 14, 15], phases=[], periodics=[], per_reg=150):
         ''' One instance per I/O-module. Define the PWM channels via the bits list.
             Do not include channels not used in pwm
             The channels in pwm list should not be present in dochannels.sql (trying to sync static values)!
         '''
-        self.mb = mb
+        self.d = d
         self.bits = bits # channel list
         self.mbi = mbi # modbus comm instance
         self.mba = mba # modbus address
@@ -40,7 +40,7 @@ class IT5888pwm(object):
         self.name = name
         self.period = period # generation starts with value writing
         try:
-            res = self.mb[self.mbi].write(self.mba, self.per_reg, value=self.period) # needs to be resent after io board reset
+            res = self.d.set_doword(self.mba, self.per_reg, value=self.period, mbi=self.mbi) # needs to be resent after io board reset
             if res == 0:
                 log.info(self.name+' successfully created')
             else:
@@ -75,8 +75,8 @@ class IT5888pwm(object):
 
     def fix_period(self):
         '''  Restores the correct period value in IO register (150) '''
-        if self.mb[self.mbi].read(self.mba, self.per_reg, 1)[0] != (self.period << 2): # period stored in 0,25 ms units in fw 616 dec!
-            self.mb[self.mbi].write(self.mba, self.per_reg, value = self.period << 2) # restore the period register value in IO
+        if self.d.get_doword(self.mba, self.per_reg, 1, mbi=self.mbi)[0] != (self.period << 2): # period stored in 0,25 ms units in fw 616 dec!
+            self.set_doword(self.mba, self.per_reg, value = self.period << 2, mbi=self.mbi) # restore the period register value in IO
             log.info(self.name+' pwm period fixed to '+str(self.period)+' ms')
 
 
@@ -94,7 +94,8 @@ class IT5888pwm(object):
                     self.values[i] = value
                     self.fullvalues[i] = int(value + self.periodics[i] * 0x8000+ self.periodics[i] * 0x4000 + (self.phases[i] << 12)) # phase lock needed for periodic...
                     # the separate bit for phase lock seems unnecessary!
-                    self.mb[self.mbi].write(self.mba, 100 + bit, value=self.fullvalues[i])
+                    #self.mb[self.mbi].write(self.mba, 100 + bit, value=self.fullvalues[i])
+                    self.d.set_doword(self.mba, 100 + bit, value=self.fullvalues[i], mbi=self.mbi)
                     log.info('new pwm value '+str(value)+', fullvalue '+str(hex(self.fullvalues[i]))+' set for channel bit '+str(bit)+', phase '+str(self.phases[i])+', periodic '+str(self.periodics[i]))
             else:
                 log.warning('invalid (not defined in bits) bit '+str(bit)+' used ! bits='+str(self.bits))
