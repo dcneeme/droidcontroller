@@ -29,3 +29,17 @@ class UN(object): # Utilities Neeme, use like UN.val2int(14.4)
             return None
 
             
+    @staticmethod
+    def hex_reverse(hstring):
+        ''' Return bytes in opposite order '''
+        if not 'str' in type(hstring):
+            log.warning('string expected as argument')
+            return None
+        
+        if len(hstring)%2 != 0: # odd number of halfbytes
+            hstring = '0'+hstring
+            
+        res = ''
+        for i in range(len(hstring), 0, -2):
+            res += hstring[i-2:i]
+        return res
