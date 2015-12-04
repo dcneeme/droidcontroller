@@ -32,7 +32,7 @@ class UN(object): # Utilities Neeme, use like UN.val2int(14.4)
     @staticmethod
     def hex_reverse(hstring):
         ''' Return bytes in opposite order '''
-        if not 'str' in type(hstring):
+        if not 'str' in str(type(hstring)):
             log.warning('string expected as argument')
             return None
         
@@ -43,3 +43,19 @@ class UN(object): # Utilities Neeme, use like UN.val2int(14.4)
         for i in range(len(hstring), 0, -2):
             res += hstring[i-2:i]
         return res
+        
+        
+    @staticmethod
+    def onewire_hexid(reglist): # read result from id registers, 4 for each id
+        ''' Return onewire hex id list '''
+        if len(reglist) % 4 != 0:
+            log.warning('invalid number of registers, not multiple of 4!')
+            
+        res = []
+        for j in range(int(len(reglist) / 4)):
+            idstring = ''
+            for reg in range(4):
+                idstring += hex(reglist[ (j * 4) + reg]).split('x')[1].zfill(4) # UN.hex_reverse()
+            res.append(UN.hex_reverse(idstring).upper()) # change order and make upper case
+        return res
+        
