@@ -1,6 +1,6 @@
 # neeme 2015
 import traceback, time, tornado
-from droidcontroller.util_n import UN
+#from droidcontroller.util_n import UN
 from droidcontroller.mbus import *
 
 import logging
@@ -12,7 +12,7 @@ class MbusWaterMeter(object): # FIXME averaging
     ''' to be used with iomain with tornado IOloop. writes values into services. '''
     def __init__(self, ac, model, svc_cum, svc_avg, avg_win = 3600):
         try:
-            self.mbus = Mbus() # vaikimisi port auto, autokey FTDI  # port='/dev/ttyUSB0') #
+            self.mbus = Mbus(model='cyble_v2') # vaikimisi port auto, autokey FTDI  # port='/dev/ttyUSB0') #
             #mbus_present = 1
         except:
             #mbus_present = 0
@@ -27,9 +27,10 @@ class MbusWaterMeter(object): # FIXME averaging
         ''' Reads and returns cumulative and average sliding window values in meter units '''
         try:
             self.mbus.read()
-            volume = self.mbus.get_volume()
+            volume = int(self.mbus.get_volume())
             log.info('got value from water meter: '+str(volume))
-            self.ac.set_aivalue('self.svc_cum', 1, UN.val2int(volume)) # to report only, in L
+            #self.ac.set_aivalue('self.svc_cum', 1, UN.val2int(volume)) # to report only, in L / problem with val2int??
+            self.ac.set_aivalue('self.svc_cum', 1, volume) # to report only, in L
             return 0 
         except:
             log.warning('mbus water meter reading or aicochannels register writing FAILED!')
