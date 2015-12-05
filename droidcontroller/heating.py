@@ -20,7 +20,17 @@ class Heater(object): # Junkers Euromaxx for now.
         self.pwm_gas = [] # 0 onfloor , 1 hot
         self.pwm_gas.append(IT5888pwm(d, mbi = 0, mba = 1, name='hot water pwm control', period = 1000, bits = [13])) # do6, nupupinge regul, limits from svc
         self.pwm_gas.append(IT5888pwm(d, mbi = 0, mba = 1, name='floor_onTemp pwm control', period = 1000, bits = [14])) # do7, termostaadi kyte
-        
+        self.svc_hmode = svc_hmode
+        self.svc_Gtemp = svc_Gtemp
+        self.svc_Htemp = svc_Htemp
+        self.svc_P = svc_P
+        self.svc_I = svc_I
+        self.svc_D = svc_D
+        self.pwm = svc_pwm
+        self.svc_Gdebug = svc_Gdebug
+        self.svc_Hdebug = svc_Hdebug
+        self.svc_noint = svc_noint
+                
         self.pid_gas = [] 
         self.pid_gas.append(PID(P=0.5, I=0.05, D=0, min=5, max=995, name = 'gasheater watertemp pwm setpoint'))
         self.pid_gas.append(PID(P=0.5, I=0.05, D=0, min=5, max=995, name = 'flooron watertemp pwm setpoint'))
@@ -29,29 +39,36 @@ class Heater(object): # Junkers Euromaxx for now.
         
         self.d = d # binary channels modbus
         self.ac = ac # ai modbus
-        self.asvcs = {} # services dict ai
-        self.asvcs.update({svc_Gtemp : None }) # water from gasheater - [actual on, actual ret, setpoint, hilim]
-        self.asvcs.update({svc_Htemp : None }) # water from gasheater - [actual on, actual ret, setpoint, hilim]
-        self.asvcs.update({svc_P : None }) # kP for loops G, H
-        self.asvcs.update({svc_I : None }) # kI for loops G, H
-        self.asvcs.update({svc_D : None }) # kD for loops G, H
-        self.asvcs.update({svc_pwm : None }) # pwm control
-        self.asvcs.update({svc_Gdebug : None }) # ext int stop G
-        self.asvcs.update({svc_Hdebug : None }) # ext int stop H
         
-        self.dsvcs = {} # services dict di
-        self.dsvcs.update({svc_hmode : None }) # heating mode [flame, heating]
-        self.dsvcs.update({svc_noint : None })
+        self.aisvcs = {} # services dict ai
+        self.aisvcs.update({svc_Gtemp : None }) # water from gasheater - [actual on, actual ret, setpoint, hilim]
+        self.aisvcs.update({svc_Htemp : None }) # water from gasheater - [actual on, actual ret, setpoint, hilim]
+        self.aisvcs.update({svc_P : None }) # kP for loops G, H
+        self.aisvcs.update({svc_I : None }) # kI for loops G, H
+        self.aisvcs.update({svc_D : None }) # kD for loops G, H
+        
+        self.aosvcs = {} # services dict ao
+        self.aosvcs.update({svc_pwm : None }) # pwm control
+        self.aosvcs.update({svc_Gdebug : None }) # ext int stop G
+        self.aosvcs.update({svc_Hdebug : None }) # ext int stop H
+        
+        self.disvcs = {} # services dict di
+        self.disvcs.update({svc_hmode : None }) # heating mode [flame, heating]
+        
+        self.dosvcs = {} # services dict do
+        self.dosvcs.update({svc_noint : None })
         
     def read_svcs(self):
         ''' read the cvs tables to get heating related input data '''
-        for svc in self.asvcs:
-            self.asvcs.update({ svc : self.ac.get_aivalues(svc) })
-            log.info('asvcs update '+svc+':'+str(self.asvcs[svc]))
+        for svc in self.aisvcs:
+            #log.info('trying aisvcs update with '+svc)
+            self.aisvcs.update({ svc : self.ac.get_aivalues(svc) })
+            log.info('aisvcs update '+svc+':'+str(self.aisvcs[svc]))
         
-        for svc in self.dsvcs:
-            self.dsvcs.update({ svc : self.ac.get_divalues(svc) })
-            log.info('dsvcs update '+svc+':'+str(self.dsvcs[svc]))
+        for svc in self.disvcs:
+            #log.info('trying disvcs update with '+svc)
+            self.disvcs.update({ svc : self.d.get_divalues(svc) })
+            log.info('disvcs update '+svc+':'+str(self.disvcs[svc]))
             
    
     def write_svcs(self):
@@ -66,9 +83,7 @@ class Heater(object): # Junkers Euromaxx for now.
         if self.tempvarsG != None:
             self.ac.set_aivalues(self.svc_Hdebug, values=[UN.val2int(self.tempvarsH['error'],10), 
                     UN.val2int(self.tempvarsH['outP'],10), UN.val2int(self.tempvarsH['outI'],10), 
-                    UN.val2int(self.tempvarsH['outD'],10) ]) # PID comp for loop 1
-        
-        self.ac.set_divalues(self.svc_noint, values=[self.tempvarsG['extnoint'], self.tempvarsH['extnoint'] ]) # ext int stop
+                    UN.val2int(self.tempvarsH['outD'],10) ]) # PID comp x 10 for loop 1
         
         
     def output(self):
@@ -79,27 +94,27 @@ class Heater(object): # Junkers Euromaxx for now.
         log.info('heating output start')
         try:
             #noint = -(self.GSW[0] ^ 1) # inversion. no down integration during non-heating
-            tmp = self.dsvcs['GSW']
+            tmp = self.disvcs[self.svc_hmode] # GSW
             if tmp != None:
                 noint = -((tmp[1]) ^ 1) # inversion. no down integration during non-heating
             else:
-                noint = 1
-                log.warning('set noint to 1 due to no valid GSW value yet, '+str(GSW))
+                noint = 1 # valid for both heater pid loops 
+                log.warning('set noint to 1 due to no valid GSW value yet, '+str(tmp))
                 
             if noint != 0:
-                log.info('down int forbidden for gasheater loops based on GSW '+str(self.GSW)+', noint '+str(noint))
+                log.info('down int forbidden for gasheater loops based on GSW '+str(tmp)+', noint '+str(noint))
             else: ##
-                log.info('int allowed for gasheater loops based on GSW '+str(self.GSW)+', noint '+str(noint)) ##
+                log.info('int allowed for gasheater loops based on GSW '+str(tmp)+', noint '+str(noint)) ##
                 
             self.read_svcs() # refresh TGW, THW, KPPW, KGIW, KGDW values
             
-            self.pwm_values = [ UN.val2int(self.pid_gas[0].output(self.TGW[2], self.TGW[0], noint=noint)), 
-                                UN.val2int(self.pid_gas[1].output(self.THW[2], self.THW[0], noint=noint)) ]
+            self.pwm_values = [ UN.val2int(self.pid_gas[0].output(self.aisvcs[self.svc_Gtemp][2], self.aisvcs[self.svc_Gtemp][0], noint=noint)), 
+                                UN.val2int(self.pid_gas[1].output(self.aisvcs[self.svc_Htemp][2], self.aisvcs[self.svc_Htemp][0], noint=noint)) ]
             
             self.write_svcs()  # outputs setting, incl pwm
             
-            self.tempvarsG = self.pid_gas[0].getvars() # dict
-            self.tempvarsH = self.pid_gas[1].getvars() # dict
+            self.tempvarsG = self.pid_gas[0].getvars() # dict based on pid variables
+            self.tempvarsH = self.pid_gas[1].getvars() # dict bnased on pid variables
             ''' 
             {'Kp' : self.Kp, \
             'Ki' : self.Ki, \
