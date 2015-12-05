@@ -56,6 +56,7 @@ class UN(object): # Utilities Neeme, use like UN.val2int(14.4)
             idstring = ''
             for reg in range(4):
                 idstring += hex(reglist[ (j * 4) + reg]).split('x')[1].zfill(4) # UN.hex_reverse()
-            res.append(UN.hex_reverse(idstring).upper()) # change order and make upper case
+            if idstring != '0000000000000000':
+                res.append(UN.hex_reverse(idstring).upper()) # change order and make upper case
         return res
         
