@@ -53,7 +53,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
 
     def sqlread(self,table):
-        s.sqlread(table) # read dichannels
+        s.sqlread(table) # restore dichannels from file
 
 
     def Initialize(self): # before using this create s=SQLgeneral()
@@ -429,15 +429,17 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             if value == None:
                 rowproblem = 1 # do not send this svc
                 log.warning('svc '+val_reg+' member '+str(member)+' value None!')
+                log.warning('srow '+str(repr(srow))) ##
+               
             else:
-                if lisa != "": # not the first member any more
-                    lisa = lisa+" "
+                if lisa != '': # not the first member any more
+                    lisa = lisa + " "
 
                 # status and inversions according to configuration byte
                 status = 0 # initially for each member
                 if (cfg&4): # value2value inversion
                     value = (1^value) # possible member values 0 voi 1
-                lisa=lisa + str(value) # adding possibly inverted member value to multivalue string
+                lisa += str(value) # adding possibly inverted member value to multivalue string
 
                 if (cfg&8): # value2status inversion
                     value = (1^value) # member value not needed any more

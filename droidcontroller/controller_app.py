@@ -7,13 +7,14 @@ import logging
 logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 log = logging.getLogger(__name__)
 
+from droidcontroller.udp_commands import * # sellega alusta, kaivitab ka SQlgeneral
+from droidcontroller.uniscada import * # UDPchannel, TCPchannel
+from droidcontroller.statekeeper import *
 from droidcontroller.acchannels import *
 from droidcontroller.dchannels import *
 # the previous block also generated sqlgeneral and uniscada instances, like s, udp, tcp
-from droidcontroller.speedometer import * # cycle speed
+from droidcontroller.speedometer import * # cycle speed for statistics
 
-
-from droidcontroller.udp_commands import * # sellega alusta, kaivitab ka SQlgeneral
 
 mac = ''
 filee = ''
