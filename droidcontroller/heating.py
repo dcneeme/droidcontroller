@@ -138,35 +138,35 @@ class Heater(object): # Junkers Euromaxx for now.
             'extnoint' : self.extnoint, \
             'name': self.name }
             '''
-            print('tempvarsG',self.tempvarsG) # debug
-            print('tempvarsH',self.tempvarsH) # debug
+            #print('tempvarsG',self.tempvarsG) # debug
+            #print('tempvarsH',self.tempvarsH) # debug
 
 
-            if UN.val2int(self.tempvarsG['outMax']) != self.TGW[3]:
-                self.pid_gas[0].setMax(self.TGW[3])
-                log.warning('pid_gas[0] hilim changed to '+str(self.TGW[3]))
-            if UN.val2int(self.tempvarsG['Kp'],10) != self.KGPW[0]:
-                self.pid_gas[0].setKp(self.KGPW[0] / 10.0)
-                log.warning('pid_gas[0] kP changed!')
-            if UN.val2int(self.tempvarsG['Ki'],1000) != self.KGIW[0]:
-                self.pid_gas[0].setKi(self.KGIW[0] / 1000.0)
-                log.warning('pid_gas[0] kI changed!')
-            if UN.val2int(self.tempvarsG['Kd']) != self.KGDW[0]:
-                self.pid_gas[0].setKd(self.KGDW[0])
-                log.warning('pid_gas[0] kD changed to '+str(self.KGDW[0]))
+            if UN.val2int(self.tempvarsG['outMax']) != self.aisvcs[self.svc_Gtemp][3]: 
+                self.pid_gas[0].setMax(self.aisvcs[self.svc_Gtemp][3])
+                log.warning('pid_gas[0] hilim changed to '+str(self.aisvcs[self.svc_Gtemp][3]))
+            if UN.val2int(self.tempvarsG['Kp'],10) != self.aisvcs[self.svc_P][0]:
+                self.pid_gas[0].setKp(self.aisvcs[self.svc_P][0] / 10.0)
+                log.warning('pid_gas[0] kP changed to '+str(self.aisvcs[self.svc_P][0]))
+            if UN.val2int(self.tempvarsG['Ki'],1000) != self.aisvcs[self.svc_I][0]:
+                self.pid_gas[0].setKi(self.aisvcs[self.svc_I][0] / 1000.0)
+                log.warning('pid_gas[0] kI changed to '+str(self.aisvcs[self.svc_I][0]))
+            if UN.val2int(self.tempvarsG['Kd']) != self.aisvcs[self.svc_D][0]:
+                self.pid_gas[0].setKd(self.aisvcs[self.svc_D][0])
+                log.warning('pid_gas[0] kD changed to '+str(self.aisvcs[self.svc_D][0]))
 
-            if UN.val2int(self.tempvarsH['outMax']) != self.THW[3]:
-                self.pid_gas[1].setMax(self.THW[3])
-                log.warning('pid_gas[1] hilim changed to '+str(self.THW[3]))
-            if UN.val2int(self.tempvarsH['Kp'], 10) != self.KGPW[1]:
-                self.pid_gas[1].setKp(self.KGPW[1] / 10.0)
-                log.warning('pid_gas[1] kP changed!')
-            if UN.val2int(self.tempvarsH['Ki'], 1000) != self.KGIW[1]:
-                self.pid_gas[1].setKi(KGIW[1] / 1000.0)
-                log.warning('pid_gas[1] kI changed!')
-            if UN.val2int(self.tempvarsH['Kd']) != self.KGDW[1]:
-                self.pid_gas[1].setKd(self.KGDW[1])
-                log.warning('pid_gas[1] kD changed to '+str(self.KGDW[1]))
+            if UN.val2int(self.tempvarsH['outMax']) != self.aisvcs[self.svc_Htemp][3]:
+                self.pid_gas[1].setMax(self.aisvcs[self.svc_Htemp][3])
+                log.warning('pid_gas[1] hilim changed to '+str(self.aisvcs[self.svc_Htemp][3]))
+            if UN.val2int(self.tempvarsH['Kp'], 10) != self.aisvcs[self.svc_P][1]:
+                self.pid_gas[1].setKp(self.aisvcs[self.svc_P][1] / 10.0)
+                log.warning('pid_gas[1] kP changed to '+str(self.aisvcs[self.svc_P][1]))
+            if UN.val2int(self.tempvarsH['Ki'], 1000) != self.aisvcs[self.svc_I][1]:
+                self.pid_gas[1].setKi(self.aisvcs[self.svc_I][1] / 1000.0)
+                log.warning('pid_gas[1] kI changed to '+str(self.aisvcs[self.svc_I][1]))
+            if UN.val2int(self.tempvarsH['Kd']) != self.aisvcs[self.svc_D][1]:
+                self.pid_gas[1].setKd(self.aisvcs[self.svc_D][1])
+                log.warning('pid_gas[1] kD changed to '+str(self.aisvcs[self.svc_D][1]))
 
             log.info('gas_heater done, noint '+str(noint)+', new pwm values '+str(self.pwm_values))
         except:

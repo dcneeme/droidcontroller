@@ -15,7 +15,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         Read and send only happen if enough time is passed from previous, chk readperiod, sendperiod!
     '''
 
-    def __init__(self, in_sql = 'aicochannels.sql', out_sql = 'aochannels.sql', readperiod = 5, sendperiod = 120):
+    def __init__(self, msgbus, in_sql = 'aicochannels.sql', out_sql = 'aochannels.sql', readperiod = 5, sendperiod = 120):
+        self.msgbus = msgbus
         self.setReadPeriod(readperiod)
         self.setSendPeriod(sendperiod)
         self.in_sql = in_sql.split('.')[0]
