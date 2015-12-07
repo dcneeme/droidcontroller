@@ -40,6 +40,7 @@ class IT5888pwm(object):
         self.name = name
         self.period = period # generation starts with value writing
         try:
+            time.sleep(0.1) # period register write may fail without this delay for some reason...
             res = self.d.set_doword(self.mba, self.per_reg, value=self.period, mbi=self.mbi) # needs to be resent after io board reset
             if res == 0:
                 log.info(self.name+' successfully created')
