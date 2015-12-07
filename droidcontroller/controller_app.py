@@ -14,6 +14,7 @@ from droidcontroller.acchannels import *
 from droidcontroller.dchannels import *
 # the previous block also generated sqlgeneral and uniscada instances, like s, udp, tcp
 from droidcontroller.speedometer import * # cycle speed for statistics
+from droidcontroller.msgbus import MsgBus # cycle speed for statistics
 
 
 mac = ''
@@ -62,18 +63,21 @@ log = logging.getLogger(__name__)
 class ControllerApp(object): # default modbus address of io in controller = 1
     ''' '''
     def __init__(self, app, ostype='archlinux', mba=1, mbi=0):
+        self.msgbus = MsgBus()
+        self.msgbus.subscribe('debug', 'di_grp_result', 'debugger', self.buslog) ###
+        
         self.app = app # client-specific main script
         self.mba = mba # controller io modbus address if dc6888
         self.mbi = mbi # io channel for controller
-        self.ac = ACchannels(in_sql = 'aicochannels.sql', readperiod = 0, sendperiod = 25) # ai and counters
-        self.d = Dchannels(readperiod = 0, sendperiod = 180) # di and do. immediate notification on change, read as often as possible
+        self.ac = ACchannels(self.msgbus, in_sql = 'aicochannels.sql', readperiod = 0, sendperiod = 25) # ai and counters
+        self.d = Dchannels(self.msgbus, readperiod = 0, sendperiod = 180) # di and do. immediate notification on change, read as often as possible
         self.p = Commands(ostype) # setup and commands from server
         self.r = RegularComm(interval=12) # interval needs to be below timer value!
 
         self.running = 0 # 999 feed enabled if running only
         self.spm = SpeedoMeter(windowsize = 100) # to see di speed
         self.get_AVV(inspect.stack()[1]) # caller name and hw version
-
+        
         self.loop = tornado.ioloop.IOLoop.instance()
         udp.add_reader_callback(self.udp_reader)
 
@@ -90,7 +94,10 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         self.cal_scheduler.start()
         log.info('ControllerApp instance created. '+self.AVV)
 
-
+    def buslog(self, token, subject, message): # self, token, subject, message
+        ''' Simple logger. Usable as an example for everything listening msgbus ''' 
+        log.info('from msgbus: %s %s %s', token, subject, str(message))
+    
     def get_AVV(self, frm):
         ''' Get the name of calling customer-specific script and controller hw version as self.AVV '''
         #frm = inspect.stack()[1]
@@ -122,16 +129,16 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         send_state = udp.sk_send.get_state()
         receive_state = udp.sk.get_state()
         #self.reset_sender_timeout() # FIXME
-        if send_state[0] == 1 and send_state[1] > 30 and receive_state[0] == 0 and receive_state[1] > 30: ## receive problem
-            log.warning('** udp send ok but no answer. reading buffer until empty! **') # if read buff not empty then no event from new data!
-            udp.sk.up()
-            udp.sk.dn() # to restart timer
-            got = udp.udpread()
-            while got != None and got != {}:
-                self.got_parse(got)
-                got = udp.udpread()
-            log.debug('*** read buffer until empty done wo IOLoop!!!')
-            #time.sleep(1)
+        #if send_state[0] == 1 and send_state[1] > 30 and receive_state[0] == 0 and receive_state[1] > 30: ## receive problem
+        #    log.warning('** udp send ok but no answer. reading buffer until empty! **') # if read buff not empty then no event from new data!
+        #    udp.sk.up()
+        #    udp.sk.dn() # to restart timer
+        #    got = udp.udpread()
+        #    while got != None and got != {}:
+        #        self.got_parse(got)
+        #        got = udp.udpread()
+        #    log.debug('*** read buffer until empty done wo IOLoop!!!')
+        #    #time.sleep(1)
             
 
     def udp_reader(self, udp, fd, events): # no timer! on event!

@@ -53,10 +53,11 @@ class Heater(object): # Junkers Euromaxx for now.
         self.aosvcs.update({svc_Hdebug : None }) # ext int stop H
 
         self.disvcs = {} # services dict di
-        self.disvcs.update({svc_hmode : None }) # heating mode [flame, heating]
+        self.disvcs.update({svc_hmode : [0, 0] }) # heating mode [flame, heating]
 
         self.dosvcs = {} # services dict do
         self.dosvcs.update({svc_noint : None })
+
 
     def read_svcs(self):
         ''' read the cvs tables to get heating related input data '''

@@ -82,6 +82,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 if mb[mbi]:
                     result = mb[mbi].read(mba, regadd, count=count, type=regtype)
                     msg += ' OK, raw '+str(result)
+                    self.msgbus.publish('di_grp_result', {'mbi': mbi, 'mba': mba, 'regadd': regadd, 'result': result})
                     log.debug(msg) ##
                 else:
                     msg += ' -- FAIL, no mb[] for '+str(mbi)

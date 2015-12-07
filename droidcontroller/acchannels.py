@@ -296,6 +296,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 if mb[mbi]:
                     result = mb[mbi].read(mba, regadd, count=count, type=regtype) # client.read_holding_registers(address=regadd, count=1, unit=mba)
                     msg += ', raw: '+str(result)
+                    self.msgbus.publish('di_grp_result', {'mbi': mbi, 'mba': mba, 'regadd': regadd, 'result': result})
                 else:
                     msg += ' -- no mb[]!'
 
