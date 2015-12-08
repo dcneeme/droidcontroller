@@ -15,7 +15,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         Read and send only happen if enough time is passed from previous, chk readperiod, sendperiod!
     '''
 
-    def __init__(self, msgbus, in_sql = 'aicochannels.sql', out_sql = 'aochannels.sql', readperiod = 5, sendperiod = 120):
+    def __init__(self, msgbus=None, in_sql = 'aicochannels.sql', out_sql = 'aochannels.sql', readperiod = 5, sendperiod = 120):
         self.msgbus = msgbus
         self.setReadPeriod(readperiod)
         self.setSendPeriod(sendperiod)
@@ -296,7 +296,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 if mb[mbi]:
                     result = mb[mbi].read(mba, regadd, count=count, type=regtype) # client.read_holding_registers(address=regadd, count=1, unit=mba)
                     msg += ', raw: '+str(result)
-                    self.msgbus.publish('di_grp_result', {'mbi': mbi, 'mba': mba, 'regadd': regadd, 'result': result})
+                    if self.msgbus != None:
+                        self.msgbus.publish('di_grp_result', {'mbi': mbi, 'mba': mba, 'regadd': regadd, 'result': result})
                 else:
                     msg += ' -- no mb[]!'
 
