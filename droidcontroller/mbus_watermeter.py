@@ -1,6 +1,5 @@
 # neeme 2015
 import traceback, time, tornado
-#from droidcontroller.util_n import UN
 from droidcontroller.mbus import *
 
 import logging
@@ -8,21 +7,21 @@ import logging
 #logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 log = logging.getLogger(__name__)
 
-class MbusWaterMeter(object): # FIXME averaging
+class MbusWaterMeter(object): # FIXME averaging missing!
     ''' to be used with iomain with tornado IOloop. writes values into services. '''
-    def __init__(self, ac, model, svc_cum, svc_avg, avg_win = 3600):
-        self.ac = ac # aicochannels
+    def __init__(self, msgbus, model, svc_cum, svc_avg, avg_win = 3600):
+        #self.ac = ac # aicochannels
+        self.msgbus = msgbus # all communication via msgbus, not to ac  directly!
+        
         self.svc_cum = svc_cum # where to write reading from meter
         self.svc_avg = svc_avg # where to write average consumption in time window
         self.avg_win = avg_win # sliding time window length s 
         try:
             self.mbus = Mbus(model='cyble_v2') # vaikimisi port auto, autokey FTDI  # port='/dev/ttyUSB0') #
-            log.info('mbus instance created, ac '+str(self.ac))
-            #mbus_present = 1
+            log.info('mbus instance created, output to msgbus: '+svc_cum)
         except:
-            #mbus_present = 0
             log.warning('Mbus connection NOT possible, probably no suitable USB port found!')
-       
+            traceback.print_exc()
         
     def read(self):
         ''' Reads and returns cumulative and average sliding window values in meter units '''
@@ -30,18 +29,8 @@ class MbusWaterMeter(object): # FIXME averaging
             self.mbus.read()
             volume = int(self.mbus.get_volume())
             log.info('got value from water meter: '+str(volume)+', going to save into svc '+self.svc_cum)
-            #self.ac.set_aivalue('self.svc_cum', 1, UN.val2int(volume)) # to report only, in L / problem with val2int??
-            res = self.ac.set_aivalue(self.svc_cum, 1, volume) # to report only, in L
-            if res == 0:
-                self.ac.get_aivalues(self.svc_cum) ##
-                return 0
-            else:
-                log.warning('PROBLEM with writing svc '+self.svc_cum+', trying to read')
-                try:
-                    self.ac.get_aivalues(self.svc_cum)
-                except:
-                    traceback.print_exc()
+            self.msgbus.publish(self.svc_cum, {'values': [ volume ], 'status': 0}) # msgbus.publish(val_reg, {'values': values, 'status': status})
+            #res = self.ac.set_aivalue(self.svc_cum, 1, volume) # moved to iomain or whatever listener (based on sqlgeneral?)
         except:
-            log.warning('mbus water meter reading or aicochannels register writing FAILED!')
+            log.warning('watermeter read FAILED')
             traceback.print_exc()
-            return 1

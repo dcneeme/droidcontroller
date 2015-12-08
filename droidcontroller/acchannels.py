@@ -779,7 +779,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         hilim = None
         lolim = None
         nolim = 0
-
+        values = [] # to be reported via msgbus
+        
         if sta_reg == '' and (val_reg[-1] == 'W' or val_reg[-1] == 'V'):
             sta_reg = val_reg[0:-1]+'S' # assuming S in the end
 
@@ -995,6 +996,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
             try: # what if None? exception?
                 lisa += str(int(round(value))) # adding member values into one string
+                values.append(int(round(value))) # for msgbus
             except:
                 msg = 'invalid value '+str(value)+' found for service '+val_reg+'.'+str(member)
                 if self.msg != msg:
@@ -1013,6 +1015,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         # service members done, check if all of them valid to use in svc tuple
         if rowproblemcount == 0: # all members valid
             sendtuple = [sta_reg, status, val_reg, lisa] # sending service to buffer
+            if self.msgbus != None:
+                self.msgbus.publish(val_reg, {'values': values, 'status': status})
             return sendtuple # for regular send or status check
         else:
             log.warning(val_reg+' had '+str(rowproblemcount)+' problematic members, sendtuple NOT created! status '+str(status)+', lisa: '+lisa)

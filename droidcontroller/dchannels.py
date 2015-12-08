@@ -327,6 +327,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                             msg='DI service '+val_reg+' needs to be notified, change bitmap '+str(hex(chg))
                             chg_dict.update({val_reg : [chg, val]})  #### FIXME / kahtlane , 1 asemel 3, 2 asemel 6 jne
                             log.info(msg)
+                            
                         else:
                             msg='DI service '+val_reg+' unchanged: '
                         log.debug(msg)
@@ -380,11 +381,13 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
            '''
         # no transaction started here because we are in transaction (started make_dichannels())
         lisa='' # value string
+        values = []
         sumstatus=0 # status calc
         cur=conn.cursor()
         Cmd="select * from dichannels where val_reg='"+val_reg+"' order by member asc" # data for one service ###########
         cur.execute(Cmd)
         rowproblem = 0 # do not report service where member of type h is stalled
+        
         for srow in cur: # ridu tuleb nii palju kui selle teenuse liikmeid, pole oluline milliste mba ja readd vahele jaotatud
             #print 'row in cursor3a',srow # temporary debug
             mba=0 # local here
@@ -444,9 +447,10 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 if (cfg&4): # value2value inversion
                     value = (1^value) # possible member values 0 voi 1
                 lisa += str(value) # adding possibly inverted member value to multivalue string
-
+                values.append(value)
+                
                 if (cfg&8): # value2status inversion
-                    value = (1^value) # member value not needed any more
+                    value = (1^value) # member value not needed any more?
 
                 if (cfg&1): # status warning if value 1
                     status = value #
@@ -470,8 +474,11 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         if sta_reg == val_reg: # only status will be sent then!
             val_reg=''
             lisa=''
-
+            values.append(status) # for msgbus
+            
         if rowproblem == 0:
+            if self.msgbus != None:
+                self.msgbus.publish(val_reg, {'values': values, 'status': sumstatus})
             return [sta_reg, sumstatus, val_reg, lisa]  # returns tuple to send. to be send to udp.send([])
         else:
             log.warning('no sendtuple due to rowproblem')
@@ -525,7 +532,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 di_value = 0
                 do_value = 0
                 mbi = 0
-                log.debug('do change mba,regadd,bit '+str(int(eval(row[0])))+", "+str(int(eval(row[1])))+", "+str(int(eval(row[2])))+' from '+str(int(eval(row[4])))+' to '+str(int(eval(row[3]))))
+                log.debug('do change mba,regadd,bit '+str(int(eval(row[0])))+', '+str(int(eval(row[1])))+', '+str(int(eval(row[2])))+' from '+str(int(eval(row[4])))+' to '+str(int(eval(row[3]))))
                 try:
                     mbi = row[5] if row[5] != '' else 0 # num
                     mba = int(eval(row[0])) # must be number

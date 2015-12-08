@@ -93,10 +93,12 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         self.ai_scheduler.start()
         self.cal_scheduler.start()
         log.info('ControllerApp instance created. '+self.AVV)
+        
 
     def buslog(self, token, subject, message): # self, token, subject, message
         ''' Simple logger. Usable as an example for everything listening msgbus ''' 
-        log.info('from msgbus: %s %s %s', token, subject, str(message))
+        log.debug('from msgbus token %s, subject %s, message %s', token, subject, str(message))
+        
     
     def get_AVV(self, frm):
         ''' Get the name of calling customer-specific script and controller hw version as self.AVV '''

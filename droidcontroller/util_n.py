@@ -60,3 +60,14 @@ class UN(object): # Utilities Neeme, use like UN.val2int(14.4)
                 res.append(UN.hex_reverse(idstring).upper()) # change order and make upper case
         return res
         
+    @staticmethod
+    def bit_replace(word, bit, value): # changing word with single bit value
+        ''' Replaces bit in 2byte word. Examples:
+            #bit_replace(255,7,0) # 127
+            #bit_replace(0,15,1) # 32k
+            #bit_replace(0,7,1) # 128
+        '''
+        #print('bit_replace var: ',format("%04x" % word),bit,value,format("%04x" % ((word & (65535 - 2**bit)) + (value<<bit)))) # debug
+        return ((word & (65535 - 2**bit)) + (value<<bit))
+
+        
