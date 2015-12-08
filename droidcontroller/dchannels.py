@@ -32,7 +32,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         Able to sync input and output channels and accept changes to service members by their sta_reg code
     '''
 
-    def __init__(self, msgbus, in_sql = 'dichannels.sql', out_sql = 'dochannels.sql', readperiod = 0, sendperiod = 120): # sends immediately on change too!
+    def __init__(self, msgbus=None, in_sql = 'dichannels.sql', out_sql = 'dochannels.sql', readperiod = 0, sendperiod = 120): # sends immediately on change too!
         self.msgbus = msgbus
         
         # readperiod 0 means read on every execution. this is usually wanted behaviour to detect any di changes as soon as possible.
@@ -82,7 +82,8 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 if mb[mbi]:
                     result = mb[mbi].read(mba, regadd, count=count, type=regtype)
                     msg += ' OK, raw '+str(result)
-                    self.msgbus.publish('di_grp_result', {'mbi': mbi, 'mba': mba, 'regadd': regadd, 'result': result})
+                    if self.msgbus != None:
+                        self.msgbus.publish('di_grp_result', {'mbi': mbi, 'mba': mba, 'regadd': regadd, 'result': result})
                     log.debug(msg) ##
                 else:
                     msg += ' -- FAIL, no mb[] for '+str(mbi)
