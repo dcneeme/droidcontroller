@@ -22,7 +22,7 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
         # messagebus? several loops in the same room have to listen the same setpoint
         self.name = name
         self.msgbus = msgbus
-        self.msgbus.subscribe('floorset', act_svc[0], 'floorset', self.get_actual) # token, subject, message
+        self.msgbus.subscribe('flooract', act_svc[0], 'flooract', self.set_actual) # token, subject, message
         self.msgbus.subscribe('floorset', set_svc[0], 'floorset', self.set_setpoint) # token, subject, message
 
         self.lolim = lolim
@@ -37,32 +37,46 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
         self.out = 0 # do
 
 
-    def get_actual(self, token, subject, message): # subject is svcname
+    def set_actual(self, token, subject, message): # subject is svcname
         ''' from msgbus token floorset, subject TBW, message {'values': [210, 168, 250, 210], 'status': 0} '''
-        log.info('from msgbus token %s, subject %s, message %s', token, subject, str(message))
-        self.actual = message['values'][self.act_svc[1]]
-        log.info('new actual to '+self.name+': '+str(self.actual))
-
+        log.info('set_actual got from msgbus token %s, subject %s, message %s', token, subject, str(message))
+        actual = message['values'][self.act_svc[1] - 1] # svc members start from 1
+        if actual == None:
+            log.warning('INVALID actual '+str(actual)+' for '+self.name+' extracted from msgbus message '+str(message))
+        else:
+            log.info(self.name+' actual '+str(actual)) ##
+            if self.actual != actual or self.actual == None:
+                log.info('new actual to '+self.name+': '+str(self.actual))
+                self.actual = actual
+                
 
     def set_setpoint(self, token, subject, message): # subject is svcname
         ''' from msgbus token floorset, subject TBW, message {'values': [210, 168, 250, 210], 'status': 0} '''
-        log.info('from msgbus token %s, subject %s, message %s', token, subject, str(message))
-        setpoint = message['values'][self.set_svc[1]]
-        if self.setpoint != setpoint:
-            log.info('new setpoint to '+self.name+': '+str(self.setpoint))
-            self.setpoint = setpoint
-
+        log.info('set_setpoint got from msgbus token %s, subject %s, message %s', token, subject, str(message))
+        setpoint = message['values'][self.set_svc[1] - 1] # svc members start from 1
+        if setpoint == None:
+            log.warning('INVALID setpoint '+str(setpoint)+' for '+self.name+' extracted from msgbus message '+str(message))
+        else:
+            log.info(self.name+' setpoint '+str(setpoint)) ##
+            if self.setpoint != setpoint or self.setpoint == None:
+                log.info('new setpoint to '+self.name+': '+str(self.setpoint))
+                self.setpoint = setpoint
+        
 
     def output(self): # tuple from input()
         ''' Use PID to decide what the slow pwm output should be. '''
-        len = self.pid.output(self.actual, self.setpoint)
-        ptime = (time.time() + self.phasedelay) % self.period
-        log.info('ptime for '+self.name+': '+str(int(ptime))) ##
-        if ptime < len:
-            out = 1
+        if self.actual != None and self.setpoint != None:
+            len = self.pid.output(self.actual, self.setpoint)
+            ptime = (time.time() + self.phasedelay) % self.period
+            log.info('ptime for '+self.name+': '+str(int(ptime))) ##
+            if ptime < len:
+                out = 1
+            else:
+                out = 0
         else:
-            out = 0
-
+            log.warning('INVALID variable in '+self.name+': (actual,setpoint) '+str((self.actual, self.setpoint))+', (act_svc, set_svc) '+str((self.act_svc, self.set_svc)))
+            out = None
+            
         if out != self.out:
             self.out = out
             log.info('floor loop '+self.name+' valve state changed to '+str(self.out))

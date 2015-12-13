@@ -748,7 +748,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         return values
 
 
-    def doall(self): # do this regularly, blocks for the time of socket timeout!
+    def doall(self): # do this regularly
         ''' Does everything on time if executed regularly '''
         res = [2, 2, 2] # returncodes list
         self.ts = round(time.time(),1)

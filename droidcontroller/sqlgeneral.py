@@ -537,40 +537,54 @@ class SQLgeneral(UDPchannel): # parent class for ACchannels, Dchannels
     def setby_dimember_do(self, svc, member, value): # to set an output channel in dochannels by the DI service name and member (defined in dichannels)
         '''Sets  output channel by the service name and member using service name defined for this output in dichannels table '''
         #(mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,comment,type integer)
+        #log.info('setby_dimember_do() start w params '+str((svc, member, value))) ###
+        if value == None or value > 1 or value < 0:
+            log.warning('INVALID value for setby_dimember_do(): '+str(value))
+            return 2
+            
         cur=conn.cursor()
         #Cmd="BEGIN IMMEDIATE TRANSACTION" # conn, et ei saaks muutuda lugemise ajal
         #conn.execute(Cmd)
         Cmd="select mba,regadd,bit,mbi from dichannels where val_reg='"+svc+"' and member='"+str(member)+"'"
         cur.execute(Cmd)
         conn.commit()
+        #log.info(Cmd +' done') ##
+        
         mba=None
         reg=None
         bit=None
         mbi=0
+        found = 0
         for row in cur: # should be one row only
+            #log.info('setby_dimember row '+str(repr(row))) ##
+            found =1 
             try:
-                value=(value&1) # only 0 or 1 allowed
-                mba=int(row[0]) if row[0] != '' else 0 # flag illegal if 0
-                reg=int(row[1]) if row[0] != '' else None
-                bit=int(row[2]) if row[0] != '' else None
-                mbi=int(row[3]) if row[0] != '' else None
-                if mba>0:
-                    res=self.setbit_do(bit,value,mba,reg,mbi=mbi) # sets using physical channel parameters
+                value = (value & 1) # only 0 or 1 allowed
+                mba = int(row[0]) if row[0] != '' else 0 # flag illegal if 0
+                reg = int(row[1]) if row[0] != '' else None
+                bit = int(row[2]) if row[0] != '' else None
+                mbi = int(row[3]) if row[0] != '' else None
+                if mba > 0:
+                    res = self.setbit_do(bit,value,mba,reg,mbi=mbi) # sets using physical channel parameters
+                    #log.info('setbit_do result '+str(res)+', params ' +str((bit,value,mba,reg,mbi))) ##
                 else:
-                    print('invalid parameters for setby_dimember_do')
+                    log.warning('invalid parameters for setby_dimember_do()? '+str((bit,value,mba,reg,mbi)))
                     return 1
+                
                 if res == 0: # ok
+                    log.info('setbit_do() done with params bit,value,mba,reg,mbi '+str((bit,value,mba,reg,mbi))+' based on svc '+svc+'.'+str(member))
                     return 0
                 else:
-                    print('setby_dimember_do: could not get returncode 0 from setbit_do() with params bit,value,mba,reg,mbi',bit,value,mba,reg,mbi)
+                    log.warning('setby_dimember_do: could not get returncode 0 from setbit_do() with params bit,value,mba,reg,mbi '+str(bit,value,mba,reg,mbi))
                 return 1
             except:
-                msg='setbit_dochannels failed for bit '+str(bit)+': '+str(sys.exc_info()[1])
+                msg='setbit_do FAILED for bit '+str(bit)+'!'
                 log.warning(msg)
                 udp.syslog(msg)
                 traceback.print_exc() # debug
                 return 1
-
+        if found == 0:
+            log.warning('NO match in dichannels for '+Cmd)
 
 
     def bit_replace(self, word, bit, value): # changing word with single bit value
