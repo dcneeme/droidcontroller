@@ -23,7 +23,7 @@ class SerialConf:
     ''' Configure USR IOYT products via serial port '''
     def __init__(self, port='auto', autokey='FTDI', tout=4,
             model='WIFI232B', conf={
-                'UART': '19200,8,1,Even,NFC',
+                'UART': '9600,8,1,None,NFC',
                 'FUDLX': 'on',
                 'WANN': 'static,10.0.0.4,255.255.255.0,10.0.0.253',
                 'WSSSID': 'gembird',
@@ -100,7 +100,8 @@ class SerialConf:
                     time.sleep(0.03)
                 self.crlf()
                 time.sleep(delay + i)
-                res = self.ser.read(expect_size).decode('utf-8').replace('\r\n',' ') # ascii codec will fail with bytes > 127
+                #res = self.ser.read(expect_size).decode('utf-8').replace('\r\n',' ') # ascii codec will fail with bytes > 127
+                res = self.ser.read(expect_size).decode('utf-8').replace('\r\n',' ').replace('\r','') # CR to be removed!
                 #res = self.ser.readline().decode('utf-8').replace('\r','').replace('\n','') # this first line is command echo
                 #if line == 1:
                 #    res = self.ser.readline().decode('utf-8').replace('\r','').replace('\n','') # ascii codec will fail with bytes > 127
@@ -129,7 +130,7 @@ class SerialConf:
 
         res = self.comm(cmd, expect_string='+++', delay = 1, retries = 1, line = 0) # trying to get back command echo, no more lines coming
         if res == '': # wrong speed?
-            log.info('trying initial speed '+str(self.ispeed))
+            log.info('trying initial speed, should connect if /reset is done'+str(self.ispeed))
             self.reopen(self.ispeed, self.iparity) # try factory default parameters 57k6 8N1
             print(str(self.ser))
             if self.model == 'WIFI232B':
@@ -156,7 +157,9 @@ class SerialConf:
                 res = self.comm(cmd, expect_size = len(cmd)+7, delay = 1)
                 i += 1
                 log.info('   got '+res+'       ')
-
+        self.comm('AT+Z') # restart
+        print('module restarted, the communication at targeted speed and transparent mode can be tried soon')
+        
 
     def get_conf(self):
         ''' read config via AT command '''
@@ -179,7 +182,7 @@ class SerialConf:
         self.get_conf() # read current config
         print('going to write new configuration\n')
         self.set_conf() # set new config
-        self.comm('AT+Z') # restart
+        #self.comm('AT+Z') # restart
         print('wait for module restart\n')
         time.sleep(10)
         self.set_mode() # switching into at command mode
