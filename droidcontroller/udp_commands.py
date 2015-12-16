@@ -339,7 +339,7 @@ class Commands(SQLgeneral): # p
                     todocode = 1
 
             else:
-                log.warning('UNIMPLEMENTED cmd '+cmd)
+                log.warning('UNIMPLEMENTED cmd '+TODO)
 
 
 
