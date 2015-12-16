@@ -84,7 +84,7 @@ class SerialConf:
         self.ser = serial.Serial(self.port, speed, timeout=self.tout, parity=parity) # that opens too
 
 
-    def comm(self, send_string, expect_string='+', expect_size=120, delay=1, retries=3): # line index
+    def comm(self, send_string, expect_string='+', delay=1, retries=3): # line index
         ''' Delay needed after every character! '''
         i=0
         res= ''
@@ -105,14 +105,24 @@ class SerialConf:
                     sys.stdout.flush()
                 self.crlf()
                 res = ''
+                got = 0
+                minsize = 6
                 j = 0
-                while res == '' and j < 5:
-                    res = self.ser.read(1).decode('utf-8')
-                    sys.stdout.write(',') # to see retries
-                    sys.stdout.flush()
+                while res == '' and j < 100:
+                    time.sleep(0.1)
+                    inbytes = self.ser.inWaiting()
+                    if inbytes > minsize: # '\r\n\r+ok=WPA2PSK,AES,villakooguit\r\n\r\n'
+                        got = 1
+                        break # read all with timeout
+                    else: 
+                        if got == 0: # still waiting
+                            sys.stdout.write(',') # to see retries
+                            sys.stdout.flush()
+                        else: # got == 1 but got no more
+                            break
                     j += 1
-                time.sleep(delay)
-                res = self.ser.read(120).decode('utf-8').replace('\r\n',' ').replace('\r','').replace('\n','') # .split('+')[1] # 
+                time.sleep(delay) # starting from the response beginning
+                res = self.ser.read(256).decode('utf-8') # .replace('\r\n',' ').replace('\r','').replace('\n','') # .split('+')[1] # 
                 
             except:
                 res = ''
@@ -131,12 +141,6 @@ class SerialConf:
         ''' try +++a '''
         print(str(self.ser))
         
-        if self.model == 'WIFI232B':
-            cmd='+++a'
-        else:
-            log.warning('unsupported model '+model)
-            return 1
-        
         res = '' # response string, bytes
         self.ser.flushInput()
         self.ser.write('+++'.encode('ascii'))
@@ -149,8 +153,9 @@ class SerialConf:
         if res == '+': # already in at cmd mode
             print('device already in at mode')
             self.crlf() # finish the cmd
-            time.sleep(0.1)
+            time.sleep(0.2)
             self.ser.flushInput()
+            res= ' '
         elif res == 'a': # switching int at cmd mode
             print('switching to at mode')
             time.sleep(0.1)
@@ -196,15 +201,8 @@ class SerialConf:
         for key in self.conf:
             res = ''
             i = 0
-            #while not self.conf[key] in res and i < retries:
-            #    sys.stdout.write('*') # to see retries
-            #    sys.stdout.flush()
-            #    cmd = 'AT+'+key+'='+self.conf[key]
-            #    res = self.comm(cmd, expect_size = len(cmd)+7, delay = 1)
-            #    i += 1
-            #    print('   got '+res)
             cmd = 'AT+'+key+'='+self.conf[key]
-            res = self.comm(cmd, expect_string='+ok', delay=3)
+            res = self.comm(cmd, expect_string='+ok', delay=1).replace('\r\n',' ').replace('\r','').replace('\n','')[1:] # avoid cr, lf
             print('   got '+res)
         time.sleep(1)
         self.comm('AT+Z') # restart
@@ -214,13 +212,13 @@ class SerialConf:
     def get_conf(self):
         ''' read config via AT command '''
         for key in self.conf:
-            res = self.comm('AT+'+key, delay = 0) # do not use delay less than 3
+            res = self.comm('AT+'+key, delay = 0).replace('\r\n',' ').replace('\r','').replace('\n','')[1:] # avoid cr & lf here, cut first chars
             print('   got '+res)
 
 
     def get_networks(self):
         ''' List available WLANs and chk for connectivity '''
-        res = self.comm('AT+WSCAN', expect_size=512, delay = 5)
+        res = self.comm('AT+WSCAN', delay = 1)
         print(res)
         #res = self.comm('AT+TCPLK')
         #print(res)
@@ -237,6 +235,7 @@ class SerialConf:
         time.sleep(10)
         self.set_mode() # switching into at command mode
         self.get_conf() # read new config
+        self.get_networks() # show networks
 
 ##########################################################
 if __name__ == '__main__':
