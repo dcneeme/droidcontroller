@@ -21,7 +21,7 @@ print(list(serial.tools.list_ports.comports()))
 
 class SerialConf:
     ''' Configure USR IOYT products via serial port '''
-    def __init__(self, port='auto', autokey='FTDI', tout=4,
+    def __init__(self, port='auto', autokey='FTDI', tout=1,
             model='WIFI232B', conf={
                 'UART': '9600,8,1,None,NFC',
                 'FUDLX': 'on',
@@ -78,33 +78,42 @@ class SerialConf:
 
     def reopen(self, speed, parity):
         ''' Try other speed and parity on the same port '''
-        log.warning('trying to reopen serial port '+self.port+' using speed '+str(speed)+', parity '+str(parity))
+        print('trying to reopen serial port '+self.port+' using speed '+str(speed)+', parity '+str(parity))
         self.ser.close()
         time.sleep(1)
         self.ser = serial.Serial(self.port, speed, timeout=self.tout, parity=parity) # that opens too
 
 
-    def comm(self, send_string, expect_string='+ok', expect_size=120, delay=1, retries=5, line=1): # line index
+    def comm(self, send_string, expect_string='+', expect_size=120, delay=1, retries=3): # line index
         ''' Delay needed after every character! '''
         i=0
         res= ''
         #self.ser.flushInput()
-        log.info('sending '+send_string) ##
+        log.debug('sending '+send_string) ##
         while not expect_string in res and i < retries:
+        #while res == '' and i < retries: # TEST
             self.ser.flushInput()
             sys.stdout.write('.') # to see retries
             sys.stdout.flush()
             try:
+                res = '' # response string, bytes
                 for char in send_string:
                     self.ser.write(char.encode('ascii'))
-                    time.sleep(0.03)
+                    time.sleep(0.01)
+                    res = self.ser.read(1).decode('utf-8') # echo
+                    sys.stdout.write(res) # to see retries
+                    sys.stdout.flush()
                 self.crlf()
-                time.sleep(delay + i)
-                #res = self.ser.read(expect_size).decode('utf-8').replace('\r\n',' ') # ascii codec will fail with bytes > 127
-                res = self.ser.read(expect_size).decode('utf-8').replace('\r\n',' ').replace('\r','') # CR to be removed!
-                #res = self.ser.readline().decode('utf-8').replace('\r','').replace('\n','') # this first line is command echo
-                #if line == 1:
-                #    res = self.ser.readline().decode('utf-8').replace('\r','').replace('\n','') # ascii codec will fail with bytes > 127
+                res = ''
+                j = 0
+                while res == '' and j < 5:
+                    res = self.ser.read(1).decode('utf-8')
+                    sys.stdout.write(',') # to see retries
+                    sys.stdout.flush()
+                    j += 1
+                time.sleep(delay)
+                res = self.ser.read(120).decode('utf-8').replace('\r\n',' ').replace('\r','').replace('\n','') # .split('+')[1] # 
+                
             except:
                 res = ''
                 log.debug('read FAILED!')
@@ -116,47 +125,88 @@ class SerialConf:
 
     def crlf(self):
         self.ser.write('\r\n'.encode('ascii'))
+        
 
-
-    def set_mode(self): # ALWAYS INTO SER CONF, USE AT+Z TO TRANSPARENT!
-        ''' test and set the mode '''
-        self.reopen(self.speed, self.parity) # reopen at targeted speed, even if already using this
+    def conn(self):
+        ''' try +++a '''
         print(str(self.ser))
+        
         if self.model == 'WIFI232B':
             cmd='+++a'
         else:
             log.warning('unsupported model '+model)
             return 1
-
-        res = self.comm(cmd, expect_string='+++', delay = 1, retries = 1, line = 0) # trying to get back command echo, no more lines coming
-        if res == '': # wrong speed?
-            log.info('trying initial speed, should connect if /reset is done'+str(self.ispeed))
+        
+        res = '' # response string, bytes
+        self.ser.flushInput()
+        self.ser.write('+++'.encode('ascii'))
+        time.sleep(0.1)
+        try:
+            res = self.ser.read(1).decode('utf-8') # echo
+        except:
+            traceback.print_exc() # pass
+        
+        if res == '+': # already in at cmd mode
+            print('device already in at mode')
+            self.crlf() # finish the cmd
+            time.sleep(0.1)
+            self.ser.flushInput()
+        elif res == 'a': # switching int at cmd mode
+            print('switching to at mode')
+            time.sleep(0.1)
+            self.ser.write('a'.encode('ascii'))
+            time.sleep(0.1)
+            res = self.ser.read(3).decode('utf-8')
+        else:
+            log.debug('invalid read result from serial, res='+str(res))
+            res = '' # fail
+        if res != '':
+            print('conn: connected, res='+res)
+            return 0
+        else:
+            log.warning('FAILED to get serial connectivity at this time')
+            return 1
+        
+        
+    def set_mode(self): # ALWAYS TO SER CONF, USE AT+Z or AT+ENTM TO get into TRANSPARENT mode!
+        ''' test and set the mode to AT command '''
+        self.reopen(self.speed, self.parity) # reopen at targeted speed, even if already using this
+        res = self.conn()
+        if res != 0: # no success with current speed
+            print('trying to connect at speed '+str(self.ispeed))
             self.reopen(self.ispeed, self.iparity) # try factory default parameters 57k6 8N1
-            print(str(self.ser))
-            if self.model == 'WIFI232B':
-                cmd='+++a'
-            else:
-                log.warning('UNKNOWN model '+self.model)
-            res = self.comm(cmd, expect_string='+++', delay = 1, retries = 1)
-            log.info(res)
-            if res != '': # got some answer
-                log.info('serial connectivity established at initial speed '+str(self.ispeed))
+            res = self.conn()
+            
+        if res != 0: # no success with current speed
+            log.info('FAILED to connect with '+self.model+'. try /reset!')
+            return 1
+        else:
+            print('connected')        
+        return 0
 
-        return res
-
-
+    
+    def reset_mode(self): # back to tr5ansparent
+        cmd='AT+ENTM'
+        res = self.comm(cmd, expect_string='+ok', delay = 1, retries = 2)
+        print(res)
+        
+        
     def set_conf(self, retries=3):
         ''' write config as at command '''
         for key in self.conf:
             res = ''
             i = 0
-            while not self.conf[key] in res and i < retries:
-                sys.stdout.write('*') # to see retries
-                sys.stdout.flush()
-                cmd = 'AT+'+key+'='+self.conf[key]
-                res = self.comm(cmd, expect_size = len(cmd)+7, delay = 1)
-                i += 1
-                log.info('   got '+res+'       ')
+            #while not self.conf[key] in res and i < retries:
+            #    sys.stdout.write('*') # to see retries
+            #    sys.stdout.flush()
+            #    cmd = 'AT+'+key+'='+self.conf[key]
+            #    res = self.comm(cmd, expect_size = len(cmd)+7, delay = 1)
+            #    i += 1
+            #    print('   got '+res)
+            cmd = 'AT+'+key+'='+self.conf[key]
+            res = self.comm(cmd, expect_string='+ok', delay=3)
+            print('   got '+res)
+        time.sleep(1)
         self.comm('AT+Z') # restart
         print('module restarted, the communication at targeted speed and transparent mode can be tried soon')
         
@@ -164,13 +214,13 @@ class SerialConf:
     def get_conf(self):
         ''' read config via AT command '''
         for key in self.conf:
-            res = self.comm('AT+'+key, delay=2.5) # do not use delay less than 3
-            log.info('   got '+res)
+            res = self.comm('AT+'+key, delay = 0) # do not use delay less than 3
+            print('   got '+res)
 
 
     def get_networks(self):
         ''' List available WLANs and chk for connectivity '''
-        res = self.comm('AT+WSCAN', expect_size=256)
+        res = self.comm('AT+WSCAN', expect_size=512, delay = 5)
         print(res)
         #res = self.comm('AT+TCPLK')
         #print(res)
