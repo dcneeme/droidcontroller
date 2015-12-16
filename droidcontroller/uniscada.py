@@ -4,6 +4,10 @@
 # able to restore unsent history from buffer2server.sql when connectivity restored
 ## FIXME - led usage via method, chk if GPIO usable
 
+import logging
+#logging.basicConfig(stream=sys.stderr, level=logging.INFO) # temporary
+log = logging.getLogger(__name__)
+
 import time, datetime
 import sqlite3
 import traceback
@@ -12,8 +16,13 @@ import sys, inspect
 import os, subprocess
 import gzip
 import tarfile
-import requests
+try:
+    import requests
+except:
+    log.warning('no requests imported, TCPchannel not usable!')
+    time.sleep(2)
 from  functools import partial # for add_reader_callback()
+    
 import logging
 log = logging.getLogger(__name__)
 try:
