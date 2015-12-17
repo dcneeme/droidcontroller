@@ -354,16 +354,10 @@ class CommModbus(Comm):
 
         value = kwargs.get('value', None)
         values = kwargs.get('values', None)
-        #try:
-        #    values = kwargs['values', None]
-        #    #count = len(values)
-        #except:
-        #    try:
-        #        value = kwargs['value', None]
-        #    except:
-        #        #traceback.print_exc() # debug
-        #        log.warning('write parameters problem, no value or values given, params '+str(kwargs))
-        #        return 2
+        
+        if value= None and values = None:
+            log.error('write FAILED: no required parameters value or values! mba '+str(mba)+', reg '+str(reg)))
+            return 2
 
         if type == 'h': # holding
             if value:
@@ -407,7 +401,7 @@ class CommModbus(Comm):
                     self.add_error(mba, 1)
                     return 1
             else:
-                log.warning('FAILED write, no value or values? mba '+str(mba)+', reg '+str(reg)+', **kwargs '+str(**kwargs))
+                log.warning('FAILED write, no value or values? mba '+str(mba)+', reg '+str(reg)+', kwargs '+str(kwargs))
 
         elif type == 'c': # coil
             try:
@@ -415,7 +409,7 @@ class CommModbus(Comm):
                 #self.errorcount = 0
                 return 0
             except:
-                #traceback.print_exc() # self.on_error(id, **kwargs)
+                #traceback.print_exc() 
                 self.errorcount += 1
                 return 1
         elif type == 'n': # npe_io  ##################### NPE subexec WRITE ##################
