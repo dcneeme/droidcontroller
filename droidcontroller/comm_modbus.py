@@ -407,7 +407,7 @@ class CommModbus(Comm):
                     self.add_error(mba, 1)
                     return 1
             else:
-                log.warning('FAILED write, neither value or values given!')
+                log.warning('FAILED write, no value or values? mba '+str(mba)+', reg '+str(reg)+', **kwargs '+str(**kwargs))
 
         elif type == 'c': # coil
             try:
