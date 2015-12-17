@@ -362,7 +362,7 @@ class CommModbus(Comm):
             log.info('going to write register mba '+str(mba)+', reg '+str(reg)+', value '+str(value)+', values '+str(values)+', type '+str(type)) 
 
         if type == 'h': # holding
-            if value != None: vaartus 0 annab sama tulemuse kui None!
+            if value != None: # vaartus 0 annab sama tulemuse kui None!
                 try:
                     res = self.client.write_register(address=reg, value=value, unit=mba)
                     if isinstance(res, WriteSingleRegisterResponse): # ok
