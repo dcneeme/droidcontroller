@@ -355,12 +355,14 @@ class CommModbus(Comm):
         value = kwargs.get('value', None)
         values = kwargs.get('values', None)
         
-        if value== None and values == None:
+        if value == None and values == None:
             log.error('write FAILED: no required parameters value or values! mba '+str(mba)+', reg '+str(reg))
             return 2
+        else:
+            log.info('going to write register mba '+str(mba)+', reg '+str(reg)+', value '+str(value)+', values '+str(values)+', type '+str(type)) 
 
         if type == 'h': # holding
-            if value:
+            if value != None: vaartus 0 annab sama tulemuse kui None!
                 try:
                     res = self.client.write_register(address=reg, value=value, unit=mba)
                     if isinstance(res, WriteSingleRegisterResponse): # ok
@@ -380,7 +382,7 @@ class CommModbus(Comm):
                     self.errorcount += 1
                     self.add_error(mba, 1)
                     return 1
-            elif values: # multiple register write
+            elif values != None and 'list' in str(type(values)): # multiple register write
                 try:
                     res = self.client.write_registers(address=reg, count=len(values), unit=mba, values = values)
                     if isinstance(res, WriteMultipleRegistersResponse): # ok
@@ -434,7 +436,7 @@ class CommModbus(Comm):
                 return 1
 
         else:
-            print('unknown type',type)
+            log.error('unknown type for register to write, '+str(type))
             self.errorcount += 1
             return 2
 
