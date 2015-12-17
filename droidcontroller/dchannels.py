@@ -566,24 +566,27 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                             if mb[mbi]:
                                 word = mb[mbi].read(mba, regadd, count = 1, type = 'h')[0]
                                 #print('value of the output',mba,regadd,'before change',format("%04x" % word)) # debug
+                                for bit in bit_dict.keys():
+                                    #print('do di bit,[do,di]',bit,bit_dict[bit]) # debug
+                                    word2 = s.bit_replace(word,bit,bit_dict[bit][0]) # changed the necessary bit. can't reuse / change word directly!
+                                    word = word2
+
+                                respcode = mb[mbi].write(mba, regadd, value=word)
+                                if respcode == 0:
+                                    msg = 'output written - mbi mba regadd value '+str(mbi)+' '+str(mba)+' '+str(regadd)+' '+format("%04x" % word)
+                                    log.info(msg) ##
+                                    res = (res | 1) # change bit
+                                else:
+                                    msg = 'FAILED writing register '+str(mba)+'.'+str(regadd)+' '+str(sys.exc_info()[1])
+                                    log.warning(msg)
+                                    res = (res | 2) # error bit
+                            
                         except:
-                            log.warning('device mbi '+str(mbi)+', mba'+str(mba)+', not holding register?')
+                            log.warning('sync_do could no read mbi '+str(mbi)+', mba'+str(mba))
+                            traceback.print_exc()
                             return 2
 
-                        for bit in bit_dict.keys():
-                            #print('do di bit,[do,di]',bit,bit_dict[bit]) # debug
-                            word2 = s.bit_replace(word,bit,bit_dict[bit][0]) # changed the necessary bit. can't reuse / change word directly!
-                            word = word2
-
-                        respcode = mb[mbi].write(mba, regadd, value=word)
-                        if respcode == 0:
-                            msg = 'output written - mbi mba regadd value '+str(mbi)+' '+str(mba)+' '+str(regadd)+' '+format("%04x" % word)
-                            log.debug(msg)
-                            res = (res | 1) # change bit
-                        else:
-                            msg = 'FAILED writing register '+str(mba)+'.'+str(regadd)+' '+str(sys.exc_info()[1])
-                            log.warning(msg)
-                            res = (res | 2) # error bit
+                        
 
 
         except:
