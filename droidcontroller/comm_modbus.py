@@ -356,7 +356,7 @@ class CommModbus(Comm):
         values = kwargs.get('values', None)
         
         if value== None and values == None:
-            log.error('write FAILED: no required parameters value or values! mba '+str(mba)+', reg '+str(reg)))
+            log.error('write FAILED: no required parameters value or values! mba '+str(mba)+', reg '+str(reg))
             return 2
 
         if type == 'h': # holding
