@@ -32,10 +32,10 @@ class DeltaOhm(object):
                 'DMPV': [5, 1, 'pressure hPa']
             },
             speed=460800, parity='N',
-            interval = 60,
+            interval = 30,
             id = '010000000010',
             ip='195.222.15.51',
-            mbiconf={0:'10.0.0.4:10001'}
+            mbiconf={0:'10.0.0.4:502'} # {0:'10.0.0.4:10001'} # wifi232B works in modbus proxy mode as well
             ):
 
         ''' in configuration one reference and several tested values can be described
