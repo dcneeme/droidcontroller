@@ -39,31 +39,31 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
 
     def set_actual(self, token, subject, message): # subject is svcname
         ''' from msgbus token floorset, subject TBW, message {'values': [210, 168, 250, 210], 'status': 0} '''
-        log.info('setting actual by member '+str(self.set_svc[1] - 1)+' %s, message %s', subject, str(message))
+        log.info('setting actual by member '+str(self.act_svc[1])+' %s, message %s', subject, str(message))
         actual = message['values'][self.act_svc[1] - 1] # svc members start from 1
         if actual == None:
             log.warning('INVALID actual '+str(actual)+' for '+self.name+' extracted from msgbus message '+str(message))
         else:
-            log.info(self.name+' actual '+str(actual)) ##
-            if self.actual != actual or self.actual == None:
-                log.info('new actual to '+self.name+': '+str(self.actual))
+            log.info(self.name+' actual '+str(actual)+' from '+subject+'.'+str(self.act_svc[1])+', self.actual '+str(self.actual)) ##
+            if self.actual != actual:
+                log.info('set new actual to '+self.name+': '+str(self.actual)+' from '+subject+'.'+str(self.act_svc[1]))
                 self.actual = actual
                 
 
     def set_setpoint(self, token, subject, message): # subject is svcname
         ''' from msgbus token floorset, subject TBW, message {'values': [210, 168, 250, 210], 'status': 0} '''
-        log.info('setting setpoint by member '+str(self.set_svc[1] - 1)+' from %s, message %s', subject, str(message))
+        log.info('setting setpoint by member '+str(self.set_svc[1])+' from %s, message %s', subject, str(message))
         setpoint = message['values'][self.set_svc[1] - 1] # svc members start from 1
         if setpoint == None:
             log.warning('INVALID setpoint '+str(setpoint)+' for '+self.name+' extracted from msgbus message '+str(message))
         else:
-            log.info(self.name+' setpoint '+str(setpoint)) ##
-            if self.setpoint != setpoint or self.setpoint == None:
-                log.info('new setpoint to '+self.name+': '+str(self.setpoint))
+            log.info(self.name+' setpoint '+str(setpoint)+' from '+subject+'.'+str(self.set_svc[1])+', self.setpoint '+str(self.setpoint)) ##
+            if self.setpoint != setpoint:
+                log.info('set new setpoint to '+self.name+': '+str(self.setpoint)+' from '+subject+'.'+str(self.set_svc[1]))
                 self.setpoint = setpoint
         
 
-    def output(self): #  actual and setpoint are coming from msgbus
+    def output(self): #  actual and setpoint are coming from msgbus and stored in self.actual, self.setpoint
         ''' Use PID to decide what the slow pwm output should be. '''
         len = 0 # without pid output
         if self.actual != None and self.setpoint != None:
@@ -75,7 +75,7 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
             else:
                 out = 0
         else:
-            log.warning('INVALID variable in '+self.name+': (actual,setpoint) '+str((self.actual, self.setpoint))+', (act_svc, set_svc) '+str((self.act_svc, self.set_svc)))
+            log.warning('INVALID variable in '+self.name+' (actual,setpoint): '+str((self.actual, self.setpoint))+', (act_svc, set_svc) '+str((self.act_svc, self.set_svc)))
             out = None
             
         if out != self.out:
