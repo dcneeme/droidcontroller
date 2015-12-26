@@ -71,8 +71,8 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
         ''' Returns internal variables as dictionary '''
         self.vars.update({'lolim' : self.lolim, 
             'hilim' : self.hilim, 
-            'actual' : self.actual, 
-            'setpoint' : self.setpoint, 
+            'actual' : self.pid.getvars(filter='actual'), 
+            'setpoint' : self.pid.getvars(filter='setpoint'), 
             'phasedelay' : self.phasedelay, 
             'out' : self.out, 
             'name': self.name })
