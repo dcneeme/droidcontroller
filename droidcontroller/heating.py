@@ -13,11 +13,14 @@ log = logging.getLogger(__name__)
 ###############
 class FloorTemperature(object): # one instance per floor loop. no d or ac needed, just msgbus!
     def __init__(self, msgbus, act_svc, set_svc, out_svc,
-        name = 'undefined', period = 1000, phasedelay = 0, lolim = 150, hilim = 350): # time units s, temp ddegC
+        name = 'undefined', period = 1000, phasedelay = 0, lolim = 150, hilim = 350): # time units s, temp ddegC. lolim, hilim not in use???
         ''' floor loops with slow pid and pwm period 1h, use shifted phase to load pump more evenly.
             The loops know their service and d member to get the setpoint and actuals.
             Limits are generally the same for the floor loops.
             when output() executed, new values for loop controls are calculated.
+            
+            Actual temperature for floor loop should be measured only while valve is open! 
+            It is impossible to measure if open time is less than 100s or so!
         '''
         # messagebus? several loops in the same room have to listen the same setpoint
         self.name = name
@@ -33,7 +36,7 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
         self.set_svc = set_svc if 'list' in str(type(set_svc)) else None # ['svc', member]
         #self.actual = None
         #self.setpoint = None
-        self.pid = PID(P = 1.0, I = 0.01, D = 0, min = 10, max = 990, outmode = 'nolist', name = name, dead_time = 0)
+        self.pid = PID(P = 1.0, I = 0.01, D = 0, min = 180, max = 940, outmode = 'nolist', name = name, dead_time = 0)
         self.out = 0 # do
 
 
@@ -44,8 +47,12 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
         if actual == None:
             log.warning('INVALID actual '+str(actual)+' for '+self.name+' extracted from msgbus message '+str(message))
         else:
-            log.info('setting actual to '+self.name+' actual '+str(actual)+' from '+subject+'.'+str(self.act_svc[1])) ##
-            self.pid.set_actual(actual)
+            ptime = (time.time() + self.phasedelay) % self.period
+            if self.out == 1 and ptime > 30: # valve open for at least 30 s
+                log.info('setting actual to '+self.name+' actual '+str(actual)+' from '+subject+'.'+str(self.act_svc[1])) ##
+                self.pid.set_actual(actual)
+            else:
+                log.info('setting actual for '+self.name+' skipped due to valve state '+str(self.out)+' or too recently (ptime '+str(ptime)+') opened valve')
                 
 
     def set_setpoint(self, token, subject, message): # subject is svcname
@@ -67,7 +74,7 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
         try:
             len = self.pid.output() # kasutame varem seatud muutujaid
             ptime = (time.time() + self.phasedelay) % self.period
-            log.info('ptime for '+self.name+': '+str(int(ptime))) ##
+            log.info('ptime for '+self.name+': '+str(int(ptime))) ## pulse time
             if ptime < len:
                 out = 1
             else:
