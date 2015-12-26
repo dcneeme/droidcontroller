@@ -55,6 +55,12 @@ class PID:
         log.info(msg)
 
 
+    def set_actual(self, invar):
+        if invar != None:
+            self.actual = invar
+        else:
+            log.warning('ignored illegal actual value None! keeping '+str(self.actual))
+    
     def setSetpoint(self, invar):
         ''' Set the goal for the actual value '''
         if invar != None:
@@ -254,18 +260,21 @@ class PID:
         return self.onLimit, age, self.noint # noint on sama plaarsusega kui onlimit, kehtides deadzone pikkuses
 
 
-    def output(self, actual, setpoint = None, noint = 0): # actual and external integration prevention via noint (signed, 1 = no upwards)
+    def output(self, actual = None, setpoint = None, noint = 0): # actual and external integration prevention via noint (signed, 1 = no upwards)
         ''' Performs PID computation and returns a control value and it's components (and self.error and saturation)
             based on the elapsed time (dt) and the difference between actual value and setpoint.
             Added oct 2015: noint value other than 0 will stop integration in both directions.
+            
+            If actual and/or setpoint is not given, these should be defined and updated via set_actual(), setSetpoint() !
         '''
         if setpoint != None:
             self.setPoint = setpoint # replacing setpoint if given
-        self.actual = actual
+        if actual != None:
+            self.actual = actual
         self.extnoint = noint
         direction = ['down','','up'] # up or down / FIXME use enum here! add Limit class! reusable for everybody...
         try:
-            self.error = self.setPoint - actual            # self.error value  oli invar
+            self.error = self.setPoint - self.actual            # self.error value  oli invar
         except:
             self.error = 0 # for the case of invalid actual
             log.warning('invalid actual '+repr(actual)+' for pid self.error calculation, self.error zero used!')
@@ -295,7 +304,7 @@ class PID:
         self.prevtm = self.currtime               # save t for next pass
         self.prev_err = self.error                   # save t-1 self.error
 
-        out=self.Cp + (self.Ki * self.Ci) + (self.Kd * self.Cd) # sum the terms and return the result
+        out = self.Cp + (self.Ki * self.Ci) + (self.Kd * self.Cd) # sum the terms and return the result
 
         if self.outMax is not None and self.outMin is not None:
             if not self.outMax > self.outMin: # avoid faulty limits
