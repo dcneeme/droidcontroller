@@ -1,9 +1,8 @@
 # This Python file uses the following encoding: utf-8
-# last change  6.9.2015, added crc chk
-
+# last change  26.12.2015, fixed minute conversion
 '''
 read_gps.py - query GPS device via USB port, normally at 4800 8N1
- usage:
+usage:
 from droidcontroller.read_gps import *
 gps = ReadGps()
 gps.read()
@@ -67,7 +66,7 @@ class ReadGps:
                 self.ser = serial.Serial(self.port, self.speed, timeout=tout, parity=serial.PARITY_NONE) # also opening the port
                 self.errors = 0 # every success zeroes
                 self.gpsdata = '' # last message
-                
+
                 if self.ser.isOpen():
                     log.info('ReadGps connection for receiver model '+self.model+' successful on port '+self.port)
                 else:
@@ -131,8 +130,8 @@ class ReadGps:
 
 
     def decode(self, line):
-        ''' 
-            return decoded lat lng coordinates 
+        '''
+            return decoded lat lng coordinates
             DDDMM.SSSS ("Degrees, minutes, seconds") format used in the NMEA protocol
             use RMC or GGA (complete) member of the following
             ['$GPGGA,133137.000,5925.4915,N,02436.8032,E,1,07,1.2,3.1,M,19.8,M,,0000*56', '$GPGSA,A,3,22,08,04,27,11,14,18,,,,,,2.9,1.2,2.6*3B', '$GPRMC,133137.000,A,5925.4915,N,02436.8032,E,0.00,26.40,240915,,,A*59', '$GPGGA,133138.000,5925.4915,N,02436.8032,E,1,07,1.2,3.1,M,19.8,M,,0000*59', '$GPGSA,A,3,22,08,04,27,11,14,18,,,,,,2.9,1.2,2.7*3A', '$GPRMC,133138.000,A,5925.4915,N,02436.8032,E,0.00,26.40,240915,,,A*56', '$GPGGA,133139.000,5925']
@@ -142,30 +141,30 @@ class ReadGps:
         #lat = msg.latitude
         #lon = msg.longitude
         #return lat, lon
-    
+
         '''return decoded lat lng coordinates '''
         linevars = line.split(",")
         log.debug('linevars '+str(linevars)) ##
         if line[0:6] == '$GPGGA' and linevars[6] != '0': # this line is complete and contains coordinates data
-            log.debug('found GPGGA line: '+line) ##
-            return self.getLatLng(linevars[2],linevars[4])
-            
+            log.info('found GPGGA line: '+line) ##
+            return self.getLatLng(linevars[2]+linevars[3],linevars[4]+linevars[5])
+
         if line[0:6] == '$GPRMC' and linevars[2] != 'V':
-            log.debug('found GPRMC line: '+line) ##
-            return self.getLatLng(linevars[3],linevars[5])
-            
+            log.info('found GPRMC line: '+line) ##
+            return self.getLatLng(linevars[3]+linevars[4],linevars[5]+linevars[6])
+
         else:
             #log.warning('NO $GPRMC or GPRMS found in '+line)
             return None
 
 
-    def checksum(self, line): # FIXME
+    def checksum(self, line): 
         checkString = line.split("*")
         checksum = 0
         bstring= checkString[0].encode('utf-8') # into bytes in py3!
         for i in range(len(bstring)):
             checksum ^= bstring[i]
-            
+
         try: # Just to make sure
             inputChecksum = int(checkString[1].encode('utf-8'), 16)
         except:
@@ -173,7 +172,7 @@ class ReadGps:
             return False
 
         if checksum == inputChecksum:
-            log.info('crc ok') ##
+            log.debug('gps crc ok') ##
             return True
         else:
             log.warning('Checksum ERROR: ' + hex(checksum) + ' != ' + hex(inputChecksum))
@@ -184,11 +183,30 @@ class ReadGps:
     def getTime(string,format,returnFormat):
         return time.strftime(returnFormat, time.strptime(string, format)) # Convert date and time to a nice printable format
 
+
+    def dms2dec(self, instr):
+        ''' input 02436.8034E
+            output 24..... with sign (s w makes negative)
+            6002.2087N -> 60.036811666666665
+            02410.7965E -> 24.179941666666668
+        '''
+        if re.match('[swSW]', instr):
+            sign = -1
+        else:
+            sign = 1
+        degree = int(instr[0:-8])
+        minute = float(instr[-8:-1])
+        return sign * degree + minute / 60.0
+
+
     def getLatLng(self, latString, lngString):
-        '''from https://gist.github.com/Lauszus/5785023 '''
-        log.debug(' latstring: '+latString+', lngstring: '+lngString)
-        lat = float(latString[:2].lstrip('0') + "." + "%.7s" % str(float(latString[2:]) / 60.0).lstrip("0."))
-        lng = float(lngString[:3].lstrip('0') + "." + "%.7s" % str(float(lngString[3:])/ 60.0).lstrip("0."))
+        log.info(' latstring: '+latString+', lngstring: '+lngString) ##
+        lat = self.dms2dec(latString)
+        lng = self.dms2dec(lngString)
+
+        #lat = float(latString[:2].lstrip('0') + "." + "%.7s" % str(float(latString[2:]) / 60.0).lstrip("0."))
+        #lng = float(lngString[:3].lstrip('0') + "." + "%.7s" % str(float(lngString[3:])/ 60.0).lstrip("0."))
+        log.info('gps lat, lng '+str(lat)+', '+str(lng)) ##
         return lat, lng
 
     def getTime(self, string, format, returnFormat):
