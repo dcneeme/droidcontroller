@@ -52,7 +52,7 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
                 log.info('setting actual to '+self.name+' actual '+str(actual)+' from '+subject+'.'+str(self.act_svc[1])) ##
                 self.pid.set_actual(actual)
             else:
-                log.info('setting actual for '+self.name+' skipped due to valve state '+str(self.out)+' or too recently (ptime '+str(ptime)+') opened valve')
+                log.info('setting actual for '+self.name+' skipped due to valve state '+str(self.out)+' or too recently (ptime '+str(int(ptime))+') opened valve')
                 
 
     def set_setpoint(self, token, subject, message): # subject is svcname
