@@ -39,7 +39,7 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
 
     def set_actual(self, token, subject, message): # subject is svcname
         ''' from msgbus token floorset, subject TBW, message {'values': [210, 168, 250, 210], 'status': 0} '''
-        log.info('set_actual got from msgbus token %s, subject %s, message %s', token, subject, str(message))
+        log.info('setting actual by member '+str(self.set_svc[1] - 1)+' %s, message %s', subject, str(message))
         actual = message['values'][self.act_svc[1] - 1] # svc members start from 1
         if actual == None:
             log.warning('INVALID actual '+str(actual)+' for '+self.name+' extracted from msgbus message '+str(message))
@@ -52,7 +52,7 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
 
     def set_setpoint(self, token, subject, message): # subject is svcname
         ''' from msgbus token floorset, subject TBW, message {'values': [210, 168, 250, 210], 'status': 0} '''
-        log.info('set_setpoint got from msgbus token %s, subject %s, message %s', token, subject, str(message))
+        log.info('setting setpoint by member '+str(self.set_svc[1] - 1)+' from %s, message %s', subject, str(message))
         setpoint = message['values'][self.set_svc[1] - 1] # svc members start from 1
         if setpoint == None:
             log.warning('INVALID setpoint '+str(setpoint)+' for '+self.name+' extracted from msgbus message '+str(message))
@@ -63,10 +63,11 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
                 self.setpoint = setpoint
         
 
-    def output(self): # tuple from input()
+    def output(self): #  actual and setpoint are coming from msgbus
         ''' Use PID to decide what the slow pwm output should be. '''
+        len = 0 # without pid output
         if self.actual != None and self.setpoint != None:
-            len = self.pid.output(self.actual, self.setpoint)
+            len = self.pid.output(self.setpoint, self.actual) # niipidi et oleks neg ts
             ptime = (time.time() + self.phasedelay) % self.period
             log.info('ptime for '+self.name+': '+str(int(ptime))) ##
             if ptime < len:
@@ -81,7 +82,7 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
             self.out = out
             log.info('floor loop '+self.name+' valve state changed to '+str(self.out))
 
-        return out
+        return out, int(round((100.0 * len) / self.period, 1)) # the second member is pwm% with 1 decimal
 
 
 
