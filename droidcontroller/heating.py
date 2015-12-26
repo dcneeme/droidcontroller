@@ -24,6 +24,7 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
         '''
         # messagebus? several loops in the same room have to listen the same setpoint
         self.name = name
+        self.vars = {} # for getvars only
         self.msgbus = msgbus
         self.msgbus.subscribe('act_'+self.name, act_svc[0], 'flooract', self.set_actual) # token, subject, message
         self.msgbus.subscribe('set_'+self.name, set_svc[0], 'floorset', self.set_setpoint) # token, subject, message
@@ -66,6 +67,22 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
             self.pid.setSetpoint(setpoint)
         
 
+    def getvars(self, filter = None):
+        ''' Returns internal variables as dictionary '''
+        self.vars.update({'lolim' : self.lolim, 
+            'hilim' : self.hilim, 
+            'actual' : self.actual, 
+            'setpoint' : self.setpoint, 
+            'phasedelay' : self.phasedelay, 
+            'out' : self.out, 
+            'name': self.name })
+        if filter is None: # return everything
+            return self.vars
+        else:
+            if filter in self.vars:
+                return self.vars.get(filter)
+                
+    
     def output(self): #  actual and setpoint are coming from msgbus and written to pid() before
         ''' Use PID to decide what the slow pwm output should be. '''
         len = 0 # without pid output
@@ -88,7 +105,7 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
             self.out = out
             log.info('floor loop '+self.name+' valve state changed to '+str(self.out))
 
-        return out, int(round((100.0 * len) / self.period, 1)) # the second member is pwm% with 1 decimal
+        return self.out, int(round((100.0 * len) / self.period, 1)) # the second member is pwm% with 1 decimal
 
 
 
