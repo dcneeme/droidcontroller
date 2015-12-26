@@ -22,8 +22,8 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
         # messagebus? several loops in the same room have to listen the same setpoint
         self.name = name
         self.msgbus = msgbus
-        self.msgbus.subscribe('flooract', act_svc[0], 'flooract', self.set_actual) # token, subject, message
-        self.msgbus.subscribe('floorset', set_svc[0], 'floorset', self.set_setpoint) # token, subject, message
+        self.msgbus.subscribe('act_'+self.name, act_svc[0], 'flooract', self.set_actual) # token, subject, message
+        self.msgbus.subscribe('set_'+self.name, set_svc[0], 'floorset', self.set_setpoint) # token, subject, message
 
         self.lolim = lolim
         self.hilim = hilim
@@ -31,52 +31,51 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
         self.phasedelay = phasedelay
         self.act_svc = act_svc if 'list' in str(type(act_svc)) else None # ['svc', member]
         self.set_svc = set_svc if 'list' in str(type(set_svc)) else None # ['svc', member]
-        self.actual = None
-        self.setpoint = None
+        #self.actual = None
+        #self.setpoint = None
         self.pid = PID(P = 1.0, I = 0.01, D = 0, min = 10, max = 990, outmode = 'nolist', name = name, dead_time = 0)
         self.out = 0 # do
 
 
     def set_actual(self, token, subject, message): # subject is svcname
         ''' from msgbus token floorset, subject TBW, message {'values': [210, 168, 250, 210], 'status': 0} '''
-        log.info('setting actual by member '+str(self.act_svc[1])+' %s, message %s', subject, str(message))
+        log.debug('setting '+self.name+' actual by member '+str(self.act_svc[1])+' %s, message %s', subject, str(message))
         actual = message['values'][self.act_svc[1] - 1] # svc members start from 1
         if actual == None:
             log.warning('INVALID actual '+str(actual)+' for '+self.name+' extracted from msgbus message '+str(message))
         else:
-            log.info(self.name+' actual '+str(actual)+' from '+subject+'.'+str(self.act_svc[1])+', self.actual '+str(self.actual)) ##
-            if self.actual != actual:
-                log.info('set new actual to '+self.name+': '+str(self.actual)+' from '+subject+'.'+str(self.act_svc[1]))
-                self.actual = actual
+            log.info('setting actual to '+self.name+' actual '+str(actual)+' from '+subject+'.'+str(self.act_svc[1])) ##
+            self.pid.set_actual(actual)
                 
 
     def set_setpoint(self, token, subject, message): # subject is svcname
         ''' from msgbus token floorset, subject TBW, message {'values': [210, 168, 250, 210], 'status': 0} '''
-        log.info('setting setpoint by member '+str(self.set_svc[1])+' from %s, message %s', subject, str(message))
+        log.debug('setting '+self.name+' setpoint by member '+str(self.set_svc[1])+' from %s, message %s', subject, str(message))
         setpoint = message['values'][self.set_svc[1] - 1] # svc members start from 1
         if setpoint == None:
             log.warning('INVALID setpoint '+str(setpoint)+' for '+self.name+' extracted from msgbus message '+str(message))
         else:
-            log.info(self.name+' setpoint '+str(setpoint)+' from '+subject+'.'+str(self.set_svc[1])+', self.setpoint '+str(self.setpoint)) ##
-            if self.setpoint != setpoint:
-                log.info('set new setpoint to '+self.name+': '+str(self.setpoint)+' from '+subject+'.'+str(self.set_svc[1]))
-                self.setpoint = setpoint
+            log.info('setting setpoint to '+self.name+': '+str(setpoint)+' from '+subject+'.'+str(self.set_svc[1]))
+            self.pid.setSetpoint(setpoint)
         
 
-    def output(self): #  actual and setpoint are coming from msgbus and stored in self.actual, self.setpoint
+    def output(self): #  actual and setpoint are coming from msgbus and written to pid() before
         ''' Use PID to decide what the slow pwm output should be. '''
         len = 0 # without pid output
-        if self.actual != None and self.setpoint != None:
-            len = self.pid.output(self.setpoint, self.actual) # niipidi et oleks neg ts
+        #if self.actual != None and self.setpoint != None:
+            #len = self.pid.output(self.setpoint, self.actual) # niipidi et oleks neg ts
+        try:
+            len = self.pid.output() # kasutame varem seatud muutujaid
             ptime = (time.time() + self.phasedelay) % self.period
             log.info('ptime for '+self.name+': '+str(int(ptime))) ##
             if ptime < len:
                 out = 1
             else:
                 out = 0
-        else:
-            log.warning('INVALID variable in '+self.name+' (actual,setpoint): '+str((self.actual, self.setpoint))+', (act_svc, set_svc) '+str((self.act_svc, self.set_svc)))
+        except:
+            log.warning('FAILED PID calculation for '+self.name+', (act_svc, set_svc) '+str((self.act_svc, self.set_svc)))
             out = None
+            traceback.print_exc()
             
         if out != self.out:
             self.out = out
