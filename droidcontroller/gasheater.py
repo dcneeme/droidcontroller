@@ -123,12 +123,12 @@ class JunkersHeater(object): # Junkers Euromaxx  FIXME use msgbus for ai svc!
             #############
             try: # pwm values generation using pid instances
                 act_g = self.aisvcs[self.svc_Gtemp][2]
-                set_g = self.aisvcs[self.svc_Gtemp][0]
+                set_g = self.aisvcs[self.svc_Gtemp][0] # setpoint to hot_out
                 act_h = self.aisvcs[self.svc_Htemp][2]
-                set_h = self.aisvcs[self.svc_Htemp][0]
+                set_h = self.aisvcs[self.svc_Htemp][0] # setpoint for floor_on
 
                 self.pwm_values = [ UN.val2int(self.pid[0].output(act_g, set_g, noint=noint)),
-                                    UN.val2int(self.pid[1].output(act_h, act_h, noint=noint)) ]
+                                    UN.val2int(self.pid[1].output(act_h, set_h, noint=noint)) ]
 
                 log.info('gasheater pid variables g: '+str(self.pid[0].getvars()))
                 log.info('gasheater pid variables h: '+str(self.pid[1].getvars()))
