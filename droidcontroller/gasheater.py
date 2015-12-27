@@ -28,9 +28,9 @@ class JunkersHeater(object): # Junkers Euromaxx  FIXME use msgbus for ai svc!
         self.svc_Hdebug = svc_Hdebug
         self.svc_noint = svc_noint
 
-        self.pid_gas = []
-        self.pid_gas.append(PID(P=0.5, I=0.05, D=0, min=5, max=995, name = 'hot_out'))
-        self.pid_gas.append(PID(P=0.5, I=0.05, D=0, min=5, max=995, name = 'floor_on'))
+        self.pid = []
+        self.pid.append(PID(P=0.5, I=0.05, D=0, min=5, max=995, name = 'hot_out'))
+        self.pid.append(PID(P=0.5, I=0.05, D=0, min=5, max=995, name = 'floor_on'))
         self.tempvarsG = None
         self.tempvarsH = None
         self.pwm_values = [None, None]
@@ -103,7 +103,7 @@ class JunkersHeater(object): # Junkers Euromaxx  FIXME use msgbus for ai svc!
             setpoints to heater out and floor onflow are taken from the services TGW[2] and THW[2]
             and may depend on outdoor temperature or just demand from the floor (other loops for these valvee)
         '''
-        log.info('heating output start')
+        #log.info('heating output start')
         try:
             #noint = -(self.GSW[0] ^ 1) # inversion. no down integration during non-heating
             tmp = self.disvcs[self.svc_hmode] # GSW
@@ -113,10 +113,10 @@ class JunkersHeater(object): # Junkers Euromaxx  FIXME use msgbus for ai svc!
                 noint = 1 # valid for both heater pid loops
                 log.warning('set noint to 1 due to no valid GSW value yet, '+str(tmp))
 
-            if noint != 0:
-                log.info('down int forbidden for gasheater loops based on GSW '+str(tmp)+', noint '+str(noint))
-            else: ##
-                log.info('int allowed for gasheater loops based on GSW '+str(tmp)+', noint '+str(noint)) ##
+            #if noint != 0:
+            #    log.info('down int forbidden for gasheater loops based on GSW '+str(tmp)+', noint '+str(noint))
+            #else: ##
+            #    log.info('int allowed for gasheater loops based on GSW '+str(tmp)+', noint '+str(noint)) ##
 
             self.read_svcs() # refresh TGW, THW, KPPW, KGIW, KGDW values
 
@@ -127,11 +127,15 @@ class JunkersHeater(object): # Junkers Euromaxx  FIXME use msgbus for ai svc!
                 act_h = self.aisvcs[self.svc_Htemp][2]
                 set_h = self.aisvcs[self.svc_Htemp][0]
 
-                self.pwm_values = [ UN.val2int(self.pid_gas[0].output(act_g, set_g, noint=noint)),
-                                    UN.val2int(self.pid_gas[1].output(act_h, act_h, noint=noint)) ]
+                self.pwm_values = [ UN.val2int(self.pid[0].output(act_g, set_g, noint=noint)),
+                                    UN.val2int(self.pid[1].output(act_h, act_h, noint=noint)) ]
 
+                log.info('gasheater pid variables g: '+str(self.pid[0].getvars()))
+                log.info('gasheater pid variables h: '+str(self.pid[1].getvars()))
+                
                 log.info('gasheater hot set_g %d, act_g %d, pwm %d, onfloor set_h %d, act_h %d, pwm %d, noint %d' %
                             (set_g, act_g, self.pwm_values[0], set_h, act_h, self.pwm_values[1], noint))
+                            
             except:
                 log.warning('gasheater pid related FAILURE!')
                 traceback.print_exc()
@@ -139,8 +143,8 @@ class JunkersHeater(object): # Junkers Euromaxx  FIXME use msgbus for ai svc!
 
             self.write_svcs()  # outputs setting, incl pwm
 
-            self.tempvarsG = self.pid_gas[0].getvars() # dict based on pid variables
-            self.tempvarsH = self.pid_gas[1].getvars() # dict bnased on pid variables
+            self.tempvarsG = self.pid[0].getvars() # dict based on pid variables
+            self.tempvarsH = self.pid[1].getvars() # dict bnased on pid variables
             '''
             {'Kp' : self.Kp, \
             'Ki' : self.Ki, \
@@ -163,30 +167,30 @@ class JunkersHeater(object): # Junkers Euromaxx  FIXME use msgbus for ai svc!
 
 
             if UN.val2int(self.tempvarsG['outMax']) != self.aisvcs[self.svc_Gtemp][3]:
-                self.pid_gas[0].setMax(self.aisvcs[self.svc_Gtemp][3])
-                log.warning('pid_gas[0] hilim changed to '+str(self.aisvcs[self.svc_Gtemp][3]))
+                self.pid[0].setMax(self.aisvcs[self.svc_Gtemp][3])
+                log.warning('pid[0] hilim changed to '+str(self.aisvcs[self.svc_Gtemp][3]))
             if UN.val2int(self.tempvarsG['Kp'],10) != self.aisvcs[self.svc_P][0]:
-                self.pid_gas[0].setKp(self.aisvcs[self.svc_P][0] / 10.0)
-                log.warning('pid_gas[0] kP changed to '+str(self.aisvcs[self.svc_P][0]))
+                self.pid[0].setKp(self.aisvcs[self.svc_P][0] / 10.0)
+                log.warning('pid[0] kP changed to '+str(self.aisvcs[self.svc_P][0]))
             if UN.val2int(self.tempvarsG['Ki'],1000) != self.aisvcs[self.svc_I][0]:
-                self.pid_gas[0].setKi(self.aisvcs[self.svc_I][0] / 1000.0)
-                log.warning('pid_gas[0] kI changed to '+str(self.aisvcs[self.svc_I][0]))
+                self.pid[0].setKi(self.aisvcs[self.svc_I][0] / 1000.0)
+                log.warning('pid[0] kI changed to '+str(self.aisvcs[self.svc_I][0]))
             if UN.val2int(self.tempvarsG['Kd']) != self.aisvcs[self.svc_D][0]:
-                self.pid_gas[0].setKd(self.aisvcs[self.svc_D][0])
-                log.warning('pid_gas[0] kD changed to '+str(self.aisvcs[self.svc_D][0]))
+                self.pid[0].setKd(self.aisvcs[self.svc_D][0])
+                log.warning('pid[0] kD changed to '+str(self.aisvcs[self.svc_D][0]))
 
             if UN.val2int(self.tempvarsH['outMax']) != self.aisvcs[self.svc_Htemp][3]:
-                self.pid_gas[1].setMax(self.aisvcs[self.svc_Htemp][3])
-                log.warning('pid_gas[1] hilim changed to '+str(self.aisvcs[self.svc_Htemp][3]))
+                self.pid[1].setMax(self.aisvcs[self.svc_Htemp][3])
+                log.warning('pid[1] hilim changed to '+str(self.aisvcs[self.svc_Htemp][3]))
             if UN.val2int(self.tempvarsH['Kp'], 10) != self.aisvcs[self.svc_P][1]:
-                self.pid_gas[1].setKp(self.aisvcs[self.svc_P][1] / 10.0)
-                log.warning('pid_gas[1] kP changed to '+str(self.aisvcs[self.svc_P][1]))
+                self.pid[1].setKp(self.aisvcs[self.svc_P][1] / 10.0)
+                log.warning('pid[1] kP changed to '+str(self.aisvcs[self.svc_P][1]))
             if UN.val2int(self.tempvarsH['Ki'], 1000) != self.aisvcs[self.svc_I][1]:
-                self.pid_gas[1].setKi(self.aisvcs[self.svc_I][1] / 1000.0)
-                log.warning('pid_gas[1] kI changed to '+str(self.aisvcs[self.svc_I][1]))
+                self.pid[1].setKi(self.aisvcs[self.svc_I][1] / 1000.0)
+                log.warning('pid[1] kI changed to '+str(self.aisvcs[self.svc_I][1]))
             if UN.val2int(self.tempvarsH['Kd']) != self.aisvcs[self.svc_D][1]:
-                self.pid_gas[1].setKd(self.aisvcs[self.svc_D][1])
-                log.warning('pid_gas[1] kD changed to '+str(self.aisvcs[self.svc_D][1]))
+                self.pid[1].setKd(self.aisvcs[self.svc_D][1])
+                log.warning('pid[1] kD changed to '+str(self.aisvcs[self.svc_D][1]))
 
             log.info('gas_heater done, noint '+str(noint)+', new pwm values '+str(self.pwm_values))
         except:
