@@ -8,7 +8,10 @@ import traceback, logging
 log = logging.getLogger(__name__)
 
 class JunkersHeater(object): # Junkers Euromaxx  FIXME use msgbus for ai svc!
-    ''' Controlling the water temperature from the heater and the onflow temperature to the floor with 2 sets of pid_pwm and pwm_gas loops '''
+    ''' 
+        Controlling the water temperature from the heater and the onflow temperature to the floor with 2 sets of pid_pwm and pwm_gas loops.
+        Could be improved similar to heating.py (setup, avoid direct modbus register usage etc)
+    '''
     def __init__(self, d, ac, msgbus, svc_hmode='GSW', svc_Gtemp='TGW',svc_Htemp='THW',
             svc_P='KGPW', svc_I='KGIW', svc_D='KGDW',
             svc_pwm='PWW', svc_Gdebug='LGGW', svc_Hdebug='LGHW', svc_noint='NGIW',

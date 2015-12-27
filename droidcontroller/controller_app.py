@@ -4,7 +4,6 @@ import sys, os, traceback, inspect, datetime
 import tornado
 import tornado.ioloop
 import logging
-logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 log = logging.getLogger(__name__)
 
 from droidcontroller.udp_commands import * # sellega alusta, kaivitab ka SQlgeneral
@@ -56,7 +55,6 @@ log.info('got monport '+str(monport))
 udp.setPort(monport)
 
 import logging
-logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 log = logging.getLogger(__name__)
 
 

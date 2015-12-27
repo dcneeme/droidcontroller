@@ -525,7 +525,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
             for row in cur: # for every bit, sorted by mbi, mba, regadd, bit
                 tmp_array = [] # do,di bits together
-                log.debug('got row about change needed from dochannels-dichannels left join',row)
+                log.debug('got row about change needed from dochannels-dichannels left join %s', row)
                 regadd = 0
                 mba = 0
                 bit = 0

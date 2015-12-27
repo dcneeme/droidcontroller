@@ -132,12 +132,8 @@ class RoomTemperature(object):
         if actual == None:
             log.warning('INVALID actual '+str(actual)+' for '+self.name+' extracted from msgbus message '+str(message))
         else:
-            ptime = (time.time() + self.phasedelay) % self.period
-            if self.out == 1 and ptime > 30: # valve open for at least 30 s
-                log.debug('setting actual to '+self.name+' actual '+str(actual)+' from '+subject+'.'+str(self.act_svc[1])) ##
-                self.pid.set_actual(actual)
-            else:
-                log.debug('setting actual for '+self.name+' skipped due to valve state '+str(self.out)+' or too recently (ptime '+str(int(ptime))+') opened valve')
+            log.debug('setting actual to '+self.name+' actual '+str(actual)+' from '+subject+'.'+str(self.act_svc[1])) ##
+            self.pid.set_actual(actual)
                 
 
     def set_setpoint(self, token, subject, message): # subject is svcname

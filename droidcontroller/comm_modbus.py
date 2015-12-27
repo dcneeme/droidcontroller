@@ -15,7 +15,6 @@ import sys # to return sys.exc_info()[1])
 import time # had no effect in init for type 'u' only
 
 import logging
-logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 log = logging.getLogger(__name__)
 
 # USE FAST VERSION OF PYMODBUS! 0.5 s timepout for RTU

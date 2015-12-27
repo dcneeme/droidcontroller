@@ -23,7 +23,6 @@ he.output(1,40,30)
 
 import time, sys
 import logging
-logging.basicConfig(stream=sys.stderr, level=logging.INFO)
 log = logging.getLogger(__name__)
 
 
