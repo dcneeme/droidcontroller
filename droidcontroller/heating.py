@@ -50,10 +50,10 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
         else:
             ptime = (time.time() + self.phasedelay) % self.period
             if self.out == 1 and ptime > 30: # valve open for at least 30 s
-                log.info('setting actual to '+self.name+' actual '+str(actual)+' from '+subject+'.'+str(self.act_svc[1])) ##
+                log.debug('setting actual to '+self.name+' actual '+str(actual)+' from '+subject+'.'+str(self.act_svc[1])) ##
                 self.pid.set_actual(actual)
             else:
-                log.info('setting actual for '+self.name+' skipped due to valve state '+str(self.out)+' or too recently (ptime '+str(int(ptime))+') opened valve')
+                log.debug('setting actual for '+self.name+' skipped due to valve state '+str(self.out)+' or too recently (ptime '+str(int(ptime))+') opened valve')
                 
 
     def set_setpoint(self, token, subject, message): # subject is svcname
@@ -63,7 +63,7 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
         if setpoint == None:
             log.warning('INVALID setpoint '+str(setpoint)+' for '+self.name+' extracted from msgbus message '+str(message))
         else:
-            log.info('setting setpoint to '+self.name+': '+str(setpoint)+' from '+subject+'.'+str(self.set_svc[1]))
+            log.debug('setting setpoint to '+self.name+': '+str(setpoint)+' from '+subject+'.'+str(self.set_svc[1]))
             self.pid.setSetpoint(setpoint)
         
 
@@ -91,7 +91,7 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
         try:
             len = self.pid.output() # kasutame varem seatud muutujaid
             ptime = (time.time() + self.phasedelay) % self.period
-            log.info('ptime for '+self.name+': '+str(int(ptime))) ## pulse time
+            #log.info('ptime for '+self.name+': '+str(int(ptime))) ## pulse time
             if ptime < len:
                 out = 1
             else:
@@ -103,7 +103,7 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
             
         if out != self.out:
             self.out = out
-            log.info('floor loop '+self.name+' valve state changed to '+str(self.out))
+            log.debug('floor loop '+self.name+' valve state changed to '+str(self.out))
 
         return self.out, int(round((100.0 * len) / self.period, 1)) # the second member is pwm% with 1 decimal
 
@@ -112,16 +112,66 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
 ###################
 class RoomTemperature(object):
     ''' Controls room air temperature using floor loops with shared setpoint temperature '''
-    def __init__(self, d, ac, msgbus, act_svc, set_svc, floorloops, name='undefined'): # floorloops is list of tuples [(in_ret_temp_svc, mbi, mba, reg, bit)]
-        #self.act_svc = act_svc if 'list' in str(type(act_svc)) else None # ['svc', member]
-        #self.set_svc = set_svc if 'list' in str(type(set_svc)) else None # ['svc', member]
-        self.pid2floor = pid(PID(P=1.0, I=0.01, min=100, max=350, outmode='nolist', name='room '+name, dead_time=0))
-        self.f = [] # floor loops
-        for i in len(floorloops):
-            self.f.append(FloorLoop(floorloops[i][0]))
+    def __init__(self, msgbus, act_svc, set_svc, out_svc, name = 'undefined', lolim = 150, hilim = 350): 
+        self.name = name
+        self.vars = {} # for getvars only
+        self.msgbus = msgbus
+        self.msgbus.subscribe('act_'+self.name, act_svc[0], 'room_act', self.set_actual) # token, subject, message
+        self.msgbus.subscribe('set_'+self.name, set_svc[0], 'room_set', self.set_setpoint) # token, subject, message
+        self.lolim = lolim
+        self.hilim = hilim
+        self.act_svc = act_svc if 'list' in str(type(act_svc)) else None # ['svc', member]
+        self.set_svc = set_svc if 'list' in str(type(set_svc)) else None # ['svc', member]
+        self.pid = PID(P = 1.0, I = 0.01, D = 0, min = 180, max = 940, outmode = 'nolist', name = name, dead_time = 0)
+        
 
-    def doall(self, roomsetpoint):
-        ''' Tries to set shared setpoint to floor loops in order to maintain the temperature in the room '''
-        setfloor = self.pid2floor(ac.get(act_svc), ac.get(act_svc)) # ddeg
+    def set_actual(self, token, subject, message): # subject is svcname
+        ''' from msgbus token floorset, subject TBW, message {'values': [210, 168, 250, 210], 'status': 0} '''
+        log.debug('setting '+self.name+' actual by member '+str(self.act_svc[1])+' %s, message %s', subject, str(message))
+        actual = message['values'][self.act_svc[1] - 1] # svc members start from 1
+        if actual == None:
+            log.warning('INVALID actual '+str(actual)+' for '+self.name+' extracted from msgbus message '+str(message))
+        else:
+            ptime = (time.time() + self.phasedelay) % self.period
+            if self.out == 1 and ptime > 30: # valve open for at least 30 s
+                log.debug('setting actual to '+self.name+' actual '+str(actual)+' from '+subject+'.'+str(self.act_svc[1])) ##
+                self.pid.set_actual(actual)
+            else:
+                log.debug('setting actual for '+self.name+' skipped due to valve state '+str(self.out)+' or too recently (ptime '+str(int(ptime))+') opened valve')
+                
 
+    def set_setpoint(self, token, subject, message): # subject is svcname
+        ''' from msgbus token floorset, subject TBW, message {'values': [210, 168, 250, 210], 'status': 0} '''
+        log.debug('setting '+self.name+' setpoint by member '+str(self.set_svc[1])+' from %s, message %s', subject, str(message))
+        setpoint = message['values'][self.set_svc[1] - 1] # svc members start from 1
+        if setpoint == None:
+            log.warning('INVALID setpoint '+str(setpoint)+' for '+self.name+' extracted from msgbus message '+str(message))
+        else:
+            log.debug('setting setpoint to '+self.name+': '+str(setpoint)+' from '+subject+'.'+str(self.set_svc[1]))
+            self.pid.setSetpoint(setpoint)
+        
 
+    def getvars(self, filter = None):
+        ''' Returns internal variables as dictionary '''
+        self.vars.update({'lolim' : self.lolim, 
+            'hilim' : self.hilim, 
+            'actual' : self.pid.getvars(filter='actual'), 
+            'setpoint' : self.pid.getvars(filter='setpoint'), 
+            'out' : self.out, 
+            'name': self.name })
+        if filter is None: # return everything
+            return self.vars
+        else:
+            if filter in self.vars:
+                return self.vars.get(filter)
+                
+    
+    def output(self): #  actual and setpoint are coming from msgbus and written to pid() before
+        ''' Use PID to decide what the slow pwm output should be. '''
+        try:
+            out = self.pid.output() # kasutame varem seatud muutujaid
+        except:
+            log.warning('FAILED PID calculation for '+self.name+', (act_svc, set_svc) '+str((self.act_svc, self.set_svc)))
+            out = None
+            traceback.print_exc()
+        return out
