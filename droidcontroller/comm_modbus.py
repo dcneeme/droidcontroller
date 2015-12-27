@@ -359,7 +359,7 @@ class CommModbus(Comm):
             log.error('write FAILED: no required parameters value or values! mba '+str(mba)+', reg '+str(reg))
             return 2
         else:
-            log.info('going to write register mba '+str(mba)+', reg '+str(reg)+', value '+str(value)+', values '+str(values)+', type '+str(type)) 
+            log.debug('going to write register mba '+str(mba)+', reg '+str(reg)+', value '+str(value)+', values '+str(values)+', type '+str(type)) 
 
         if type == 'h': # holding
             if value != None: # vaartus 0 annab sama tulemuse kui None!
@@ -382,7 +382,7 @@ class CommModbus(Comm):
                     self.errorcount += 1
                     self.add_error(mba, 1)
                     return 1
-            elif values != None and 'list' in str(type(values)): # multiple register write
+            elif values != None: # and 'list' in str(type(values)): # multiple register write
                 try:
                     res = self.client.write_registers(address=reg, count=len(values), unit=mba, values = values)
                     if isinstance(res, WriteMultipleRegistersResponse): # ok

@@ -25,6 +25,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         self.cp = [] # possible counter2value calculation instances
         self.chg = 0 # possible need for immediate notification
         self.msg = ''  # to reduce repetitive messages
+        log.info('ACchannels instance created, msgbus '+str(self.msgbus))
         self.Initialize()
 
 
@@ -69,7 +70,11 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             sta_reg=val_reg[:-1]+'S' # status
             #cfg=int(row[1]) if row[1] != '' else 0
             udp.send([sta_reg,1,val_reg,'?']) # udp.udpsend(val_reg+':?\n') # ask via buffer only
-        conn.commit()
+        try:
+            conn.commit()
+            log.info('queried the last known values for counter services')
+        except:
+            log.warning('FAILED to create a query about counter values')
         return 0
 
 
@@ -733,7 +738,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 Cmd="select val_reg from "+self.in_sql+" where val_reg='"+svc+"'"
             cur.execute(Cmd)
 
-            self.cpi = -1 # self.cp[self.cpi] instance counter
+            self.cpi = -1 # self.cp[self.cpi] instance counter initially missing
             for row in cur: # services
                 val_reg=row[0] # teenuse nimi
                 #sta_reg=val_reg[:-1]+"S" # nimi ilma viimase symbolita ja S - statuse teenuse nimi, analoogsuuruste ja temp kohta
@@ -843,7 +848,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 mbi = srow[20] # int
                 wcount = int(srow[21]) if srow[21] != '' else 1  # word count
                 ##chg = 0 # member status change flag
-                log.debug('val_reg '+val_reg+' member '+str(member)+', cfg='+str(cfg)+', raw='+str(raw)+', ovalue='+str(ovalue)+', outlo='+str(outlo)+', outhi='+str(outhi)) ##
+                log.info('>>> val_reg '+val_reg+' member '+str(member)+', cfg='+str(cfg)+', raw='+str(raw)+', ovalue='+str(ovalue)+', outlo='+str(outlo)+', outhi='+str(outhi)) ##
                 #print('val_reg '+val_reg+' member '+str(member)+', cfg='+str(cfg)+', raw='+str(raw)+', ovalue='+str(ovalue)+', outlo='+str(outlo)+', outhi='+str(outhi)) # debug
 
             except:
@@ -885,7 +890,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                             #res = self.cp[self.cpi].calc(ots, raw, ts_now = self.ts) # power calculation based on raw counter increase
                             res = self.cp[self.cpi].calc(raw) # based on current ts only!
 
-                            log.debug('got result from cp['+str(self.cpi)+']: '+str(res)+', '+str(raw))  # debug
+                            log.info('got result from cp['+str(self.cpi)+']: '+str(res)+', '+str(raw))  # debug
                             if (cfg&128): # on off state from power
                                 raw = res[1] # state on/off 0 or 1
                                 if res[2] != 0: # on/off change
@@ -1016,7 +1021,10 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         if rowproblemcount == 0: # all members valid
             sendtuple = [sta_reg, status, val_reg, lisa] # sending service to buffer
             if self.msgbus != None:
-                self.msgbus.publish(val_reg, {'values': values, 'status': status})
+                try:
+                    self.msgbus.publish(val_reg, {'values': values, 'status': status})
+                except:
+                    traceback.print_exc()
             return sendtuple # for regular send or status check
         else:
             log.warning(val_reg+' had '+str(rowproblemcount)+' problematic members, sendtuple NOT created! status '+str(status)+', lisa: '+lisa)

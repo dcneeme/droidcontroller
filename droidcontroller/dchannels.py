@@ -563,24 +563,28 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                     #print('processing mba',mba)
                     for regadd in reg_dict.keys(): # chk all output registers defined in dochannels table
                         try:
-                            if mb[mbi]:
-                                word = mb[mbi].read(mba, regadd, count = 1, type = 'h')[0]
-                                #print('value of the output',mba,regadd,'before change',format("%04x" % word)) # debug
-                                for bit in bit_dict.keys():
-                                    #print('do di bit,[do,di]',bit,bit_dict[bit]) # debug
-                                    word2 = s.bit_replace(word,bit,bit_dict[bit][0]) # changed the necessary bit. can't reuse / change word directly!
-                                    word = word2
+                            word = mb[mbi].read(mba, regadd, count = 1, type = 'h')[0]
+                            #print('value of the output',mba,regadd,'before change',format("%04x" % word)) # debug
+                            for bit in bit_dict.keys():
+                                #print('do di bit,[do,di]',bit,bit_dict[bit]) # debug
+                                word2 = s.bit_replace(word,bit,bit_dict[bit][0]) # changed the necessary bit. can't reuse / change word directly!
+                                word = word2
 
+                            try:
                                 respcode = mb[mbi].write(mba, regadd, value=word)
                                 if respcode == 0:
                                     msg = 'output written - mbi mba regadd value '+str(mbi)+' '+str(mba)+' '+str(regadd)+' '+format("%04x" % word)
                                     log.info(msg) ##
                                     res = (res | 1) # change bit
                                 else:
-                                    msg = 'FAILED writing register '+str(mba)+'.'+str(regadd)+' '+str(sys.exc_info()[1])
+                                    msg = 'FAILED writing register '+str(mba)+'.'+str(regadd)+', value '+str(value)+', respcode '+str(respcode)
                                     log.warning(msg)
                                     res = (res | 2) # error bit
-                            
+                            except:
+                                log.warning('FAILED to write mba '+str(mba)+', regadd '+str(regadd)+', value '+str(value))
+                                traceback.print_exc()
+                                return 2
+
                         except:
                             log.warning('sync_do could no read mbi '+str(mbi)+', mba'+str(mba))
                             traceback.print_exc()

@@ -46,16 +46,16 @@ class UN(object): # Utilities Neeme, use like UN.val2int(14.4)
         
         
     @staticmethod
-    def onewire_hexid(reglist): # read result from id registers, 4 for each id
+    def onewire_hexid(reglist, groupsize=4): # read result from id registers, grouped for each id
         ''' Return onewire hex id list '''
-        if len(reglist) % 4 != 0:
-            log.warning('invalid number of registers, not multiple of 4!')
+        if len(reglist) % groupsize != 0:
+            log.warning('invalid number of registers, not multiple of groupsize '+str(groupsize)+'!')
             
         res = []
-        for j in range(int(len(reglist) / 4)):
+        for j in range(int(len(reglist) / groupsize)):
             idstring = ''
-            for reg in range(4):
-                idstring += hex(reglist[ (j * 4) + reg]).split('x')[1].zfill(4) # UN.hex_reverse()
+            for reg in range(groupsize):
+                idstring += hex(reglist[ (j * groupsize) + reg]).split('x')[1].zfill(4) # UN.hex_reverse()
             if idstring != '0000000000000000':
                 res.append(UN.hex_reverse(idstring).upper()) # change order and make upper case
         return res

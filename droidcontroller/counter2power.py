@@ -28,7 +28,7 @@ class Counter2Power():
             if off_tout >0:
                 self.off_tout = off_tout
             else:
-                log.warning('INVALID off_tout='+str(off_tout)+', using value 60 instead')
+                log.warning('MISSING off_tout='+str(off_tout)+' for svc '+self.svc_name+', using value 60 s instead (36W zero threshold)')
                 self.off_tout = 60
 
             if pulses4kWh > 0:
@@ -41,7 +41,7 @@ class Counter2Power():
             log.error('init problem, counter2power may be unusable!')
             
         self.init() # clear buffer dictionary
-        log.debug('Counter2Power() instance created for pwr svc '+svc_name+' member '+str(self.svc_member)+', off_tout '+str(self.off_tout))
+        log.debug('Counter2Power() instance created for pwr svc '+self.svc_name+' member '+str(self.svc_member)+', off_tout '+str(self.off_tout))
         
         
     def init(self): # to be used in case of counter (re)setting, to avoid jump to power calculation
