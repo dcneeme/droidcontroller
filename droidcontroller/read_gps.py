@@ -184,7 +184,7 @@ class ReadGps:
         return time.strftime(returnFormat, time.strptime(string, format)) # Convert date and time to a nice printable format
 
 
-    def dms2dec(self, instr):
+    def dm2dec(self, instr):
         ''' input 02436.8034E
             output 24..... with sign (s w makes negative)
             6002.2087N -> 60.036811666666665
@@ -201,8 +201,8 @@ class ReadGps:
 
     def getLatLng(self, latString, lngString):
         log.info(' latstring: '+latString+', lngstring: '+lngString) ##
-        lat = self.dms2dec(latString)
-        lng = self.dms2dec(lngString)
+        lat = self.dm2dec(latString)
+        lng = self.dm2dec(lngString)
 
         #lat = float(latString[:2].lstrip('0') + "." + "%.7s" % str(float(latString[2:]) / 60.0).lstrip("0."))
         #lng = float(lngString[:3].lstrip('0') + "." + "%.7s" % str(float(lngString[3:])/ 60.0).lstrip("0."))
