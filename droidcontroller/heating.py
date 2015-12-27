@@ -37,7 +37,7 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
         self.set_svc = set_svc if 'list' in str(type(set_svc)) else None # ['svc', member]
         #self.actual = None
         #self.setpoint = None
-        self.pid = PID(P = 1.0, I = 0.01, D = 0, min = 180, max = 940, outmode = 'nolist', name = name, dead_time = 0)
+        self.pid = PID(P = 1.0, I = 0.01, D = 0, min = lolim, max = hilim, outmode = 'nolist', name = name, dead_time = 0)
         self.out = 0 # do
 
 
@@ -50,10 +50,10 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
         else:
             ptime = (time.time() + self.phasedelay) % self.period
             if self.out == 1 and ptime > 30: # valve open for at least 30 s
-                log.debug('setting actual to '+self.name+' actual '+str(actual)+' from '+subject+'.'+str(self.act_svc[1])) ##
+                log.info('setting actual to '+self.name+' actual '+str(actual)+' from msgbus '+subject+'.'+str(self.act_svc[1])) ##
                 self.pid.set_actual(actual)
             else:
-                log.debug('setting actual for '+self.name+' skipped due to valve state '+str(self.out)+' or too recently (ptime '+str(int(ptime))+') opened valve')
+                log.info('setting actual from msgbus for '+self.name+' skipped due to valve state '+str(self.out)+' or too recently (ptime '+str(int(ptime))+') opened valve')
                 
 
     def set_setpoint(self, token, subject, message): # subject is svcname
@@ -63,7 +63,7 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
         if setpoint == None:
             log.warning('INVALID setpoint '+str(setpoint)+' for '+self.name+' extracted from msgbus message '+str(message))
         else:
-            log.debug('setting setpoint to '+self.name+': '+str(setpoint)+' from '+subject+'.'+str(self.set_svc[1]))
+            log.info('setting setpoint to '+self.name+': '+str(setpoint)+' from msgbus '+subject+'.'+str(self.set_svc[1]))
             self.pid.setSetpoint(setpoint)
         
 
@@ -105,14 +105,14 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
             self.out = out
             log.debug('floor loop '+self.name+' valve state changed to '+str(self.out))
 
-        return self.out, int(round((100.0 * len) / self.period, 1)) # the second member is pwm% with 1 decimal
+        return self.out, int(round((100.0 * len) / self.period, 1)) # value and pwm% with 1 decimal
 
 
 
 ###################
 class RoomTemperature(object):
     ''' Controls room air temperature using floor loops with shared setpoint temperature '''
-    def __init__(self, msgbus, act_svc, set_svc, out_svc, name = 'undefined', lolim = 150, hilim = 350): 
+    def __init__(self, msgbus, act_svc, set_svc, out_svc, name = 'undefined', lolim = 150, hilim = 250): 
         self.name = name
         self.vars = {} # for getvars only
         self.msgbus = msgbus
@@ -122,7 +122,7 @@ class RoomTemperature(object):
         self.hilim = hilim
         self.act_svc = act_svc if 'list' in str(type(act_svc)) else None # ['svc', member]
         self.set_svc = set_svc if 'list' in str(type(set_svc)) else None # ['svc', member]
-        self.pid = PID(P = 1.0, I = 0.01, D = 0, min = 180, max = 940, outmode = 'nolist', name = name, dead_time = 0)
+        self.pid = PID(P = 0.1, I = 0.01, D = 0, min = lolim, max = hilim, outmode = 'nolist', name = name, dead_time = 0)
         
 
     def set_actual(self, token, subject, message): # subject is svcname
@@ -132,7 +132,7 @@ class RoomTemperature(object):
         if actual == None:
             log.warning('INVALID actual '+str(actual)+' for '+self.name+' extracted from msgbus message '+str(message))
         else:
-            log.debug('setting actual to '+self.name+' actual '+str(actual)+' from '+subject+'.'+str(self.act_svc[1])) ##
+            log.info('setting actual to '+self.name+' actual '+str(actual)+' from msgbus '+subject+'.'+str(self.act_svc[1])) ##
             self.pid.set_actual(actual)
                 
 
@@ -143,7 +143,7 @@ class RoomTemperature(object):
         if setpoint == None:
             log.warning('INVALID setpoint '+str(setpoint)+' for '+self.name+' extracted from msgbus message '+str(message))
         else:
-            log.debug('setting setpoint to '+self.name+': '+str(setpoint)+' from '+subject+'.'+str(self.set_svc[1]))
+            log.info('setting setpoint to '+self.name+': '+str(setpoint)+' from msgbus '+subject+'.'+str(self.set_svc[1]))
             self.pid.setSetpoint(setpoint)
         
 
@@ -170,4 +170,4 @@ class RoomTemperature(object):
             log.warning('FAILED PID calculation for '+self.name+', (act_svc, set_svc) '+str((self.act_svc, self.set_svc)))
             out = None
             traceback.print_exc()
-        return out
+        return out # just value
