@@ -16,7 +16,7 @@ log = logging.getLogger(__name__)
 class Gcal(object):
     ''' Class containing methods to read events from monitoring server handing access to google calendar '''
 
-    def __init__(self, host_id, days=3, table='calendar') #, msgbus=0, out_svc=None): # able to publish to msgbus / no need! async is more important!
+    def __init__(self, host_id, days=3, table='calendar'): #, msgbus=0, out_svc=None): # able to publish to msgbus / no need! async is more important!
         self.host_id = host_id
         self.days = days
         self.conn = sqlite3.connect(':memory:')
