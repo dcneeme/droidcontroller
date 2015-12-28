@@ -10,14 +10,13 @@ log = logging.getLogger(__name__)
     cal.sync()
     cal.check('S') # returns value for S (1 if just 'S' in event summary, 22 if 'S=22' in summary)
 
-      FIXME - does not dump table to file, to keep recurring events without connectivity...
-      FIXME - cooling/warming delay should be taken into account in heating control, to shift setpoint
+    FIXME - cooling/warming delay should be taken into account in heating control, to shift setpoint
 '''
 
 class Gcal(object):
     ''' Class containing methods to read events from monitoring server handing access to google calendar '''
 
-    def __init__(self, host_id, days=3, table='calendar', msgbus=0, out_svc=None): # able to publish to msgbus
+    def __init__(self, host_id, days=3, table='calendar') #, msgbus=0, out_svc=None): # able to publish to msgbus / no need! async is more important!
         self.host_id = host_id
         self.days = days
         self.conn = sqlite3.connect(':memory:')
@@ -32,6 +31,7 @@ class Gcal(object):
             self.conn.execute(Cmd)
             self.conn.commit()
             log.info('created new calendar table')
+        log.info('gcal instance for cal/host_id '+self.host_id+' created')
 
 
     def sqlread(self, table): # drops table and reads from file <table>.sql that must exist
@@ -172,3 +172,5 @@ class Gcal(object):
         except:
             traceback.print_exc()
             return None
+            
+        
