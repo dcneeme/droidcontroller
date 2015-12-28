@@ -20,6 +20,7 @@ class Gcal(object):
         self.host_id = host_id
         self.days = days
         self.conn = sqlite3.connect(':memory:')
+        self.cur = self.conn.cursor()
         self.table = table
         if self.sqlread(self.table) == 0: # dump read ok
             log.info('reusing existing calendar file')
