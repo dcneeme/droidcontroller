@@ -63,7 +63,7 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
         if setpoint == None:
             log.warning('INVALID setpoint '+str(setpoint)+' for '+self.name+' extracted from msgbus message '+str(message))
         else:
-            log.info('setting setpoint to '+self.name+': '+str(setpoint)+' from msgbus '+subject+'.'+str(self.set_svc[1]))
+            log.debug('setting setpoint to floor loop '+self.name+': '+str(setpoint)+' from msgbus '+subject+'.'+str(self.set_svc[1]))
             self.pid.setSetpoint(setpoint)
         
 
@@ -143,7 +143,7 @@ class RoomTemperature(object):
         if setpoint == None:
             log.warning('INVALID setpoint '+str(setpoint)+' for '+self.name+' extracted from msgbus message '+str(message))
         else:
-            log.info('setting setpoint to '+self.name+': '+str(setpoint)+' from msgbus '+subject+'.'+str(self.set_svc[1]))
+            log.info('setting setpoint to air loop '+self.name+': '+str(setpoint)+' from msgbus '+subject+'.'+str(self.set_svc[1]))
             self.pid.setSetpoint(setpoint)
         
 

@@ -1,23 +1,40 @@
-import os, traceback, sqlite3, time, subprocess, requests
+import os, traceback, sqlite3, time, subprocess
+
+import requests # for sync usage mode
+import tornado # for async usage mode
+import tornado.ioloop # for async usage mode
+import tornado.httpclient # for async usage mode
 
 import logging
 log = logging.getLogger(__name__)
 
 ''' Class and methods to read events from monitoring server handling access to google calendar.
-    Usage:
+    Usage in sync mode:
     from droidcontroller.gcal.py import *
     cal=Gcal('00101200006')
     cal.sync()
     cal.check('S') # returns value for S (1 if just 'S' in event summary, 22 if 'S=22' in summary)
 
+    Usage in async mode:
+    from droidcontroller.gcal.py import *
+    cal=Gcal('00101200006')
+    cal.async() # sends request, response must be processed by _httpreply()
+    
+    cal.check('S') # returns value for S (1 if just 'S' in event summary, 22 if 'S=22' in summary)
+
+    
     FIXME - cooling/warming delay should be taken into account in heating control, to shift setpoint
 '''
 
 class Gcal(object):
     ''' Class containing methods to read events from monitoring server handing access to google calendar '''
 
-    def __init__(self, host_id, days=3, table='calendar'): #, msgbus=0, out_svc=None): # able to publish to msgbus / no need! async is more important!
+    def __init__(self, host_id, days=3, table='calendar', user='barix', password='controller'):
+        ''' Calendar data from gcal, processed to simpler wo overlaps by itvilla.ee '''
         self.host_id = host_id
+        self.user = user
+        self.password = password
+        #self.url = 
         self.days = days
         self.conn = sqlite3.connect(':memory:')
         self.cur = self.conn.cursor()
@@ -73,7 +90,7 @@ class Gcal(object):
 
     def sync(self, cal_id=None): # query to SUPPORTHOST, returning all events. cal_id may be different from host_id (several cals)...
         ''' Updates the local event buffer for days ahead. Dumps the result into sql file.
-            Should happen in background according to some interval... ''' # FIXME make it async
+            Blocks until response! Use async() with tornado ioloop if you can. ''' 
         # example:   http://www.itvilla.ee/cgi-bin/gcal.cgi?mac=000101000001&days=10
         if not cal_id:
             cal_id = self.host_id
@@ -81,21 +98,54 @@ class Gcal(object):
         headers = {'Authorization': 'Basic YmFyaXg6Y29udHJvbGxlcg=='} # Base64$="YmFyaXg6Y29udHJvbGxlcg==" ' barix:controller
         msg = 'starting gcal query '+req
         log.debug(msg) # debug
+        # in this method wait until response or timeout
         try:
-            response = requests.get(req, headers = headers)
+            res = requests.get(req, headers = headers)
+            self.process_response(res.content) ## 
         except:
             msg = 'gcal query '+req+' failed!'
             log.warning(msg)
             traceback.print_exc()
             return 1 # kui ei saa gcal yhendust, siis lopetab ja vana ei havita!
 
+    def async(self, cal_id=None):
+        ''' Non-blocking request to calendar server 
+        basen_subpath = 'tempdemo'
+        basen_aid = 'itvilla'
+        basen_uid = b'itvilla'
+        basen_passwd = 'MxPZcbkjdFF5uEF9'
+        basen_url = 'https://mybasen.pilot.basen.com/_ua/' + basen_aid + '/v0.1/data'
+        '''
+        #req = 'http://www.itvilla.ee/cgi-bin/gcal.cgi?mac='+cal_id+'&days='+str(self.days)+'&format=json'
+        self.url = 'http://www.itvilla.ee/cgi-bin/gcal.cgi?mac='+self.host_id+'&days='+str(self.days)+'&format=json'
+        #headers = {'Authorization': 'Basic YmFyaXg6Y29udHJvbGxlcg=='} # Base64$="YmFyaXg6Y29udHJvbGxlcg==" ' barix:controller
+        headers = { "Content-Type": "application/json; charset=utf-8" }
+        log.info("sending async request to itvilla: "+self.url) ##
         try:
-            if '[]' in str(response.content):
+            log.info("sending async request to itvilla: "+self.url) ##
+            tornado.httpclient.AsyncHTTPClient().fetch(self.url, self._httpreply, method='GET', headers=headers,  body=None,
+                auth_mode="basic", auth_username=self.user, auth_password=self.password) # response to httpreply when it comes, without blocking
+        except:
+            loq.error('async request '+self.url+' to itvilla FAILED!')
+            traceback.print_exc()
+            
+    def _httpreply(self, response):
+        ''' For async usage '''
+        if response.error:
+            log.error("HTTP ERROR: %s", str(response.error))
+        else:
+            log.info("HTTP RESPONSE: %s", response.body)
+
+            
+    def process_response(self, response):
+        ''' Calendar content into sql table, use inside sync() or independently for async mode '''
+        try:
+            if '[]' in str(response):
                 log.info('no content from calendar, keeping the existing calendar table')
                 return 2
             else:
-                log.info('got calendar content: '+ str(response.content))
-                events = eval(response.content) # string to list
+                log.info('got calendar content: '+ str(response))
+                events = eval(response) # string to list
 
         except:
             msg = 'getting calendar events failed for host_id '+self.host_id
@@ -118,11 +168,11 @@ class Gcal(object):
                 self.conn.execute(Cmd)
             self.conn.commit()
             self.dump() # to file
-            msg = 'calendar table updated and dumped'
+            msg = 'calendar table '+self.table+' updated and dumped'
             log.info(msg)
             return 0
         except:
-            msg = 'delete + insert to calendar table failed!'
+            msg = 'delete + insert to calendar table '+self.table+' FAILED!'
             log.warning(msg)
             traceback.print_exc() # debug
             return 1 # kui insert ei onnestu, siis ka delete ei toimu
@@ -130,8 +180,6 @@ class Gcal(object):
 
     def dump(self): # sql table to file
         ''' Writes the table into a SQL-file to keep the existing scheduling data '''
-        msg=self.table+' dump into '+self.table+'.sql'
-        log.info(msg)
         try:
             with open(self.table+'.sql', 'w') as f:
                 for line in self.conn.iterdump(): # see dumbib koik kokku!
@@ -139,6 +187,7 @@ class Gcal(object):
                         f.write('%s\n' % line)
             subprocess.call('sync')
             time.sleep(0.1)
+            log.info(self.table+' dump into '+self.table+'.sql done')
             return 0
         except:
             msg = 'FAILURE dumping '+self.table+'!'
@@ -172,5 +221,4 @@ class Gcal(object):
         except:
             traceback.print_exc()
             return None
-            
-        
+                
