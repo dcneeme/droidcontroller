@@ -277,7 +277,7 @@ class PID:
             self.error = self.setPoint - self.actual            # self.error value  oli invar
         except:
             self.error = 0 # for the case of invalid actual
-            log.warning('invalid actual '+repr(actual)+' for pid self.error calculation, self.error zero used!')
+            log.warning('invalid actual '+repr(actual)+' for pid '+self.name+' error calculation, error zero used!')
 
         self.currtime = time.time()               # get t
         dt = self.currtime - self.prevtm          # get delta t
@@ -509,9 +509,9 @@ class ThreeStep:
                     log.info(self.name+' onlimit set to '+str(self.onLimit))
 
             else:
-                log.debug(self.name+' invalid value for set_onlimit or no need for state change')
+                log.debug(self.name+' invalid value for set_onlimit for pid '+self.name+' or no need for state change')
         except:
-            log.warning(self.name+' invalid value for set_onlimit: '+str(invar))
+            log.warning(self.name+' invalid value for set_onlimit for pid '+self.name+': '+str(invar))
 
 
     def output(self, invar): # actual as parameter or 3T control
@@ -525,7 +525,7 @@ class ThreeStep:
             self.error=self.Setpoint - invar            # self.error value
         except:
             self.error = 0 # for the case of invalid actual
-            msg=self.name+' invalid actual '+repr(invar)+' for 3step self.error calculation, self.error zero used!'
+            msg=self.name+' invalid actual '+repr(invar)+' for 3step '+self.name self.error calculation, self.error zero used!'
             log.warning(msg)
 
         #self.error=self.Setpoint - invar            # current self.error value
