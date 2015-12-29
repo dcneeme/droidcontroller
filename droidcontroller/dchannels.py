@@ -131,7 +131,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                             if value != ovalue: # change detected, update dichannels value, chg-flag  - saaks ka maski alusel!!!
                                 chg = 3 # 2-bit change flag, bit 0 to send and bit 1 to process, to be reset separately
                                 msg = 'DIchannel mbi.mba.reg '+str(mbi)+'.'+str(mba)+'.'+str(regadd)+' bit '+str(bit)+' change! was '+str(ovalue)+', became '+str(value) # temporary
-                                log.info(msg) ## debug
+                                log.debug(msg) ##
                                 #udp.syslog(msg)
                                 # dichannels table update with new bit values and change flags. no status change here. no update if not changed!
                                 Cmd = "UPDATE "+self.in_sql+" set value='"+str(value)+"', chg='"+str(chg)+"', ts='"+str(self.ts)+"' where mba='"+str(mba)+"' and regadd='"+str(regadd+i)+"' and mbi="+str(mbi)+" and bit='"+str(bit)+"'"
@@ -142,7 +142,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                             log.debug('dichannels update cmd: '+Cmd)
                             conn.execute(Cmd) # write
                         except:
-                            log.warning('dichannels table update problem')
+                            log.warning('dichannels table update FAILED!')
                             traceback.print_exc()
                 #time.sleep(0.05)
                 if chg == 0: # no change
@@ -313,7 +313,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
                 for row in cur: # services to be processed. either just changed or to be resent
                     svccount += 1
-                    log.info('processing di row '+str(repr(row))) ##
+                    log.debug('processing di row '+str(repr(row))) ##
                     val_reg = ''
                     sta_reg = ''
                     sumstatus = 0 # initially
@@ -335,7 +335,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                         sendtuple = self.make_dichannel_svc(val_reg) # for each service
                         udp.send(sendtuple)
                         msg = 'buffered within reporting all '+str(sendtuple) ####
-                        log.info(msg)
+                        log.debug(msg)
                     else:
                         log.warning('FAILED to select row for '+val_reg)
 
@@ -346,7 +346,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 if sendtuple:
                     udp.send(sendtuple)
                     msg = 'buffered due to reporting single '+str(sendtuple) ####
-                    log.info(msg)
+                    log.debug(msg)
 
             #if sendtuple != None and sendtuple != []:
             #    udp.send(sendtuple)

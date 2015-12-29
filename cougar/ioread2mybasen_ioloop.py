@@ -57,7 +57,8 @@ class ModbusRead(object):
         res = self.client.read_holding_registers(address=address, count=count, unit=self.slave_addr)
         try:
             if isinstance(res, ReadHoldingRegistersResponse):
-                log.info("READ: %0.2f", res.registers[0])
+                #log.info("READ: %0.2f", res.registers[0])
+                log.info("READ: %d", res.registers[0]) # integer from there!
                 return res.registers[0]
             else:
                 log.error("ERROR reading register: %s", str(res))

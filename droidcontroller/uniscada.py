@@ -251,7 +251,7 @@ class UDPchannel():
             return 0
 
         except:
-            msg = filenmame+' corrupt: '+str(sys.exc_info()[1])
+            msg = filename+' corrupt: '+str(sys.exc_info()[1])
             log.warning(msg)
             traceback.print_exc()
             time.sleep(1)

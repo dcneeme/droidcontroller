@@ -91,11 +91,10 @@ class Gcal(object):
 
         try:
             if '[]' in str(response.content):
-                log.warning('invalid content for calendar, keeping the existing calendar table')
-                s.print_table('calendar')
+                log.info('no content from calendar, keeping the existing calendar table')
                 return 2
             else:
-                log.info('response.content', response.content)
+                log.info('got calendar content: '+ str(response.content))
                 events = eval(response.content) # string to list
 
         except:

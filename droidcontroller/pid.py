@@ -44,8 +44,8 @@ class PID:
         self.setKp(P)
         self.setKi(I)
         self.setKd(D)
-        self.setMin(min)
-        self.setMax(max)
+        self.setMin(min) # minimum allowed output value
+        self.setMax(max) # maximum allowed output value
         self.setName(name)
         self.dead_time = dead_time # time for reaction start for the controlled object
         self.extnoint = 0 # from outside, on output()
@@ -316,7 +316,7 @@ class PID:
                 if self.onLimit != 1:
                     self.onLimit = 1 # reached hi limit
                     self.tsLimit = self.currtime
-                    log.info('loop '+self.name+' reached hi limit')
+                    log.warning('loop '+self.name+' output reached hi limit')
 
 
         if self.outMin is not None:
@@ -325,13 +325,13 @@ class PID:
                 if self.onLimit != -1:
                     self.onLimit = -1 # reached lo limit
                     self.tsLimit = self.currtime
-
+                    log.warning('loop '+self.name+' output reached hi limit')
 
         if self.outMin is not None and self.outMax is not None: # to be sure about onLimit, double check
             hyst = 0.03 * (self.outMax - self.outMin) # 3 %
             if out > self.outMin + hyst and out < self.outMax - hyst: # lubatud piires
                 if self.onLimit != 0:
-                    log.warning(self.name+' onLimit value '+str(self.onLimit)+' dropped to zero!')
+                    log.warning(self.name+' onLimit value '+str(self.onLimit)+' zeroing!')
                     self.onLimit = 0 # fix possible self.error
 
         else:

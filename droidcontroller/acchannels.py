@@ -15,7 +15,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         Read and send only happen if enough time is passed from previous, chk readperiod, sendperiod!
     '''
 
-    def __init__(self, msgbus=None, in_sql = 'aicochannels.sql', out_sql = 'aochannels.sql', readperiod = 5, sendperiod = 120):
+    def __init__(self, msgbus=None, in_sql = 'aicochannels.sql', out_sql = 'aochannels.sql', readperiod = 10, sendperiod = 120):
         self.msgbus = msgbus
         self.setReadPeriod(readperiod)
         self.setSendPeriod(sendperiod)
@@ -259,7 +259,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 res=1
 
             if res == 0:
-                log.info('write success to counter mba.regadd '+str(mba)+'.'+str(regadd))
+                log.debug('write success to counter mba.regadd '+str(mba)+'.'+str(regadd))
             else:
                 log.warning('set_counter: write FAILED to mba '+str(mba)+', regadd '+str(regadd))
             return res
@@ -746,7 +746,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 sendtuple = self.make_svc(val_reg) # returns like ['T1S', 0, 'T1W', '170 218 164']
                 if sendtuple != None and sendtuple != []: #
                     udp.send(sendtuple) # can send to buffer double if make_svc found change. no dbl sending if ts is the same.
-                    log.info('buffered for reporting: '+str(sendtuple)) ##
+                    log.debug('buffered for reporting: '+str(sendtuple)) ##
                 else:
                     msg = 'FAILED to report due to empty sendtuple for svc '+val_reg
                     if self.msg != msg:
@@ -848,7 +848,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 mbi = srow[20] # int
                 wcount = int(srow[21]) if srow[21] != '' else 1  # word count
                 ##chg = 0 # member status change flag
-                log.info('>>> val_reg '+val_reg+' member '+str(member)+', cfg='+str(cfg)+', raw='+str(raw)+', ovalue='+str(ovalue)+', outlo='+str(outlo)+', outhi='+str(outhi)) ##
+                log.debug('>>> val_reg '+val_reg+' member '+str(member)+', cfg='+str(cfg)+', raw='+str(raw)+', ovalue='+str(ovalue)+', outlo='+str(outlo)+', outhi='+str(outhi)) ##
                 #print('val_reg '+val_reg+' member '+str(member)+', cfg='+str(cfg)+', raw='+str(raw)+', ovalue='+str(ovalue)+', outlo='+str(outlo)+', outhi='+str(outhi)) # debug
 
             except:
@@ -890,7 +890,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                             #res = self.cp[self.cpi].calc(ots, raw, ts_now = self.ts) # power calculation based on raw counter increase
                             res = self.cp[self.cpi].calc(raw) # based on current ts only!
 
-                            log.info('got result from cp['+str(self.cpi)+']: '+str(res)+', '+str(raw))  # debug
+                            log.debug('got result from cp['+str(self.cpi)+']: '+str(res)+', '+str(raw))  # debug
                             if (cfg&128): # on off state from power
                                 raw = res[1] # state on/off 0 or 1
                                 if res[2] != 0: # on/off change
@@ -930,7 +930,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                 log.debug('averaging on, value became '+str(value)) # debug
 
                             if (cfg & 256) and (abs(value - ovalue) > abs(value / 5.0)): # change more than 20% detected, use num w comma!
-                                log.info('### value change (was '+str(ovalue)+', became '+str(value)+') for '+val_reg+'.'+str(member)+', need to send')
+                                log.debug('### value change (was '+str(ovalue)+', became '+str(value)+') for '+val_reg+'.'+str(member)+', need to send')
                                 self.chg += 1
 
 
