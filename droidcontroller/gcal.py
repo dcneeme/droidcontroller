@@ -44,8 +44,9 @@ class Gcal(object):
         else: # create new table
             Cmd = 'drop table if exists '+self.table
             self.conn.execute(Cmd) # drop the table if it exists
-            Cmd = "CREATE TABLE calendar(title,timestamp,value); \
-                CREATE INDEX ts_calendar on 'calendar'(timestamp);"
+            Cmd = "CREATE TABLE calendar(title,timestamp,value);"
+            self.conn.execute(Cmd)
+            Cmd = "CREATE INDEX ts_calendar on 'calendar'(timestamp);"
             self.conn.execute(Cmd)
             self.conn.commit()
             log.info('created new calendar table')
@@ -120,7 +121,6 @@ class Gcal(object):
         self.url = 'http://www.itvilla.ee/cgi-bin/gcal.cgi?mac='+self.host_id+'&days='+str(self.days)+'&format=json'
         #headers = {'Authorization': 'Basic YmFyaXg6Y29udHJvbGxlcg=='} # Base64$="YmFyaXg6Y29udHJvbGxlcg==" ' barix:controller
         headers = { "Content-Type": "application/json; charset=utf-8" }
-        log.info("sending async request to itvilla: "+self.url) ##
         try:
             log.info("sending async request to itvilla: "+self.url) ##
             tornado.httpclient.AsyncHTTPClient().fetch(self.url, self._httpreply, method='GET', headers=headers,  body=None,
