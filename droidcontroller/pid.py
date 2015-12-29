@@ -525,7 +525,7 @@ class ThreeStep:
             self.error=self.Setpoint - invar            # self.error value
         except:
             self.error = 0 # for the case of invalid actual
-            msg=self.name+' invalid actual '+repr(invar)+' for 3step '+self.name self.error calculation, self.error zero used!'
+            msg=self.name+' invalid actual '+repr(invar)+' for 3step '+self.name+' error calculation, error zero used!'
             log.warning(msg)
 
         #self.error=self.Setpoint - invar            # current self.error value
