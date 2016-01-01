@@ -82,7 +82,7 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
                 
         self.invars.update({svc: currvalues}) #remember the new valuelist
         
-        out = inproc(value, mtype)
+        out = self.inproc(value, mtype)
         if out != self.out:
             log.info('lamp out change to '+str(out))
         if self.msgbus != None:
