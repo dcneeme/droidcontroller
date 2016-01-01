@@ -6,7 +6,7 @@
 import logging, time
 log = logging.getLogger(__name__)
 
-class StateKeeper: #
+class StateKeeper(object): #
     ''' Keep the state and the timestamp of the last state change.
         The state falls down if no up() actions are coming before timeout.
         Toggle input toggle() forces immediate state change.
@@ -14,7 +14,7 @@ class StateKeeper: #
         TODO: add upfilter, time to get another up, must be smaller than off_tout
         '''
 
-    def __init__(self, off_tout = 120, on_tout = 0): # falls to down (connstate = 0) after no setting up for off_tout
+    def __init__(self, name='undefined', off_tout = 120, on_tout = 0): # falls to down (connstate = 0) after no setting up for off_tout
         ''' First up() while in state 0 does not change state unless in_tout == 0.
             If the second up() arrives before in_tout, state will go up.
             off_tout value None will keep it up forever without recurring up() events.
@@ -23,6 +23,7 @@ class StateKeeper: #
             on_tout >0 will with for another up() for defined tout seconds.
             on_tout None is illegal. tout values in seconds.
         '''
+        self.name = name
         self.off_tout = off_tout # down if no up() events during this.
         self.on_tout = on_tout
         self.neverup = 1 #goes down with first up
@@ -47,7 +48,7 @@ class StateKeeper: #
 
 
     def up(self):
-        ''' Turns state up if less than on+tout s from previous up() evemnt.
+        ''' Turns state up if less than on_tout s from previous up() evemnt.
             Next similar signal must arrive before off_out to keep it up
         '''
         self.ts_uplast = time.time()
@@ -122,3 +123,7 @@ class StateKeeper: #
             firstup = 0
         return self.state, age, self.neverup, firstup, time2down # tuple
 
+
+    def get_name(self):
+        return self.name
+        
