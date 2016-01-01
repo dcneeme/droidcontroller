@@ -77,7 +77,7 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
             if values[im] != currvalues[im]:
                 mtype = self.in_svc[svc][im][1]
                 currvalues[im] = values[im]
-                print('new value for svc %s im %d: %d',svc,im,currvalue[im])
+                print('new value for svc %s im %d: %d',svc,im,currvalues[im])
                 #processing according to the mtype    
                 
         self.invars.update({svc: currvalues}) #remember the new valuelist
