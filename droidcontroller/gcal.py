@@ -97,12 +97,13 @@ class Gcal(object):
             cal_id = self.host_id
         req = 'http://www.itvilla.ee/cgi-bin/gcal.cgi?mac='+cal_id+'&days='+str(self.days)+'&format=json'
         headers = {'Authorization': 'Basic YmFyaXg6Y29udHJvbGxlcg=='} # Base64$="YmFyaXg6Y29udHJvbGxlcg==" ' barix:controller
-        msg = 'starting gcal query '+req
+        msg = 'starting gcal sync query '+req
         log.debug(msg) # debug
         # in this method wait until response or timeout
         try:
             res = requests.get(req, headers = headers)
-            self.process_response(res.content) ## 
+            self.process_response(res.content) ##
+            return 0            
         except:
             msg = 'gcal query '+req+' failed!'
             log.warning(msg)
@@ -110,19 +111,11 @@ class Gcal(object):
             return 1 # kui ei saa gcal yhendust, siis lopetab ja vana ei havita!
 
     def async(self, cal_id=None):
-        ''' Non-blocking request to calendar server 
-        basen_subpath = 'tempdemo'
-        basen_aid = 'itvilla'
-        basen_uid = b'itvilla'
-        basen_passwd = 'MxPZcbkjdFF5uEF9'
-        basen_url = 'https://mybasen.pilot.basen.com/_ua/' + basen_aid + '/v0.1/data'
-        '''
-        #req = 'http://www.itvilla.ee/cgi-bin/gcal.cgi?mac='+cal_id+'&days='+str(self.days)+'&format=json'
+        ''' Non-blocking request to calendar server '''
         self.url = 'http://www.itvilla.ee/cgi-bin/gcal.cgi?mac='+self.host_id+'&days='+str(self.days)+'&format=json'
-        #headers = {'Authorization': 'Basic YmFyaXg6Y29udHJvbGxlcg=='} # Base64$="YmFyaXg6Y29udHJvbGxlcg==" ' barix:controller
         headers = { "Content-Type": "application/json; charset=utf-8" }
         try:
-            log.info("sending async request to itvilla: "+self.url) ##
+            log.info("starting gcal async query: "+self.url) ##
             tornado.httpclient.AsyncHTTPClient().fetch(self.url, self._httpreply, method='GET', headers=headers,  body=None,
                 auth_mode="basic", auth_username=self.user, auth_password=self.password) # response to httpreply when it comes, without blocking
         except:
@@ -134,8 +127,8 @@ class Gcal(object):
         if response.error:
             log.error("HTTP ERROR: %s", str(response.error))
         else:
-            log.info("HTTP RESPONSE: %s", response.body)
-
+            #log.info("HTTP RESPONSE: %s", response.body)
+            self.process_response(response.body)
             
     def process_response(self, response):
         ''' Calendar content into sql table, use inside sync() or independently for async mode '''
