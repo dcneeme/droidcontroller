@@ -8,7 +8,7 @@ log = logging.getLogger(__name__)
 
 ###############
 class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbus!
-    def __init__(self, msgbus=None, in_svc={'K1W':[(1,3), (2,3)], 'KAW':[(1,8)]}, out_svc=['DOV',1,1], name = 'undefined', timeout = None): # timeout in s
+    def __init__(self, msgbus=None, in_svc={'K1W':[(1,1), (2,2)], 'KAW':[(1,3)]}, out_svc=['DOV',1], name = 'undefined', timeout = None, out = 0): # timeout in s
         ''' Virtual lamp that controls the actual io output channel, via level or dimmer pulse or (TBD) dali command.
             Input svc may present level or transition (define the change direction). 
             In order to mix manual and automated control, the levels should not be generally followed directly. 
@@ -17,7 +17,7 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
             Presence sensors may be used to swith on or off (via timeout) if such services are defined.
             
             There may be several input services with similar or different properties. Define as list of lists.
-            in_svc = [[svc,member,mtype],] # mtype 1 invbyup, 2 invbydn, 3 invbyboth, 5 followhi, 6 followlo, 7 followboth, 8 hienable, 16 loenable?
+            in_svc = [[svc,member,mtype],] # mtype 1 invbyup, 2 invbydn, 3 invbyboth, 5 forcehi, 6 forcelo, 7 follow
             out_svc = svc, member. level!
         '''
         # messagebus? several loops in the same room have to listen the same setpoint
@@ -37,7 +37,7 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
                     currvalues.append(None) # until replaced by values (from msgbus)
                 self.invars.update({svc: currvalues})
                 
-        self.out = None
+        self.out = out
         print('instance '+self.name+' created, in_svc '+str(self.in_svc)+', invars '+str(self.invars))
 
     def get_state(self):
@@ -56,6 +56,7 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
             from msgbus token floorset, subject TBW, message {'values': [210, 168, 250, 210], 'status': 0} 
             if status == 1 then activate, otherwise inverse
         ''' 
+        out = None # peaks lugema tegelikku! msgbus kaudu kuula ka seda!
         print('svc,values',svc, values, type(svc), type(values)) ##
         if 'str' in str(type(svc)):
             pass
@@ -79,17 +80,25 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
                 currvalues[im] = values[im]
                 print('new value for svc %s im %d: %d',svc,im,currvalues[im])
                 #processing according to the mtype    
-                
-        self.invars.update({svc: currvalues}) #remember the new valuelist
-        
-        out = self.inproc(value, mtype)
-        if out != self.out:
-            log.info('lamp out change to '+str(out))
-        if self.msgbus != None:
-            self.msgbus.publish(self.out_svc, {'values': [out], 'status': 0}) # statuse suhtes ei vota siin seisukohta, peaks ehk olema None?
-        else:
-            return out
+                if mtype == 1:
+                    if values[im] == 1:
+                        out = (self.out ^ 1)
+                elif mtype == 2:
+                    if values[im] == 0:
+                        out = (self.out ^ 1)
+                elif mtype == 3:
+                    out = (self.out ^ 1)
+                        
+
+
+            self.invars.update({svc: currvalues}) #remember the new valuelist
             
+        if out != None:
+            if out != self.out:
+                log.info('lamp out change to '+str(out))
+            if self.msgbus != None:
+                self.msgbus.publish(self.out_svc[0], {'values': [self.out], 'status': 0}) # statuse suhtes ei vota siin seisukohta, peaks ehk olema None?
+        return out    
             
             
     
