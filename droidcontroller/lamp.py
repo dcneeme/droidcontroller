@@ -8,18 +8,25 @@ log = logging.getLogger(__name__)
 
 ###############
 class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbus!
-    def __init__(self, msgbus=None, in_svc={'K1W':[(1,1), (2,2)], 'KAW':[(1,3)]}, out_svc=['DOV',1], name = 'undefined', timeout = None, out = 0): # timeout in s
-        ''' Virtual lamp that controls the actual io output channel, via level or dimmer pulse or (TBD) dali command.
-            Input svc may present level or transition (define the change direction). 
-            In order to mix manual and automated control, the levels should not be generally followed directly. 
-            It is better to use transitions, to avoid conficts between inputs channels and enable multi-input control. 
-            
-            Presence sensors may be used to swith on or off (via timeout) if such services are defined.
-            
-            There may be several input services with similar or different properties. Define as list of lists.
-            in_svc = [[svc,member,mtype],] # mtype 1 invbyup, 2 invbydn, 3 invbyboth, 5 forcehi, 6 forcelo, 7 follow
-            out_svc = svc, member. level!
+    def __init__(self, msgbus=None, in_svc={'K1W':[(1,1), (2,1)], 'KAW':[(1,3)], 'DKS':[(1,19)], 'DAS':[(1,6)], 'LAS':[(1,5)]}, 
+            out_svc=['DOV',1], name = 'undefined', timeout = None, out = 0): # timeout in s
+        #K1W like a switch, KAW like a pir, DAS like dim all, LAS like light all
+        ''' 
+        Virtual lamp that controls the actual io output channel, via level or dimmer pulse or (TBD) dali command.
+        Input svc may present level or transition (define the change direction). 
+        In order to mix manual and automated control, the levels should not be generally followed directly. 
+        It is better to use transitions, to avoid conficts between inputs channels and enable multi-input control. 
         
+        Presence sensors may be used to swith on or off (via timeout) if such services are defined.
+        
+        There may be several input services with similar or different properties. Define as list of lists.
+        in_svc = [[svc,member,mtype],] # mtype 1 invbyup, 2 invbydn, 3 invbyboth, 
+                                               5 upbyup, 6 upbydn, 7 upbyboth
+                                               9 followhi, 10 followlo, 11 followboth
+       
+        out_svc = svc, member. level!
+                                               
+    
         TESTING
         python
         from droidcontroller.msgbus import *; from droidcontroller.lamp import *
@@ -31,7 +38,7 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
         self.out_svc = out_svc # one svc only
         self.invars = {} # keep the input states in memory
         self.msgbus = msgbus
-        if msgbus != None:
+        if msgbus:
             self.msgbus = msgbus
             for svc in self.in_svc:
                 print('subscribing to '+svc)
@@ -42,6 +49,7 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
                     currvalues.append(None) # until replaced by values (from msgbus)
                 self.invars.update({svc: currvalues})
                 
+        self.darktime = False # presence sensors to activate ligths disabled
         self.out = out
         print('instance '+self.name+' created, in_svc '+str(self.in_svc)+', invars '+str(self.invars))
 
@@ -62,15 +70,11 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
             if status == 1 then activate, otherwise inverse
         ''' 
         out = None # peaks lugema tegelikku! msgbus kaudu kuula ka seda!
-        print('svc,values',svc, values, type(svc), type(values)) ##
-        if 'str' in str(type(svc)):
-            pass
-        else:
+        #print('svc,values',svc, values, type(svc), type(values)) ##
+        if not isinstance(svc, str):
             log.error('invalid svc '+str(svc))
             return None
-        if 'list' in str(type(values)):
-            pass
-        else:
+        if not isinstance(values, list): # 'list' in str(type(values)):
             log.error('invalid values '+str(values))
             return None
         if len(values) != len(self.invars[svc]):
@@ -80,11 +84,13 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
         print('processing svc '+svc+' values '+str(values))
         currvalues = self.invars[svc] # list
         for im in range(len(self.invars[svc])): # im = input member
+            mtype = self.in_svc[svc][im][1]
+            currvalues[im] = values[im]
+
             if values[im] != currvalues[im]:
-                mtype = self.in_svc[svc][im][1]
-                currvalues[im] = values[im]
-                print('new value for svc %s im %d: %d',svc,im,currvalues[im])
+                print('new value for svc %s, im %d: %d',svc,im,currvalues[im])
                 #processing according to the mtype    
+                ## manual switches, bits 0..1
                 if mtype == 1:
                     if values[im] == 1:
                         out = (self.out ^ 1)
@@ -93,17 +99,44 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
                         out = (self.out ^ 1)
                 elif mtype == 3:
                     out = (self.out ^ 1)
-                        
-
-
+                ## pir sensors, bitvalue 4 to flag
+                if self.darktime == 1: # presence signals to activate light enabled (disactivate always operational it timeout)
+                    if mtype == 5:
+                        if values[im] == 1:
+                            out = 1
+                    elif mtype == 6:
+                        if values[im] == 0:
+                            out = 1
+                    elif mtype == 7:
+                        out = 1
+                
+            ## level control without change, bitvalue 8 to flag
+            if mtype == 9:
+                if values[im] == 1:
+                    out = 1
+            elif mtype == 10:
+                if values[im] == 0:
+                    out = 0
+            elif mtype == 11:
+                out = values[im]
+            
+            ## darktime sensor
+            if mtype == 17:
+                if values[im] == 1:
+                    self.darktime = 1
+            elif mtype == 18:
+                if values[im] == 0:
+                    self.darktime = 0
+            if mtype == 19: # dark time depends on di level
+                self.darktime = values[im]
+                
             self.invars.update({svc: currvalues}) #remember the new valuelist
             
         if out != None:
             if out != self.out:
                 log.info('lamp out change to '+str(out))
-            if self.msgbus != None:
+            if self.msgbus:
                 self.msgbus.publish(self.out_svc[0], {'values': [self.out], 'status': 0}) # statuse suhtes ei vota siin seisukohta, peaks ehk olema None?
         return out    
             
             
-    
