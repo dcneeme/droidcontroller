@@ -17,7 +17,7 @@ logging.basicConfig(stream=sys.stderr, level=logging.INFO) # temporary
 log = logging.getLogger(__name__)
 
 class PanelSeneca(object): # parameetriks mb
-    ''' Returns new delay to try for register 699, from the allowed range '''
+    ''' Send to seneca S401 panel. Be aware of negative data! '''
     def __init__(self, mb, mba, mbi = 0, linedict={1000:999,1001:999, 1003:999,1004:999, 1006:999,1007:999,1009:999}, power = 0):
         self.mb = mb
         self.mbi = mbi
