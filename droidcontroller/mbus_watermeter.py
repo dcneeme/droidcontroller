@@ -31,6 +31,7 @@ class MbusWaterMeter(object): # FIXME averaging missing!
         
     def read_sync(self, debug = False):
         ''' Query mbus device, waits for reply, lists all if debug == True '''
+        log.info('sending out a sync mbus query')
         try:
             self.mbus.send_request_frame(254)
             reply = self.mbus.recv_frame()
