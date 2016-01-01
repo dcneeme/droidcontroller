@@ -19,8 +19,13 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
             There may be several input services with similar or different properties. Define as list of lists.
             in_svc = [[svc,member,mtype],] # mtype 1 invbyup, 2 invbydn, 3 invbyboth, 5 forcehi, 6 forcelo, 7 follow
             out_svc = svc, member. level!
+        
+        TESTING
+        python
+        from droidcontroller.msgbus import *; from droidcontroller.lamp import *
+        msgbus=MsgBus(); lamp=Lamp(msgbus)
+        lamp.inproc('KAW',[1]); lamp.get_state()
         '''
-        # messagebus? several loops in the same room have to listen the same setpoint
         self.name = name
         self.in_svc = in_svc # dict of lists
         self.out_svc = out_svc # one svc only
