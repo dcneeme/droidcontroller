@@ -1,3 +1,4 @@
+# This Python file uses the following encoding: utf-8
 #-------------------------------------------------------------------------------
 # this is a class to simplify io board it5888 pwm usage
 # 1 oct 2015 started, neeme
@@ -10,8 +11,8 @@ log = logging.getLogger(__name__)
 class IT5888pwm(object):
     ''' Takes new periodical PWM values and resends them if changed '''
 
-    def __init__(self, d, mbi=0, mba=1, name='IT5888', period=1000, bits=[8, 9, 10, 11, 12, 13, 14, 15], phases=[], periodics=[], per_reg=150):
-        ''' One instance per I/O-module. Define the PWM channels via the bits list.
+    def __init__(self, d, mbi=0, mba=1, name='IT5888', period=1000, bits=[8], phases=[], periodics=[], per_reg=150):
+        ''' One instance per I/O-module, as period is shared! Define the PWM channels via the bits list.
             Do not include channels not used in pwm
             The channels in pwm list should not be present in dochannels.sql (trying to sync static values)!
         '''
@@ -29,13 +30,14 @@ class IT5888pwm(object):
         # values for bit channels. do1..do8 = bit8..bit15  (reg 108..115)
         for i in range(len(self.bits)):
             self.values.append(None) # initially no change to the existing values in registers
-            self.fullvalues.append(None) # initially no change to the existing values in registers
-            self.set_phases(phases)
-
-            if len(self.bits) == len(periodics): # must be list then
-                self.periodics = periodics # kordub aga mis teha
-            else:
+            #self.fullvalues.append(None) # initially no change to the existing values in registers
+            self.fullvalues.append(0) # initially
+            if len(self.bits) != len(periodics): # must be list then
                 self.periodics.append(True) # all periodical by default
+        
+        self.set_phases(phases)
+
+        
 
         self.name = name
         self.period = period # generation starts with value writing
@@ -81,8 +83,8 @@ class IT5888pwm(object):
             log.info(self.name+' pwm period fixed to '+str(self.period)+' ms')
 
 
-    def set_value(self, bit, value):
-        ''' Set one channel to the new PWM value. Will be sent to modbus register if differs from the previous '''
+    def set_value(self, bit, value):# one or all? the same can be shared in some cases...
+        ''' Set one or all multiphase channels the new PWM value. Will be sent to register only if it differs from the previous '''
         if value > 4095:
             value = 4095
             log.warning(self.name+' limited pwm value to max allowed 4095')
