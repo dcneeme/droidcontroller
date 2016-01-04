@@ -90,7 +90,7 @@ class IT5888pwm(object):
             log.warning(self.name+' limited pwm value to max allowed 4095')
 
         try:
-            if chan < self.bits:
+            if chan < len(self.bits):
                 log.info(self.name+' pwm chan '+str(chan)) ##
                 if self.values[i] == None or (self.values[i] != None and value != (self.fullvalues[i] & 0x0FFF)) or self.phaseset:
                     self.values[i] = value
