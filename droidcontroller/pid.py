@@ -316,7 +316,7 @@ class PID:
                 if self.onLimit != 1:
                     self.onLimit = 1 # reached hi limit
                     self.tsLimit = self.currtime
-                    log.warning('loop '+self.name+' output reached hi limit '+str(out))
+                    log.warning('loop '+self.name+' output reached hi limit '+str(out)+' while set='+str(self.setPoint)+', act='+str(self.actual))
  
 
         if self.outMin is not None:
@@ -325,7 +325,7 @@ class PID:
                 if self.onLimit != -1:
                     self.onLimit = -1 # reached lo limit
                     self.tsLimit = self.currtime
-                    log.warning('loop '+self.name+' output reached lo limit '+str(out))
+                    log.warning('loop '+self.name+' output reached lo limit '+str(out)+' while set='+str(self.setPoint)+', act='+str(self.actual))
 
         if self.outMin is not None and self.outMax is not None: # to be sure about onLimit, double check
             hyst = 0.03 * (self.outMax - self.outMin) # 3 %
