@@ -47,9 +47,7 @@ class MbusWaterMeter(object): # FIXME averaging missing!
         except Exception as ex:
             print("parse error: %s" % ex)
             sys.exit()
-        #print(repr(d)) #
-        res = self.parse(d, debug)
-        return res        
+        return d
             
     def parse(self, dict, debug = False):
         found = 0
@@ -75,13 +73,14 @@ class MbusWaterMeter(object): # FIXME averaging missing!
     def read_async(self, reply_cb):
         log.info("    mbus_send_request_frame..")
         EXECUTOR.submit(self.read_sync).add_done_callback(lambda future: tornado.ioloop.IOLoop.instance().add_callback(partial(self.callback, future)))
-
+        #eraldi threadis read_sync, mis ootab vastust. 
+        
     def callback(self, future):
         result = future.result()
         self.async_reply(result)
 
     def async_reply(self, result):
         print("    mbus result: " + str(result))
-        self.run()
-
+        self.parse(result)
+        
         

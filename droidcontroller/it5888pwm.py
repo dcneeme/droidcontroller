@@ -99,9 +99,9 @@ class IT5888pwm(object):
                     bit = self.bits[chan]  # the separate bit for phase lock seems unnecessary!
                     #self.mb[self.mbi].write(self.mba, 100 + bit, value=self.fullvalues[i])
                     self.d.set_doword(self.mba, 100 + bit, value=self.fullvalues[i], mbi=self.mbi)
-                    log.info('new pwm value '+str(value)+', fullvalue '+str(hex(self.fullvalues[i]))+' set for channel bit '+str(bit)+', phase '+str(self.phases[i])+', periodic '+str(self.periodics[i]))
+                    log.info('new pwm value '+str(value)+', fullvalue '+str(hex(self.fullvalues[i]))+' set for channel '+str(i)+'/ bit '+str(bit)+', phase '+str(self.phases[i])+', periodic '+str(self.periodics[i]))
             else:
-                log.error('INVALID pwm chan'+str(chan)+' used! should be less than len(bits) '+str(self.bits))
+                log.error('INVALID pwm chan'+str(chan)+' / bit '+str(bit)+' used! chan should be < len(bits) '+str(len(self.bits))+', self.bits '+str(self.bits))
                 return 1
             return 0
         except:

@@ -20,7 +20,6 @@ mac = ''
 filee = ''
 try:
     mac = os.environ['ID'] # env variable ID
-    mac = os.environ['ID'] # env variable ID
     filee = 'env var ID'
 except:
     if os.path.isfile('host_id.conf'):
@@ -40,6 +39,7 @@ log.info('got mac '+mac+' from '+filee)
 udp.setID(mac) # kontrolleri id
 tcp.setID(mac) # kas tcp seda kasutabki?
 
+  
 try:
     monip = os.environ['MONIP'] # env variable ID
 except:
@@ -72,6 +72,13 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         self.p = Commands(ostype) # setup and commands from server
         self.r = RegularComm(interval=12) # interval needs to be below timer value!
 
+        try:
+            from droidcontroller.gpio_led import GPIOLED
+            self.led = GPIOLED() # led alarm and conn
+        except:
+            log.warning('GPIOLED not imported')
+            self.led = None
+  
         self.running = 0 # 999 feed enabled if running only
         self.spm = SpeedoMeter(windowsize = 100) # to see di speed
         self.get_AVV(inspect.stack()[1]) # caller name and hw version
@@ -148,12 +155,15 @@ class ControllerApp(object): # default modbus address of io in controller = 1
             log.error('UDP socket error!')
         elif events & self.loop.READ:
             got = udp.udpread() # loeb ainult!
-            while got != None and got != {}:
+            while got != None and got != {}: # read until buffer empty
                 self.got_parse(got)
                 got = udp.udpread()
-
+    
             if udp.sk.get_state()[3] == 1: # firstup
                 self.firstup()
+                
+            #if self.led != None: # udp sees juba niigi?
+            #    self.led.commLED(1)
 
     def firstup(self):
         ''' Things to do on the first connectivity establisment after startup '''
@@ -168,8 +178,11 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         ''' 5V power break for cold reboot '''
         msg = '**** going to cut power NOW (at '+str(int(time.time()))+') via 0xFEED in attempt to restore connectivity ***'
         log.warning(msg)
+        if self.led != None:
+            self.led.alarmLED(1)
+            
         udp.dump_buffer() # save unsent messages as file
-
+         
         with open("/root/d4c/appd.log", "a") as logfile:
             logfile.write(msg)
         try:
@@ -229,7 +242,8 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         sys.stdout.flush()
         self.ac.doall()
         self.app(sys._getframe().f_code.co_name, attentioncode = 2) # d, a attention bits
-
+        if self.led != None: # ajutine
+            self.led.alarmLED(0)
     
     def regular_svc(self): # FIXME - send on change too! pakkida?
         sys.stdout.write('R') #

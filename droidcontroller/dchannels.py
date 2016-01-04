@@ -34,7 +34,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
     def __init__(self, msgbus=None, in_sql = 'dichannels.sql', out_sql = 'dochannels.sql', readperiod = 0, sendperiod = 120): # sends immediately on change too!
         self.msgbus = msgbus
-        
+        self.msg = ''
         # readperiod 0 means read on every execution. this is usually wanted behaviour to detect any di changes as soon as possible.
         self.setReadPeriod(readperiod)
         self.setSendPeriod(sendperiod)

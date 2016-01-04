@@ -334,7 +334,7 @@ class PID:
             hyst = 0.03 * (self.outMax - self.outMin) # 3 %
             if out > self.outMin + hyst and out < self.outMax - hyst: # lubatud piires
                 if self.onLimit != 0:
-                    log.warning(self.name+' onLimit value '+str(self.onLimit)+' zeroing! due to out '+str(out)+' while limits '+str(self.outMin, self.outMax))
+                    log.warning(self.name+' onLimit value '+str(self.onLimit)+' zeroing! due to out '+str(out)+' while limits '+str(self.outMin)+' - '+str(self.outMax))
                     self.onLimit = 0 # fix possible self.error
 
         else:

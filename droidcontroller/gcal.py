@@ -5,6 +5,11 @@ import tornado # for async usage mode
 import tornado.ioloop # for async usage mode
 import tornado.httpclient # for async usage mode
 
+
+from functools import partial
+from concurrent.futures import ThreadPoolExecutor
+EXECUTOR = ThreadPoolExecutor(max_workers=1)
+
 import logging
 log = logging.getLogger(__name__)
 
@@ -98,17 +103,17 @@ class Gcal(object):
         req = 'http://www.itvilla.ee/cgi-bin/gcal.cgi?mac='+cal_id+'&days='+str(self.days)+'&format=json'
         headers = {'Authorization': 'Basic YmFyaXg6Y29udHJvbGxlcg=='} # Base64$="YmFyaXg6Y29udHJvbGxlcg==" ' barix:controller
         msg = 'starting gcal sync query '+req
-        log.debug(msg) # debug
+        log.info(msg) # debug
         # in this method wait until response or timeout
         try:
             res = requests.get(req, headers = headers)
-            self.process_response(res.content) ##
-            return 0            
+            #self.process_response(res.content) ##
+            return res           
         except:
             msg = 'gcal query '+req+' failed!'
             log.warning(msg)
             traceback.print_exc()
-            return 1 # kui ei saa gcal yhendust, siis lopetab ja vana ei havita!
+            #return 1 # kui ei saa gcal yhendust, siis lopetab ja vana ei havita!
 
     def async(self, cal_id=None):
         ''' Non-blocking request to calendar server '''
@@ -118,18 +123,35 @@ class Gcal(object):
             log.info("starting gcal async query: "+self.url) ##
             tornado.httpclient.AsyncHTTPClient().fetch(self.url, self._httpreply, method='GET', headers=headers,  body=None,
                 auth_mode="basic", auth_username=self.user, auth_password=self.password) # response to httpreply when it comes, without blocking
+                # vaikimisi request_timeout=20, connect_timeout=20
         except:
-            loq.error('async request '+self.url+' to itvilla FAILED!')
+            loq.error('async request '+self.url+' FAILED!')
             traceback.print_exc()
             
     def _httpreply(self, response):
         ''' For async usage '''
+        # tcpdump -A -vvv port 80 # debugging
         if response.error:
             log.error("HTTP ERROR: %s", str(response.error))
         else:
             #log.info("HTTP RESPONSE: %s", response.body)
             self.process_response(response.body)
             
+    def read_async(self, reply_cb):
+        ''' use with concurrent.futures  ''' 
+        log.info("  gcal_send_request..")
+        EXECUTOR.submit(self.sync).add_done_callback(lambda future: tornado.ioloop.IOLoop.instance().add_callback(partial(self.callback, future)))
+        #eraldi threadis read_sync, mis ootab vastust. 
+        
+    def callback(self, future):
+        result = future.result()
+        self.async_reply(result)
+
+    def async_reply(self, result):
+        print("    mbus result: " + str(result))
+        #self.parse(result)
+        self.process_response(result)
+       
     def process_response(self, response):
         ''' Calendar content into sql table, use inside sync() or independently for async mode '''
         try:
