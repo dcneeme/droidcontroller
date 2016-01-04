@@ -83,28 +83,28 @@ class IT5888pwm(object):
             log.info(self.name+' pwm period fixed to '+str(self.period)+' ms')
 
 
-    def set_value(self, bit, value):# one or all? the same can be shared in some cases...
+    def set_value(self, chan, value):# one or all? the same can be shared in some cases...
         ''' Set one or all multiphase channels the new PWM value. Will be sent to register only if it differs from the previous '''
         if value > 4095:
             value = 4095
             log.warning(self.name+' limited pwm value to max allowed 4095')
 
         try:
-            if bit in self.bits:
-                gen = (i for i,x in enumerate(self.bits) if x == bit)
-                for i in gen: pass # should find one i only if bits correctly!
+            if chan < self.bits:
+                log.info(self.name+' pwm chan '+str(chan)) ##
                 if self.values[i] == None or (self.values[i] != None and value != (self.fullvalues[i] & 0x0FFF)) or self.phaseset:
                     self.values[i] = value
                     self.fullvalues[i] = int(value + self.periodics[i] * 0x8000+ self.periodics[i] * 0x4000 + (self.phases[i] << 12)) # phase lock needed for periodic...
-                    # the separate bit for phase lock seems unnecessary!
+                    bit = self.bits[chan]  # the separate bit for phase lock seems unnecessary!
                     #self.mb[self.mbi].write(self.mba, 100 + bit, value=self.fullvalues[i])
                     self.d.set_doword(self.mba, 100 + bit, value=self.fullvalues[i], mbi=self.mbi)
                     log.info('new pwm value '+str(value)+', fullvalue '+str(hex(self.fullvalues[i]))+' set for channel bit '+str(bit)+', phase '+str(self.phases[i])+', periodic '+str(self.periodics[i]))
             else:
-                log.warning('invalid (not defined in bits) bit '+str(bit)+' used ! bits='+str(self.bits))
+                log.error('INVALID DO bit '+str(chan)+' used! bits='+str(self.bits))
                 return 1
             return 0
         except:
+            log.error('FAILURE in setting pwm value for chan '+str(chan)+', fullvalues '+str(self.fullvalues))
             traceback.print_exc()
             return 1
 
