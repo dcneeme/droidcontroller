@@ -85,7 +85,7 @@ class IT5888pwm(object):
 
     def set_value(self, chan, value):# one or all? the same can be shared in some cases...
         ''' Set one or all multiphase channels the new PWM value. Will be sent to register only if it differs from the previous '''
-        chan= i # pwm chan index
+        i = chan # pwm chan index
         if value > 4095:
             value = 4095
             log.warning(self.name+' limited pwm value to max allowed 4095')
