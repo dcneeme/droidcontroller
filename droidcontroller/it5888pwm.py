@@ -85,12 +85,13 @@ class IT5888pwm(object):
 
     def set_value(self, chan, value):# one or all? the same can be shared in some cases...
         ''' Set one or all multiphase channels the new PWM value. Will be sent to register only if it differs from the previous '''
+        chan= i # pwm chan index
         if value > 4095:
             value = 4095
             log.warning(self.name+' limited pwm value to max allowed 4095')
 
         try:
-            if chan < len(self.bits):
+            if chan < len(self.bits): # chan is pwm channel index from this do port
                 log.info(self.name+' pwm chan '+str(chan)) ##
                 if self.values[i] == None or (self.values[i] != None and value != (self.fullvalues[i] & 0x0FFF)) or self.phaseset:
                     self.values[i] = value
@@ -100,7 +101,7 @@ class IT5888pwm(object):
                     self.d.set_doword(self.mba, 100 + bit, value=self.fullvalues[i], mbi=self.mbi)
                     log.info('new pwm value '+str(value)+', fullvalue '+str(hex(self.fullvalues[i]))+' set for channel bit '+str(bit)+', phase '+str(self.phases[i])+', periodic '+str(self.periodics[i]))
             else:
-                log.error('INVALID DO bit '+str(chan)+' used! bits='+str(self.bits))
+                log.error('INVALID pwm chan'+str(chan)+' used! should be less than len(bits) '+str(self.bits))
                 return 1
             return 0
         except:
