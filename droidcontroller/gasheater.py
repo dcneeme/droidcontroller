@@ -88,8 +88,8 @@ class JunkersHeater(object): # Junkers Euromaxx  FIXME use msgbus for ai svc!
 
     def write_svcs(self):
         ''' writes the sql svc tables with values to monitor AND pwm channels '''
-        self.pwm_gas[0].set_value(13, self.pwm_values[0]) # pwm to heater knob, do bit 13
-        self.pwm_gas[1].set_value(14, self.pwm_values[1]) # pwm to 3way valve, do bit 14
+        self.pwm_gas[0].set_value(0, self.pwm_values[0]) # pwm to heater knob, do bit 13
+        self.pwm_gas[1].set_value(1, self.pwm_values[1]) # pwm to 3way valve, do bit 14
         self.ac.set_aivalues(self.svc_pwm, values = self.pwm_values)
         if self.tempvarsG != None:
             self.ac.set_aivalues(self.svc_Gdebug, values=[UN.val2int(self.tempvarsG['error'],10),
