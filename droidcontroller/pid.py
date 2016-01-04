@@ -32,9 +32,10 @@ class PID:
         This class implements a simplistic PID control algorithm
     '''
 
-    def __init__(self, setpoint = 0, P = 1.0, I = 0.01, D = 0.0, min = None, max = None, outmode = 'nolist', name='undefined', dead_time = 0):
+    def __init__(self, setpoint = 0, P = 1.0, I = 0.01, D = 0.0, min = None, max = None, outmode = 'nolist', name='undefined', dead_time = 0, inv=False):
         self.outmode = outmode # remove later, temporary help to keep list output for some installations
         self.error = 0
+        self.inv = inv # inversion if True (negate error)
         self.name = name
         self.vars = {} # to be returned with almost all internal variables
         self.tsLimit = 0 # timestamp of reaching the saturation
@@ -275,6 +276,8 @@ class PID:
         direction = ['down','','up'] # up or down / FIXME use enum here! add Limit class! reusable for everybody...
         try:
             self.error = self.setPoint - self.actual            # self.error value  oli invar
+            if self.inv:
+                self.error = -self.error ## inversion, effect is like swapping act and set
         except:
             self.error = 0 # for the case of invalid actual
             log.warning('invalid actual '+repr(actual)+' for pid '+self.name+' error calculation, error zero used!')
