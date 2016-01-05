@@ -1,3 +1,4 @@
+# last change 5.1.2015 neeme
 from droidcontroller.util_n import UN # for val2int()
 from droidcontroller.pid import *
 from droidcontroller.it5888pwm import *
@@ -17,9 +18,7 @@ class JunkersHeater(object): # Junkers Euromaxx  FIXME use msgbus for ai svc!
             svc_pwm='PWW', svc_Gdebug='LGGW', svc_Hdebug='LGHW', svc_noint='NGIW',
             chn_gas=0, chn_onfloor=1):  # pwm chn 0 or 1. ac svc listened via msgbus
 
-        self.pwm_gas = [] # 0 onfloor , 1 hot
-        self.pwm_gas.append(IT5888pwm(d, mbi = 0, mba = 1, name='hot_out', period = 1000, bits = [13])) # do6, nupupinge regul, limits from svc
-        self.pwm_gas.append(IT5888pwm(d, mbi = 0, mba = 1, name='floor_on', period = 1000, bits = [14])) # do7, termostaadi kyte
+        self.pwm_gas = IT5888pwm(d, mbi = 0, mba = 1, name='gas_heater', period = 1000, bits = [13, 14])) # do6 nupupinge, do7 3Ttermostaat
         self.svc_hmode = svc_hmode
         self.svc_Gtemp = svc_Gtemp
         self.svc_Htemp = svc_Htemp
@@ -32,8 +31,8 @@ class JunkersHeater(object): # Junkers Euromaxx  FIXME use msgbus for ai svc!
         self.svc_noint = svc_noint
 
         self.pid = []
-        self.pid.append(PID(P=0.5, I=0.05, D=0, min=5, max=995, name = 'hot_out'))
-        self.pid.append(PID(P=0.5, I=0.05, D=0, min=5, max=995, name = 'floor_on'))
+        self.pid.append(PID(P=0.5, I=0.05, D=0, min=5, max=995, name = 'hot_out')) # pwm_gas chan 0
+        self.pid.append(PID(P=0.5, I=0.05, D=0, min=5, max=995, name = 'floor_on')) # pwm_gas chan 1
         self.tempvarsG = None
         self.tempvarsH = None
         self.pwm_values = [None, None]
@@ -88,8 +87,8 @@ class JunkersHeater(object): # Junkers Euromaxx  FIXME use msgbus for ai svc!
 
     def write_svcs(self):
         ''' writes the sql svc tables with values to monitor AND pwm channels '''
-        self.pwm_gas[0].set_value(0, self.pwm_values[0]) # pwm to heater knob, do bit 13
-        self.pwm_gas[1].set_value(1, self.pwm_values[1]) # pwm to 3way valve, do bit 14
+        self.pwm_gas.set_value(0, self.pwm_values[0]) ## pwm to heater knob, do bit 13
+        self.pwm_gas.set_value(1, self.pwm_values[1]) ## pwm to 3way valve, do bit 14
         self.ac.set_aivalues(self.svc_pwm, values = self.pwm_values)
         if self.tempvarsG != None:
             self.ac.set_aivalues(self.svc_Gdebug, values=[UN.val2int(self.tempvarsG['error'],10),
