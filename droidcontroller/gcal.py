@@ -8,7 +8,7 @@ import tornado.httpclient # for async usage mode
 
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor
-EXECUTOR = ThreadPoolExecutor(max_workers=1)
+EXECUTOR = ThreadPoolExecutor(max_workers=1) # re remark below for self.gcal_scheduler
 
 import logging
 log = logging.getLogger(__name__)
@@ -29,6 +29,11 @@ log = logging.getLogger(__name__)
 
     
     FIXME - cooling/warming delay should be taken into account in heating control, to shift setpoint
+    
+    use this in iomain init:
+    
+    self.gcal_scheduler = tornado.ioloop.PeriodicCallback(self.gcal.run, 30000, io_loop = self.loop) # every 30 minutes (3 for tst) # using future
+    self.gcal_scheduler.start()
 '''
 
 class Gcal(object):
