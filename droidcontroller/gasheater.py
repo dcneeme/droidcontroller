@@ -18,7 +18,7 @@ class JunkersHeater(object): # Junkers Euromaxx  FIXME use msgbus for ai svc!
             svc_pwm='PWW', svc_Gdebug='LGGW', svc_Hdebug='LGHW', svc_noint='NGIW',
             chn_gas=0, chn_onfloor=1):  # pwm chn 0 or 1. ac svc listened via msgbus
 
-        self.pwm_gas = IT5888pwm(d, mbi = 0, mba = 1, name='gas_heater', period = 1000, bits = [13, 14])) # do6 nupupinge, do7 3Ttermostaat
+        self.pwm_gas = IT5888pwm(d, mbi = 0, mba = 1, name='gas_heater', period = 1000, bits = [13, 14]) # do6 nupupinge, do7 3Ttermostaat
         self.svc_hmode = svc_hmode
         self.svc_Gtemp = svc_Gtemp
         self.svc_Htemp = svc_Htemp
