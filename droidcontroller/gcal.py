@@ -108,7 +108,7 @@ class Gcal(object):
         try:
             res = requests.get(req, headers = headers)
             #self.process_response(res.content) ##
-            return res           
+            return res.content           
         except:
             msg = 'gcal query '+req+' failed!'
             log.warning(msg)
@@ -236,4 +236,8 @@ class Gcal(object):
         except:
             traceback.print_exc()
             return None
-                
+
+    def run(self): # for async use
+        self.read_async(self.async_reply)
+
+        
