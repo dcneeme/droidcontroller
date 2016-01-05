@@ -11,7 +11,7 @@ log = logging.getLogger(__name__)
 class IT5888pwm(object):
     ''' Takes new periodical PWM values and resends them if changed '''
 
-    def __init__(self, d, mbi=0, mba=1, name='IT5888', period=1000, bits=[8], phases=[], periodics=[], per_reg=150):
+    def __init__(self, d, mbi=0, mba=1, name='IT5888', period=1000, bits=[8], phases=[0], periodics=[], per_reg=150):
         ''' One instance per I/O-module, as period is shared! Define the PWM channels via the bits list.
             Do not include channels not used in pwm
             The channels in pwm list should not be present in dochannels.sql (trying to sync static values)!
@@ -99,9 +99,9 @@ class IT5888pwm(object):
                     bit = self.bits[chan]  # the separate bit for phase lock seems unnecessary!
                     #self.mb[self.mbi].write(self.mba, 100 + bit, value=self.fullvalues[i])
                     self.d.set_doword(self.mba, 100 + bit, value=self.fullvalues[i], mbi=self.mbi)
-                    log.info('new pwm value '+str(value)+', fullvalue '+str(hex(self.fullvalues[i]))+' set for channel '+str(i)+'/ bit '+str(bit)+', phase '+str(self.phases[i])+', periodic '+str(self.periodics[i]))
+                    log.info(self.name+'new pwm value '+str(value)+', fullvalue '+str(hex(self.fullvalues[i]))+' set for channel '+str(i)+'/ bit '+str(bit)+', phase '+str(self.phases[i])+', periodic '+str(self.periodics[i]))
             else:
-                log.error('INVALID pwm chan'+str(chan)+' / bit '+str(bit)+' used! chan should be < len(bits) '+str(len(self.bits))+', self.bits '+str(self.bits))
+                log.error('INVALID '+self.name+' chan'+str(chan)+' / bit '+str(bit)+' used! chan should be < len(bits) '+str(len(self.bits))+', self.bits '+str(self.bits))
                 return 1
             return 0
         except:
@@ -119,7 +119,7 @@ class IT5888pwm(object):
                     #self.values = values # tehakse set_value() sees
                     for i in range(len(self.bits)):
                         self.set_value(self.bits[i], values[i])
-                log.info('all changed PWM values sent to IO')
+                log.info('all changed '+self.name+' PWM values sent to IO')
             else:
                 log.warning('invalid length for values list:'+str(len(values))+', values '+str(values)+', bits '+str(self.bits))
                 return 1

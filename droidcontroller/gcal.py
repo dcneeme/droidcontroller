@@ -144,7 +144,7 @@ class Gcal(object):
             
     def read_async(self, reply_cb):
         ''' use with concurrent.futures  ''' 
-        log.info("  gcal_send_request..")
+        log.debug("  gcal_send_request..")
         EXECUTOR.submit(self.sync).add_done_callback(lambda future: tornado.ioloop.IOLoop.instance().add_callback(partial(self.callback, future)))
         #eraldi threadis read_sync, mis ootab vastust. 
         

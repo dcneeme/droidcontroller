@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 ###############
 class FloorTemperature(object): # one instance per floor loop. no d or ac needed, just msgbus!
     def __init__(self, msgbus, act_svc, set_svc, out_svc,
-        name = 'undefined', period = 1000, phasedelay = 0, lolim = 150, hilim = 350): # time units s, temp ddegC. lolim, hilim not in use???
+        name = 'undefined', period = 1000, phasedelay = 0, lolim = 150, hilim = 350, inv=False): # time units s, temp ddegC. inv=False for NC valves.
         ''' floor loops with slow pid and pwm period 1h, use shifted phase to load pump more evenly.
             The loops know their service and d member to get the setpoint and actuals.
             Limits are generally the same for the floor loops.
@@ -24,6 +24,7 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
         '''
         # messagebus? several loops in the same room have to listen the same setpoint
         self.name = name
+        self.inv = inv # False if NC valves (valves open with current). use inv=True for NO valves.
         self.vars = {} # for getvars only
         self.msgbus = msgbus
         self.msgbus.subscribe('act_'+self.name, act_svc[0], 'flooract', self.set_actual) # token, subject, message
@@ -37,7 +38,7 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
         self.set_svc = set_svc if 'list' in str(type(set_svc)) else None # ['svc', member]
         #self.actual = None
         #self.setpoint = None
-        self.pid = PID(P = 1.0, I = 0.01, D = 0, min = lolim, max = hilim, outmode = 'nolist', name = name, dead_time = 0)
+        self.pid = PID(P = 0.1, I = 0.01, D = 0, min = lolim, max = hilim, outmode = 'nolist', name = name, dead_time = 0, inv=self.inv) # no inversion, hi pwm = more heating
         self.out = 0 # do
 
 
@@ -75,6 +76,7 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
             'setpoint' : self.pid.getvars(filter='setpoint'), 
             'phasedelay' : self.phasedelay, 
             'out' : self.out, 
+            'inv' : self.inv, 
             'name': self.name })
         if filter is None: # return everything
             return self.vars
@@ -122,7 +124,7 @@ class RoomTemperature(object):
         self.hilim = hilim
         self.act_svc = act_svc if 'list' in str(type(act_svc)) else None # ['svc', member]
         self.set_svc = set_svc if 'list' in str(type(set_svc)) else None # ['svc', member]
-        self.pid = PID(P = 0.1, I = 0.01, D = 0, min = lolim, max = hilim, outmode = 'nolist', name = name, dead_time = 0)
+        self.pid = PID(P = 0.1, I = 0.001, D = 0, min = lolim, max = hilim, outmode = 'nolist', name = name, dead_time = 0) # no inversion here
         
 
     def set_actual(self, token, subject, message): # subject is svcname
