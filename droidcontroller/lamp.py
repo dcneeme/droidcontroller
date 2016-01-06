@@ -138,7 +138,7 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
         if out != None:
             if out != self.out:
                 log.info('lamp out change to '+str(out)+', to svc '+str(self.out_svc[0])+'.'+str(self.out_svc[1]))
-                d.set_domember(out_svc[0], out_svc[1], out) # svc, member, value
+                self.d.set_domember(out_svc[0], out_svc[1], out) # svc, member, value
                 self.out = out
             #if self.msgbus:
             #    self.msgbus.publish(self.out_svc[0], {'values': [self.out], 'status': 0}) # 
