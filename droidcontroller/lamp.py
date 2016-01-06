@@ -20,7 +20,7 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
         Presence sensors may be used to swith on or off (via timeout) if such services are defined.
         
         There may be several input services with similar or different properties. Define as list of lists.
-        in_svc = [[svc,member,mtype],] # mtype 1 invbyup, 2 invbydn, 3 invbyboth, 
+        in_svc = {svc:[(member,mtype), ], } # mtype 1 invbyup, 2 invbydn, 3 invbyboth, 
                                                5 upbyup, 6 upbydn, 7 upbyboth
                                                9 followhi, 10 followlo, 11 followboth
        
@@ -42,27 +42,31 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
             self.msgbus = msgbus
             for svc in self.in_svc:
                 print('subscribing to '+svc)
-                self.msgbus.subscribe('in_'+self.name+'_'+svc, svc, 'lights', self.listen) # several members per svvc may have values & types
+                self.msgbus.subscribe('in_'+self.name+'_'+svc, svc, 'lights', self.listen_proc) # several members per svvc may have values & types
                 currvalues = []
                 for i in range(len(self.in_svc[svc])):
                     print(i, svc)
                     currvalues.append(None) # until replaced by values (from msgbus)
                 self.invars.update({svc: currvalues})
                 
+        else:
+            low.warning('no msgbus in use...')
+            
         self.darktime = False # presence sensors to activate ligths disabled
-        self.out = out
+        self.out = out # lamp state on program start. None for no change!
         print('instance '+self.name+' created, in_svc '+str(self.in_svc)+', invars '+str(self.invars))
 
     def get_state(self):
         ''' Returns current output state 0 or 1 (latter is active). '''
         return self.out
     
-    def listen(self, token, subject, message):
+    def listen_proc(self, token, subject, message):
         ''' Returns the value of received service member '''
         log.info('received from msgbus for '+self.name+':'+subject+', '+str(message))
-        svc = message['subject'] # not to be returned, not important
-        values = message['values'][self.in_svc[subject]] # extract one member value
-        return svc, values
+        values = message['values'] # member index starting from 0
+        self.inproc(subject, values)
+      
+      
         
     def inproc(self, svc, values):
         ''' Processes the lamp inputs service received 
@@ -77,10 +81,7 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
         if not isinstance(values, list): # 'list' in str(type(values)):
             log.error('invalid values '+str(values))
             return None
-        if len(values) != len(self.invars[svc]):
-            log.error('values '+str(values)+' length does not match invars['+svc+'] '+str(self.invars[svc])+' lenght!')
-            return None
-            
+           
         print('processing svc '+svc+' values '+str(values))
         currvalues = self.invars[svc] # list
         for im in range(len(self.invars[svc])): # im = input member
