@@ -8,7 +8,7 @@ log = logging.getLogger(__name__)
 
 ###############
 class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbus!
-    def __init__(self, msgbus=None, in_svc={'K1W':[(1,1), (2,1)], 'KAW':[(1,3)], 'DKS':[(1,19)], 'DAS':[(1,6)], 'LAS':[(1,5)]}, 
+    def __init__(self, d, msgbus=None, in_svc={'K1W':[(1,1), (2,1)], 'KAW':[(1,3)], 'DKS':[(1,19)], 'DAS':[(1,6)], 'LAS':[(1,5)]}, 
             out_svc=['DOV',1], name = 'undefined', timeout = None, out = 0): # timeout in s
         #K1W like a switch, KAW like a pir, DAS like dim all, LAS like light all
         ''' 
@@ -34,6 +34,7 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
         lamp.inproc('KAW',[1]); lamp.get_state()
         '''
         self.name = name
+        self.d = d # dchannels instance
         self.in_svc = in_svc # dict of lists
         self.out_svc = out_svc # one svc only
         self.invars = {} # keep the input states in memory
@@ -48,7 +49,8 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
                     print(i, svc)
                     currvalues.append(None) # until replaced by values (from msgbus)
                 self.invars.update({svc: currvalues})
-                
+            if len(self.in_svc) != len(self.invars):
+                log.error('in_svc and invars len do not match for lamp '+self.name+'! invars: '+str(self.invars))
         else:
             low.warning('no msgbus in use...')
             
@@ -86,10 +88,10 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
         currvalues = self.invars[svc] # list
         for im in range(len(self.invars[svc])): # im = input member
             mtype = self.in_svc[svc][im][1]
-            currvalues[im] = values[im]
-
+            log.info(str(im)+' mtype '+str(mtype)+' values[im] '+str(values[im])+' currvalues[im] '+str(currvalues[im]))
             if values[im] != currvalues[im]:
-                print('new value for svc %s, im %d: %d',svc,im,currvalues[im])
+                currvalues[im] = values[im]
+                log.info('new value for svc '+svc+', im '+str(im)+', currvalues '+str(currvalues[im]))
                 #processing according to the mtype    
                 ## manual switches, bits 0..1
                 if mtype == 1:
@@ -135,9 +137,13 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
             
         if out != None:
             if out != self.out:
-                log.info('lamp out change to '+str(out))
-            if self.msgbus:
-                self.msgbus.publish(self.out_svc[0], {'values': [self.out], 'status': 0}) # statuse suhtes ei vota siin seisukohta, peaks ehk olema None?
+                log.info('lamp out change to '+str(out)+', to svc '+str(out_svc[0])+'.'+str(out_svc[1]))
+                d.set_domember(out_svc[0], out_svc[1], out) # svc, member, value
+                self.out = out
+            #if self.msgbus:
+            #    self.msgbus.publish(self.out_svc[0], {'values': [self.out], 'status': 0}) # 
+            # liikme kaupa msgbus kaudu paha tegutseda...
+            
         return out    
             
             
