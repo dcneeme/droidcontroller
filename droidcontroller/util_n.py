@@ -70,4 +70,11 @@ class UN(object): # Utilities Neeme, use like UN.val2int(14.4)
         #print('bit_replace var: ',format("%04x" % word),bit,value,format("%04x" % ((word & (65535 - 2**bit)) + (value<<bit)))) # debug
         return ((word & (65535 - 2**bit)) + (value<<bit))
 
-        
+    @staticmethod
+    def comparator(invalue1, invalue2): # changing word with single bit value
+        ''' Returns 1 if invalue1 > invalue2, 0 if vice versa  '''
+        if invalue1 > invalue2:
+            out = 1
+        else:
+            out = 0
+        return out

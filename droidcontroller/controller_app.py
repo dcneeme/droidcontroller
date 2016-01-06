@@ -60,14 +60,14 @@ log = logging.getLogger(__name__)
 
 class ControllerApp(object): # default modbus address of io in controller = 1
     ''' '''
-    def __init__(self, app, ostype='archlinux', mba=1, mbi=0):
+    def __init__(self, app, ostype='archlinux', mba=1, mbi=0, ai_readperiod=3, ai_sendperiod=20): # 3s ai reading, 20s send
         self.msgbus = MsgBus()
         self.msgbus.subscribe('debug', 'di_grp_result', 'debugger', self.buslog) ###
         
         self.app = app # client-specific main script
         self.mba = mba # controller io modbus address if dc6888
         self.mbi = mbi # io channel for controller
-        self.ac = ACchannels(self.msgbus, in_sql = 'aicochannels.sql', readperiod = 0, sendperiod = 25) # ai and counters
+        self.ac = ACchannels(self.msgbus, in_sql = 'aicochannels.sql', readperiod = 0, sendperiod = ai_sendperiod) # ai and counters
         self.d = Dchannels(self.msgbus, readperiod = 0, sendperiod = 180) # di and do. immediate notification on change, read as often as possible
         self.p = Commands(ostype) # setup and commands from server
         self.r = RegularComm(interval=12) # interval needs to be below timer value!
@@ -89,14 +89,14 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         self.udpcomm_scheduler = tornado.ioloop.PeriodicCallback(self.udp_comm, 2000, io_loop = self.loop) # do not send udp more often than once in 2 sec
         self.regular_scheduler = tornado.ioloop.PeriodicCallback(self.regular_svc, 60000, io_loop = self.loop) # send regular svc
         self.di_scheduler = tornado.ioloop.PeriodicCallback(self.di_reader, 10, io_loop = self.loop) # read DI asap. was 50 ms
-        self.ai_scheduler = tornado.ioloop.PeriodicCallback(self.ai_reader, 10000, io_loop = self.loop) # ai 10 s
-        self.cal_scheduler = tornado.ioloop.PeriodicCallback(self.cal_reader, 3600000, io_loop = self.loop) # gcal 1 h
+        self.ai_scheduler = tornado.ioloop.PeriodicCallback(self.ai_reader, ai_readperiod, io_loop = self.loop) # ai 10 s
+        #self.cal_scheduler = tornado.ioloop.PeriodicCallback(self.cal_reader, 1800000, io_loop = self.loop) # gcal 1 h
 
         self.udpcomm_scheduler.start()
         self.regular_scheduler.start()
         self.di_scheduler.start()
         self.ai_scheduler.start()
-        self.cal_scheduler.start()
+        #self.cal_scheduler.start()# FIXME move here from iomain
         log.info('ControllerApp instance created. '+self.AVV)
         
 
@@ -237,11 +237,8 @@ class ControllerApp(object): # default modbus address of io in controller = 1
             
 
     def ai_reader(self): # AICO reader
-        #print('reading ai, co')
-        sys.stdout.write('A') # dot without newline
-        sys.stdout.flush()
         self.ac.doall()
-        self.app(sys._getframe().f_code.co_name, attentioncode = 2) # d, a attention bits
+        self.app(sys._getframe().f_code.co_name, attentioncode = 2) # d, a attention bits / use msgbus instead
         if self.led != None: # ajutine
             self.led.alarmLED(0)
     
