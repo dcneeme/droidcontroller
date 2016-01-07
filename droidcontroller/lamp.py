@@ -37,16 +37,16 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
         self.d = d # dchannels instance
         self.in_svc = in_svc # dict of lists
         self.out_svc = out_svc # one svc only
-        self.invars = {} # keep the input states in memory
+        self.invars = {} # keep the input states in memory for each svc : [members]
         self.msgbus = msgbus
         if msgbus:
             self.msgbus = msgbus
             for svc in self.in_svc:
-                print('subscribing to '+svc)
+                log.info('subscribing to '+svc)
                 self.msgbus.subscribe('in_'+self.name+'_'+svc, svc, 'lights', self.listen_proc) # several members per svvc may have values & types
                 currvalues = []
                 for i in range(len(self.in_svc[svc])):
-                    print(i, svc)
+                    #print(i, svc)
                     currvalues.append(None) # until replaced by values (from msgbus)
                 self.invars.update({svc: currvalues})
             if len(self.in_svc) != len(self.invars):
@@ -56,7 +56,7 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
             
         self.darktime = False # presence sensors to activate ligths disabled
         self.out = out # lamp state on program start. None for no change!
-        print('instance '+self.name+' created, in_svc '+str(self.in_svc)+', invars '+str(self.invars))
+        log.info('instance '+self.name+' created, in_svc '+str(self.in_svc)+', invars '+str(self.invars))
 
     def get_state(self):
         ''' Returns current output state 0 or 1 (latter is active). '''
@@ -70,75 +70,76 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
       
       
         
-    def inproc(self, svc, values):
-        ''' Processes the lamp inputs service received 
-            from msgbus token floorset, subject TBW, message {'values': [210, 168, 250, 210], 'status': 0} 
-            if status == 1 then activate, otherwise inverse
-        ''' 
+    def inproc(self, svc, values): # example ('DI1W', [0, 0, 0, 0, 0, 0, 0, 0])
+        ''' Processes the lamp inputs service received  ''' 
         out = None # peaks lugema tegelikku! msgbus kaudu kuula ka seda!
-        #print('svc,values',svc, values, type(svc), type(values)) ##
+        #print('svc, values',svc, values, 'self.out',self.out) ##
         if not isinstance(svc, str):
-            log.error('invalid svc '+str(svc))
+            log.error('invalid svc (must be str) '+str(svc))
             return None
         if not isinstance(values, list): # 'list' in str(type(values)):
-            log.error('invalid values '+str(values))
+            log.error('invalid values (must be list) '+str(values))
             return None
            
-        print('processing svc '+svc+' values '+str(values))
-        currvalues = self.invars[svc] # list
-        for im in range(len(self.invars[svc])): # im = input member
-            mtype = self.in_svc[svc][im][1]
-            log.info(str(im)+' mtype '+str(mtype)+' values[im] '+str(values[im])+' currvalues[im] '+str(currvalues[im]))
-            if values[im] != currvalues[im]:
-                currvalues[im] = values[im]
-                log.info('new value for svc '+svc+', im '+str(im)+', currvalues '+str(currvalues[im]))
+        log.info('processing svc '+svc+' values '+str(values))
+        currvalues = self.invars[svc] # value list for one svc
+        memstypes = self.in_svc[svc]  # members and types for this input service as list of tuples
+        for im in range(len(self.invars[svc])): # im = input member of interest in configuration, not all in svc
+            member = memstypes[im][0]
+            mtype = memstypes[im][1]
+            mvalue = values[member - 1]
+            log.info('in_svc im '+str(im)+' member '+str(member)+', mtype '+str(mtype)+', mvalue '+str(mvalue))
+            if mvalue != currvalues[im]:
+                currvalues[im] = mvalue
+                log.info(svc+'.'+str(member)+' mvalue '+str(mvalue)+', im '+str(im)+', new currvalues[im] '+str(currvalues[im]))
                 #processing according to the mtype    
                 ## manual switches, bits 0..1
                 if mtype == 1:
-                    if values[im] == 1:
+                    if mvalue == 1:
                         out = (self.out ^ 1)
                 elif mtype == 2:
-                    if values[im] == 0:
+                    if mvalue == 0:
                         out = (self.out ^ 1)
                 elif mtype == 3:
                     out = (self.out ^ 1)
                 ## pir sensors, bitvalue 4 to flag
                 if self.darktime == 1: # presence signals to activate light enabled (disactivate always operational it timeout)
                     if mtype == 5:
-                        if values[im] == 1:
+                        if mvalue == 1:
                             out = 1
                     elif mtype == 6:
-                        if values[im] == 0:
+                        if mvalue == 0:
                             out = 1
                     elif mtype == 7:
                         out = 1
                 
             ## level control without change, bitvalue 8 to flag
             if mtype == 9:
-                if values[im] == 1:
+                if mvalue == 1:
                     out = 1
             elif mtype == 10:
-                if values[im] == 0:
+                if mvalue == 0:
                     out = 0
             elif mtype == 11:
-                out = values[im]
+                out = mvalue
             
             ## darktime sensor
             if mtype == 17:
-                if values[im] == 1:
+                if mvalue == 1:
                     self.darktime = 1
             elif mtype == 18:
-                if values[im] == 0:
+                if mvalue == 0:
                     self.darktime = 0
             if mtype == 19: # dark time depends on di level
-                self.darktime = values[im]
+                self.darktime = mvalue
                 
-            self.invars.update({svc: currvalues}) #remember the new valuelist
+        self.invars.update({svc: currvalues}) #remember the new valuelist
             
         if out != None:
             if out != self.out:
+                #print('out change from '+str(self.out)+' to '+str(out))
                 log.info('lamp out change to '+str(out)+', to svc '+str(self.out_svc[0])+'.'+str(self.out_svc[1]))
-                self.d.set_domember(out_svc[0], out_svc[1], out) # svc, member, value
+                self.d.set_dovalue(self.out_svc[0], self.out_svc[1], out) # svc, member, value
                 self.out = out
             #if self.msgbus:
             #    self.msgbus.publish(self.out_svc[0], {'values': [self.out], 'status': 0}) # 
