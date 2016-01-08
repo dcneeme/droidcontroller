@@ -330,7 +330,7 @@ class CommModbus(Comm):
                 return None
 
         else:
-            log.warning('unknown type '+str(type))
+            log.error('unknown type '+str(type)+' for mba '+str(mba)+' reg '+str(reg)+' count '+str(count))
             self.errorcount += 1
             return None
 
