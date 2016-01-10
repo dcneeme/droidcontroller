@@ -92,14 +92,14 @@ class IT5888pwm(object):
 
         try:
             if chan < len(self.bits): # chan is pwm channel index from this do port
-                log.info(self.name+' pwm chan '+str(chan)) ##
+                log.debug(self.name+' pwm chan '+str(chan)) ##
                 if self.values[i] == None or (self.values[i] != None and value != (self.fullvalues[i] & 0x0FFF)) or self.phaseset:
                     self.values[i] = value
                     self.fullvalues[i] = int(value + self.periodics[i] * 0x8000+ self.periodics[i] * 0x4000 + (self.phases[i] << 12)) # phase lock needed for periodic...
                     bit = self.bits[chan]  # the separate bit for phase lock seems unnecessary!
                     #self.mb[self.mbi].write(self.mba, 100 + bit, value=self.fullvalues[i])
                     self.d.set_doword(self.mba, 100 + bit, value=self.fullvalues[i], mbi=self.mbi)
-                    log.info(self.name+'new pwm value '+str(value)+', fullvalue '+str(hex(self.fullvalues[i]))+' set for channel '+str(i)+'/ bit '+str(bit)+', phase '+str(self.phases[i])+', periodic '+str(self.periodics[i]))
+                    log.debug(self.name+' new pwm value '+str(value)+', fullvalue '+str(hex(self.fullvalues[i]))+' set for channel '+str(i)+'/ bit '+str(bit)+', phase '+str(self.phases[i])+', periodic '+str(self.periodics[i]))
             else:
                 log.error('INVALID '+self.name+' chan'+str(chan)+' / bit '+str(bit)+' used! chan should be < len(bits) '+str(len(self.bits))+', self.bits '+str(self.bits))
                 return 1
@@ -119,7 +119,7 @@ class IT5888pwm(object):
                     #self.values = values # tehakse set_value() sees
                     for i in range(len(self.bits)):
                         self.set_value(self.bits[i], values[i])
-                log.info('all changed '+self.name+' PWM values sent to IO')
+                log.debug('all changed '+self.name+' PWM values sent to IO')
             else:
                 log.warning('invalid length for values list:'+str(len(values))+', values '+str(values)+', bits '+str(self.bits))
                 return 1
