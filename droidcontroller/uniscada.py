@@ -348,7 +348,7 @@ class UDPchannel():
     #    return self.last
 
 
-    def unsent(self, maxage=400):   # 24 hours max history to be kept 86400 s
+    def unsent(self, maxage=3600):   # 24 hours max history to be kept 86400 s, trying with 1h first, was 400 s until 12.1.2016
         ''' Counts the non-acknowledged messages and removes older than maxage seconds (24h by default).
             If no more lines in buffer, dump empty table into sql file to avoid rows de ja vue on next start
         '''
@@ -670,10 +670,11 @@ class UDPchannel():
 
                             else:
                                 if sregister == "in": # one such a key in message
-                                    instr = data[data.find("in:")+3:].splitlines()[0].split(',')[0]
-                                    inumm = int(instr) # loodaks integerit
+                                    instr = data[data.find("in:")+3:].splitlines()[0].split(',') # [0]
+                                    inumm = int(instr[0]) # loodaks integerit
+                                    in_ts = int(instr[1])  # TS returned
                                     if inumm > 0:   # valid inum
-                                        msg='got ack '+str(inumm)+' in message: '+data.replace('\n',' ')
+                                        msg='got ack '+str(instr)+' in message: '+data.replace('\n',' ')
                                         log.debug(msg)
                                         if inumm > self.inum:
                                             self.inum = inumm
@@ -681,13 +682,17 @@ class UDPchannel():
 
                                         Cmd="BEGIN IMMEDIATE TRANSACTION" # buff2server, to delete acknowledged rows from the buffer
                                         self.conn.execute(Cmd) # buff2server ack transactioni algus, loeme ja kustutame saadetud read
-                                        Cmd="DELETE from "+self.table+" WHERE inum='"+str(inumm)+"'"  # deleting all rows where inum matches server ack
+                                        #Cmd="DELETE from "+self.table+" WHERE inum='"+str(inumm)+"'"  # deleting all rows where inum matches server ack
+                                        Cmd="DELETE from "+self.table+" WHERE inum='"+str(inumm)+"' or ts_created = '"+str(in_ts)+"'"  # deleting also rows ts_created 
+                                        #  which match with in_ts! 12.1.2016 neeme
+                                        #  trying to avoid repeating messages generation with the same old ts_created... happens if new copy will be created before ack arrives
+                                        
                                         log.debug(Cmd)
                                         try:
                                             self.conn.execute(Cmd) # deleted
                                         except:
                                             msg='problem with '+Cmd+'\n'+str(sys.exc_info()[1])
-                                            log.warning(msg)
+                                            log.error(msg)
                                             #syslog(msg)
                                             time.sleep(1)
                                         self.conn.commit() # buff2server transaction end
