@@ -632,9 +632,9 @@ class SQLgeneral(UDPchannel): # parent class for ACchannels, Dchannels
         return bad
         
         
-    def pic_update(self, mba = 1, filename = ''):
+    def pic_update(self, mba = 1, mbi = 0, filename = ''):
         ''' Updates pic firmware via modbus writes of hex lines into reg 698 '''
-        from droidcontroller.pic_update import PicUpdate
+        from droidcontroller.pic_update import PicUpdate # et ilmaaegu ei tolgendaks
         pic = PicUpdate(mb)
-        mba = int(float(mba)) # igaks juhuks, kui ei ole int
-        return pic.update(mba, filename)
+        #mba = int(float(mba)) # igaks juhuks, kui ei ole int
+        return pic.update(int(mba), int(mbi), filename)

@@ -170,10 +170,11 @@ class PicUpdate(object): # using the existing mb instance
         return res # 0 if ok
 
 
-    def update(self, mba, filename='IOplaat.hex'): # this is for the whole process
+    def update(self, mba, mbi = 0, filename='IOplaat.hex'): # this is for the whole process
         ''' Starts and stops the upload process. pic id is 0 if not stored into registers. Returns crc if simu == 1 '''
         pic_id = 0 # means unknown
-        self.mba = mba # the device id to update
+        self.mba = mba # the device id to update, likely to change every time
+        self.mbi = mbi # may change from one upload to another!
         try:
             devtype = self.mb[self.mbi].read(self.mba,256,1)[0] # 241 = F1h
             oldver = self.mb[self.mbi].read(self.mba,257,1)[0]

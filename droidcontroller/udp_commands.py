@@ -274,9 +274,9 @@ class Commands(SQLgeneral): # p
                     todocode = 1 # failure to delete *.log
 
             elif TODO.split(',')[0] == 'pic_update': # update pic fw
-                if len(TODO.split(',')) == 3: # cmd:pic_update,1,IOplaat.hex
+                if len(TODO.split(',')) == 4: # cmd:pic_update,mba,mbi,IOplaat.hex
                     try:
-                        todocode = s.pic_update(TODO.split(',')[1:3])
+                        todocode = s.pic_update(TODO.split(',')[1:4])
                     except:
                         todocode = 1 # failure to update
                 else:
