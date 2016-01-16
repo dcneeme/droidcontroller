@@ -384,15 +384,14 @@ class RegularComm(SQLgeneral): # r
         self.app_start = int(time.time())
         self.ts_regular = self.app_start - interval # for immediate sending on start
         self.ts = self.app_start
-        self.uptime = [0,0,0]
+        self.uptime = [0,0,0] # sys, app, app_start_ts
         self.host_ip = 'unknown' # controller ip
         self.cpV = 0 # cpu load d%
         self.duV = 0 # disk usage d%
 
         try:
             self.sync_uptime() # sys apptime to uptime[0]
-            #uptime[0]=int(self.subexec('cut -f1 -d. /proc/uptime',1)) # should be avoided on npe, use only once
-            self.uptime[1] = 0
+            self.uptime[1] = 0 # app uptime
             self.uptime[2] = self.uptime[0] # counting on using sys uptime instead of ts (time.time())
         except: # not unix&linux
             pass
@@ -478,35 +477,37 @@ class RegularComm(SQLgeneral): # r
             #value = str(servicetuple[3])
 
             for svc in svclist:
+                status = 0
+                valuestring = ''
                 if svc == 'UTW' or svc == 'TCW': # traffic
                     valuestring = str(udp.traffic[0])+' '+str(udp.traffic[1])+' '+str(tcp.traffic[0])+' '+str(tcp.traffic[1])
-                    if udp.traffic[0]+udp.traffic[1]+tcp.traffic[0]+tcp.traffic[1] < 10000000:
-                        status = 0 # ok
-                    else:
+                    if udp.traffic[0]+udp.traffic[1]+tcp.traffic[0]+tcp.traffic[1] > 10000000:
                         status = 1
 
                 elif svc == 'ULW' or svc == 'UPW': # uptime
                     valuestring = str(self.uptime[0])+' '+str(self.uptime[1]) # diagnostic uptimes, add status!
-                    if (self.uptime[0] > 1800) and (self.uptime[0] > 1800):
-                    #    sendstring += '0\n' # ok
-                        status = 0
-                    else:
+                    if (self.uptime[0] < 1800) or (self.uptime[1] < 1800): # sys, app uptime
                         status = 1
 
                 elif svc == 'IPV' or svc == 'ip' or svc == 'ipV': # ip address currently in use
                     valuestring = self.get_host_ip() # ip address in use from a list starting with tun0
+                    # status = 0 # make it warning if vpn active?
 
                 elif svc == 'mfV': # free memory
                     try:
-                        valuestring = str(int(psutil.virtual_memory()[4]/1000.0))
-                        #valuestring = str(psutil.phymem_usage()[2]) # free memory in bytes
+                        freemem = int(psutil.virtual_memory()[4]/1000.0) # kB
+                        valuestring = str(freemem) # kB
+                        if freemem < 500:
+                            status = 1
                     except:
                         log.warning('psutil.virtual_memory failed')
                         #traceback.print_exc()
                 elif svc == 'cpV': # cpu load %
                     try:
-                        self.cpV = (self.cpV + psutil.cpu_percent())/2.0 # averaging
+                        self.cpV = (self.cpV + psutil.cpu_percent())/2.0 # averaging with previous
                         valuestring = str(int(10 * round(self.cpV,1))) # cpu load %
+                        if self.cpV > 90:
+                            status = 1
                     except:
                         log.warning('psutil.cpu_percent failed')
                         #traceback.print_exc()
@@ -514,6 +515,10 @@ class RegularComm(SQLgeneral): # r
                     try:
                         self.duV = (psutil.disk_usage('/root')[3])
                         valuestring = str(int(10 * round(self.duV,1))) # disk usage % %
+                        if self.duV > 90:
+                            status = 1
+                            if self.duV > 95:
+                                status = 2
                     except:
                         log.warning('psutil.disk_usage failed')
                         #traceback.print_exc()
@@ -529,6 +534,7 @@ class RegularComm(SQLgeneral): # r
 
             self.ts_regular = self.ts
             age = udp.get_age() # send buffer age from uniscada
+
             agestatus = 1
             if age < 20 and age >= 0:
                 agestatus = 0
