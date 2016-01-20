@@ -63,6 +63,9 @@ class ControllerApp(object): # default modbus address of io in controller = 1
     def __init__(self, app, ostype='archlinux', mba=1, mbi=0, ai_readperiod=3, ai_sendperiod=20): # 3s ai reading, 20s send
         self.msgbus = MsgBus()
         self.msgbus.subscribe('debug', 'di_grp_result', 'debugger', self.buslog) ###
+        self.msgbus.subscribe('app_debug1', 'DI1W', 'debugger', self.buslog) ### ajutine
+        self.msgbus.subscribe('app_debug2', 'DI41W', 'debugger', self.buslog) ### ajutine
+        self.msgbus.subscribe('app_debug3', 'DI42W', 'debugger', self.buslog) ### ajutine
         
         self.app = app # client-specific main script
         self.mba = mba # controller io modbus address if dc6888
@@ -70,7 +73,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         self.ac = ACchannels(self.msgbus, in_sql = 'aicochannels.sql', readperiod = 0, sendperiod = ai_sendperiod) # ai and counters
         self.d = Dchannels(self.msgbus, readperiod = 0, sendperiod = 180) # di and do. immediate notification on change, read as often as possible
         self.p = Commands(ostype) # setup and commands from server
-        self.r = RegularComm(interval=12) # interval needs to be below timer value!
+        self.r = RegularComm(interval=12) # interval parameter needs to be less than the scheduler timer value below!
 
         try:
             from droidcontroller.gpio_led import GPIOLED
@@ -102,7 +105,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
 
     def buslog(self, token, subject, message): # self, token, subject, message
         ''' Simple logger. Usable as an example for everything listening msgbus ''' 
-        log.debug('from msgbus token %s, subject %s, message %s', token, subject, str(message))
+        log.info('from msgbus token %s, subject %s, message %s', token, subject, str(message))
         
     
     def get_AVV(self, frm):
@@ -222,24 +225,24 @@ class ControllerApp(object): # default modbus address of io in controller = 1
             sys.stdout.write('D') # some change
             sys.stdout.flush() # flush now, when something was changed
         
-        if (reslist[0] & 1):  # change in di services
+        if (reslist[0] & 1):  # change in di 
             di_dict = self.d.get_chg_dict()
             log.info('di change detected: '+str(di_dict)+', reslist '+str(reslist)) # mis siin on , chg voi svc?
             self.app(sys._getframe().f_code.co_name, attentioncode = 1) # d, a attention bits
-        if (reslist[1] & 1):  # change in do services
+        if (reslist[1] & 1):  # change in do 
             di_dict = self.d.get_chg_dict()
             log.info('do change detected: '+str(di_dict)+', reslist '+str(reslist)) # mis siin on , chg voi svc?
             self.app(sys._getframe().f_code.co_name, attentioncode = 1) # d, a attention bits
         if (reslist[2] & 1):  # change in di services
             di_dict = self.d.get_chg_dict()
-            log.info('svc to send: '+str(di_dict)+', reslist '+str(reslist))
+            log.info('di svc to send: '+str(di_dict)+', reslist '+str(reslist))
             self.udp_comm() # should reset timer too!
             
 
     def ai_reader(self): # AICO reader
         self.ac.doall()
         self.app(sys._getframe().f_code.co_name, attentioncode = 2) # d, a attention bits / use msgbus instead
-        if self.led != None: # ajutine
+        if self.led: # ajutine
             self.led.alarmLED(0)
     
     def regular_svc(self): # FIXME - send on change too! pakkida?

@@ -180,7 +180,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
 
     def sync_di(self): # binary input readings to sqlite, to be executed regularly.
-        ''' Modbus DI registers contebt to dichannels.sql, return 0 if ok. '''
+        ''' Read data from all modbus DI registers to dichannels.sql, return 0 if ok. '''
         res = 0 # returncode
         mba = 0
         val_reg = ''
@@ -324,7 +324,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                         val = int(row[2]) # values bitmap by members
                         #ts_last=int(row[2]) # last reporting time
                         if chg > 0: # message due to bichannel state change
-                            msg='DI service '+val_reg+' needs to be notified, change bitmap '+str(hex(chg))
+                            msg='DI service '+val_reg+' needs to be notified, new val bitmap '+str(hex(val))+', change bitmap '+str(hex(chg))
                             chg_dict.update({val_reg : [chg, val]})  #### FIXME / kahtlane , 1 asemel 3, 2 asemel 6 jne
                             log.info(msg)
                             
@@ -532,7 +532,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 di_value = 0
                 do_value = 0
                 mbi = 0
-                log.debug('do change mba,regadd,bit '+str(int(eval(row[0])))+', '+str(int(eval(row[1])))+', '+str(int(eval(row[2])))+' from '+str(int(eval(row[4])))+' to '+str(int(eval(row[3]))))
+                log.info('do change mba, regadd, bit '+str(int(eval(row[0])))+', '+str(int(eval(row[1])))+', '+str(int(eval(row[2])))+' from '+str(int(eval(row[4])))+' to '+str(int(eval(row[3]))))
                 try:
                     mbi = row[5] if row[5] != '' else 0 # num
                     mba = int(eval(row[0])) # must be number
@@ -573,20 +573,20 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                             try:
                                 respcode = mb[mbi].write(mba, regadd, value=word)
                                 if respcode == 0:
-                                    msg = 'output written - mbi mba regadd value '+str(mbi)+' '+str(mba)+' '+str(regadd)+' '+format("%04x" % word)
+                                    msg = 'sync_do(): output written - mbi mba regadd value '+str(mbi)+' '+str(mba)+' '+str(regadd)+' '+format("%04x" % word)
                                     log.info(msg) ##
                                     res = (res | 1) # change bit
                                 else:
-                                    msg = 'FAILED writing register '+str(mba)+'.'+str(regadd)+', value '+str(value)+', respcode '+str(respcode)
-                                    log.warning(msg)
+                                    msg = 'sync_do() FAILED to write register '+str(mba)+'.'+str(regadd)+', value '+str(value)+', respcode '+str(respcode)
+                                    log.error(msg)
                                     res = (res | 2) # error bit
                             except:
-                                log.warning('FAILED to write mba '+str(mba)+', regadd '+str(regadd)+', value '+str(value))
+                                log.error('sync_do() FAILED to write mba '+str(mba)+', regadd '+str(regadd)+', value '+str(value))
                                 traceback.print_exc()
                                 return 2
 
                         except:
-                            log.warning('sync_do could no read mbi '+str(mbi)+', mba'+str(mba))
+                            log.error('sync_do() FAILED too read mbi '+str(mbi)+', mba'+str(mba))
                             traceback.print_exc()
                             return 2
 
@@ -685,10 +685,12 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
     def set_dovalue(self,svc,member,value): # sets binary variables within services for remote control, based on service name and member number
         ''' Setting member value using sqlgeneral set_membervalue. adding sql table below for that '''
+        log.info('writing output bit for '+svc+'.'+str(member)+' to become '+str(value))
         return s.setby_dimember_do(svc, member, value) # s.set_membervalue(svc,member,value,self.out_sql)
 
-    def set_doword(self,mba,regadd,value,mbi=0): # sets holding register without services ivolvment
-        ''' Setting holding registwer (like pwm channel for pulse or pwm) '''
+    def set_doword(self,mba,regadd,value,mbi=0): # sets holding register without services involvment
+        ''' Setting holding register (like pwm channel for pulse or pwm) '''
+        log.info('writing output register mba '+str(mba)+' with word '+str(hex(value)))
         return mb[mbi].write(mba, regadd, value = value)
 
     def get_doword(self,mba,regadd,count=1,mbi=0): # returns list!

@@ -31,7 +31,7 @@ class UN(object): # Utilities Neeme, use like UN.val2int(14.4)
             
     @staticmethod
     def hex_reverse(hstring):
-        ''' Return bytes in opposite order '''
+        ''' Return bytes in opposite order. Useful for 1wire id conversion '''
         if not 'str' in str(type(hstring)):
             log.warning('string expected as argument')
             return None

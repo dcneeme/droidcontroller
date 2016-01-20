@@ -3,10 +3,16 @@
 from droidcontroller.util_n import UN # for val2int()
 from droidcontroller.statekeeper import StateKeeper
 
-import traceback, logging, time
+import traceback, time
+import logging
 log = logging.getLogger(__name__)
 
-###############
+class DO(object): # parent for Lamp instances 
+    def __init__(self, mbi=0, mba=1, reg=0, bits=[8,9,10,11,12,13,14,15])
+        
+
+
+##############
 class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbus!
     def __init__(self, d, msgbus=None, in_svc={'K1W':[(1,1), (2,1)], 'KAW':[(1,3)], 'DKS':[(1,19)], 'DAS':[(1,6)], 'LAS':[(1,5)]}, 
             out_svc=['DOV',1], name = 'undefined', timeout = None, out = 0): # timeout in s
@@ -64,7 +70,7 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
     
     def listen_proc(self, token, subject, message):
         ''' Returns the value of received service member '''
-        log.info('received from msgbus for '+self.name+':'+subject+', '+str(message))
+        log.info('lamp received from msgbus for '+self.name+':'+subject+', '+str(message))
         values = message['values'] # member index starting from 0
         self.inproc(subject, values)
       
@@ -72,6 +78,9 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
         
     def inproc(self, svc, values): # example ('DI1W', [0, 0, 0, 0, 0, 0, 0, 0])
         ''' Processes the lamp inputs service received  ''' 
+        with open('inproc.log', 'a') as handle: # ei logi msgbus teate puhul???
+            handle.write('processing svc '+svc+' values '+str(values) + '\n')
+            
         out = None # peaks lugema tegelikku! msgbus kaudu kuula ka seda!
         #print('svc, values',svc, values, 'self.out',self.out) ##
         if not isinstance(svc, str):
@@ -82,6 +91,7 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
             return None
            
         log.info('processing svc '+svc+' values '+str(values))
+        print('processing svc '+svc+' values '+str(values)) ##
         currvalues = self.invars[svc] # value list for one svc
         memstypes = self.in_svc[svc]  # members and types for this input service as list of tuples
         for im in range(len(self.invars[svc])): # im = input member of interest in configuration, not all in svc
@@ -92,6 +102,7 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
             if mvalue != currvalues[im]:
                 currvalues[im] = mvalue
                 log.info(svc+'.'+str(member)+' mvalue '+str(mvalue)+', im '+str(im)+', new currvalues[im] '+str(currvalues[im]))
+                print(svc+'.'+str(member)+' mvalue '+str(mvalue)+', im '+str(im)+', new currvalues[im] '+str(currvalues[im])) ##
                 #processing according to the mtype    
                 ## manual switches, bits 0..1
                 if mtype == 1:
@@ -139,6 +150,9 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
             if out != self.out:
                 #print('out change from '+str(self.out)+' to '+str(out))
                 log.info('lamp out change to '+str(out)+', to svc '+str(self.out_svc[0])+'.'+str(self.out_svc[1]))
+                print('lamp out change to '+str(out)+', to svc '+str(self.out_svc[0])+'.'+str(self.out_svc[1]))
+                with open('inproc.log', 'a') as handle: # ei logi msgbus teate puhul???
+                    handle.write('lamp out change to '+str(out)+', to svc '+str(self.out_svc[0])+'.'+str(self.out_svc[1])+ '\n')
                 self.d.set_dovalue(self.out_svc[0], self.out_svc[1], out) # svc, member, value
                 self.out = out
             #if self.msgbus:
