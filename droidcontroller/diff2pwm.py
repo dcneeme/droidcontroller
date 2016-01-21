@@ -19,6 +19,7 @@ class Diff2Pwm(object):
     def __init__(self, mb, mbi=0, mba=1, inreg1=600, inreg2=601, bit=15, diff=30, min=0, max=999, period=1000):
         ''' keep the diff if possible '''
         self.pwm = 0
+        self.mb = mb # CommModbus instance
         self.mbi = mbi # modbus channel, the same for input and output!
         self.mba = mba # slave address for do
         self.bit = bit # pwm channel 8...15
