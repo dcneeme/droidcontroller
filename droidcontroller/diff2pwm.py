@@ -43,7 +43,7 @@ class Diff2Pwm(object):
         invalues = self.mb[self.mbi].read(self.mba, self.inreg1, 2)
         self.pid.setSetpoint(invalues[0]+self.diff)
         self.pid.set_actual(invalues[1])
-        value = pid.output()
+        value = self.pid.output()
         log.info('in '+srt(invalues)+', pwm '+str(value))
         #res = self.output(value)
         return res # 0 is ok
