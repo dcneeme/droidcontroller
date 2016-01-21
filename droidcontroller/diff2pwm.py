@@ -16,7 +16,7 @@ class Diff2Pwm(object):
     ''' Read or listen from msgbus temperatures, write to pwm register, use PID
     '''
 
-    def __init__(self, mb, inreg1=600, inreg2=601, bit=15, diff=30, min=0, max=999, period=1000):
+    def __init__(self, mb, mbi=0, mba=1, inreg1=600, inreg2=601, bit=15, diff=30, min=0, max=999, period=1000):
         ''' keep the diff if possible '''
         self.pwm = 0
         self.mbi = mbi # modbus channel, the same for input and output!
@@ -38,12 +38,13 @@ class Diff2Pwm(object):
         res = self.mb[self.mbi].write(self.mba, 100 + bit, value=fullvalue) # write to pwm register of it5888
         return res # 0 is ok
 
-    def doall(self, value):
-        invalues = mb[self.mbi].read(self.mba, self.inreg1, 2)
+    def doall(self):
+        invalues = self.mb[self.mbi].read(self.mba, self.inreg1, 2)
         self.pid.setSetpoint(invalues[0]+self.diff)
         self.pid.set_actual(invalues[1])
         value = pid.output()
-        res = self.output(value)
+        log.info('in '+srt(invalues)+', pwm '+str(value))
+        #res = self.output(value)
         return res # 0 is ok
 
 
