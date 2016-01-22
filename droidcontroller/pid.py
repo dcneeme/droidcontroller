@@ -330,7 +330,7 @@ class PID:
                     self.tsLimit = self.currtime
                     log.warning('loop '+self.name+' output reached lo limit '+str(out)+' while set='+str(self.setPoint)+', act='+str(self.actual))
 
-        if self.outMin and self.outMax: # to be sure about onLimit, double check
+        if self.outMin != None and self.outMax != None: # to be sure about onLimit, double check
             hyst = 0.03 * (self.outMax - self.outMin) # 3 %
             if out > self.outMin + hyst and out < self.outMax - hyst: # lubatud piires
                 if self.onLimit != 0:
