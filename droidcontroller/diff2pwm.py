@@ -55,7 +55,7 @@ class Diff2Pwm(object):
         fullvalue = int(value + 0x8000 + 0x4000) # phase lock needed for periodic...
         res = self.mb[self.mbi].write(self.mba, self.reg, value=fullvalue) # write to pwm register of it5888
         if res == 0:
-            log.info('sent pwm fullvalue '+str(fullvalue)+' to '+str(self.mbi)+'.'+str(self.mba)+'.'+str(self.reg))
+            log.info('sent pwm value '+str(value)+', fullvalue '+str(fullvalue)+' to '+str(self.mbi)+'.'+str(self.mba)+'.'+str(self.reg))
         else:
             log.error('FAILURE to send pwm fullvalue '+str(fullvalue)+' to '+str(self.mbi)+'.'+str(self.mba)+'.'+str(self.reg))
             return res # 0 is ok
