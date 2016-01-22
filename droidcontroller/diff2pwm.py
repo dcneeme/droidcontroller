@@ -1,6 +1,6 @@
 # This Python file uses the following encoding: utf-8
 
-'''  control pwm based on temp difference '''
+'''  control pwm based on temp difference using io it5888 '''
 
 #from codecs import encode # for encode to work in py3
 import time
@@ -13,30 +13,33 @@ import sys, logging
 log = logging.getLogger(__name__)
 
 class Diff2Pwm(object):
-    ''' Read or listen from msgbus temperatures, write to pwm register, use PID
-    '''
+    ''' React on invalues difference using PID, write to pwm register. period register 150 (IT5888).  '''
 
-    def __init__(self, msgbus, mb, name='undefined', in_svc=['TKW', 1, 3], out_ch=[0,1,115], min=0, max=999, period=1000): # period ms
-        ''' try to use the input svc members equal using pwm on one output periodic channel. include diff in svc member config! '''
+    def __init__(self, mb, name='undefined', out_ch=[0,1,115], min=0, max=499, period=500): # period ms
+        ''' try to use the resact() input values pair for pwm on one output periodic channel.  '''
+        res = 1 # initially not ok
         self.pwm = 0
         self.mb = mb # CommModbus instance
-        self.msgbus = msgbus # CommModbus instance
         self.name = name
         self.mbi = out_ch[0] # modbus channel, the same for input and output!
         self.mba = out_ch[1] # slave address for do
         self.reg = out_ch[2] # register for pwm channel
-        self.msgbus.subscribe(self.name, in_svc[0], self.name, self.react)
-        self.diffmembers = in_svc[1:3]
-
+        
+        try:
+            res = self.mb[self.mbi].write(self.mba, 150, value=period)
+        except:
+            log.error('FAILED to write period into register 150 at mbi.mba '+str(self.mbi)+'.'+str(self.mba))
+            
         # setpoint = 0, P = 1.0, I = 0.01, D = 0.0, min = None, max = None, outmode = 'nolist', name='undefined', dead_time = 0, inv=False):
         self.pid = PID(P=0.3, I=0.1, min=min, max=max) # for pwm control
-        log.info('Diff2Pwm instance created') # pwm higher if the first in_svc member is higher than the second
-
-    def react(self,token, subject, message): # listens to TKW svc
-        ''' listens to the svc TKW, getting input values to compare '''
-        log.info('from msgbus token %s, subject %s, message %s', token, subject, str(message))
-        values = message['values']
-        invalues = [values[self.diffmembers[0] - 1], values[self.diffmembers[1] - 1]]
+        if res == 0:
+            log.info('Diff2Pwm instance created and ready') # pwm higher if the first in_svc member is higher than the second
+        else:
+            log.error('PROBLEM with Diff2Pwm instance! res '+str(res))
+            time.sleep(3)
+            
+            
+    def react(self, invalues): 
         if len(invalues) == 2: # ok
             self.pid.setSetpoint(invalues[0])
             self.pid.set_actual(invalues[1])
@@ -44,13 +47,18 @@ class Diff2Pwm(object):
             res = self.output(outvalue)
             return 0
         else:
-            log.error('INVALID svc members from '+self.in_svc+': values '+str(values)+', invalues '+str(invalues))
+            log.error('INVALID invalues: '+str(invalues))
             return 1
+            
             
     def output(self, value):
         fullvalue = int(value + 0x8000 + 0x4000) # phase lock needed for periodic...
         res = self.mb[self.mbi].write(self.mba, self.reg, value=fullvalue) # write to pwm register of it5888
-        return res # 0 is ok
+        if res == 0:
+            log.info('sent pwm fullvalue '+str(fullvalue)+' to '+str(self.mbi)+'.'+str(self.mba)+'.'+str(self.reg))
+        else:
+            log.error('FAILURE to send pwm fullvalue '+str(fullvalue)+' to '+str(self.mbi)+'.'+str(self.mba)+'.'+str(self.reg))
+            return res # 0 is ok
 
     def test(self, invalues = [0, 0]):
         self.pid.setSetpoint(invalues[0]+self.diff)
