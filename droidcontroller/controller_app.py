@@ -63,9 +63,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
     def __init__(self, app, ostype='archlinux', mba=1, mbi=0, ai_readperiod=3, ai_sendperiod=20): # 3s ai reading, 20s send
         self.msgbus = MsgBus()
         self.msgbus.subscribe('debug', 'di_grp_result', 'debugger', self.buslog) ###
-        self.msgbus.subscribe('app_debug1', 'DI1W', 'debugger', self.buslog) ### ajutine
-        self.msgbus.subscribe('app_debug2', 'DI41W', 'debugger', self.buslog) ### ajutine
-        self.msgbus.subscribe('app_debug3', 'DI42W', 'debugger', self.buslog) ### ajutine
+        #self.msgbus.subscribe('app_debug1', 'TKW', 'debugger', self.buslog) ### ajutine
         
         self.app = app # client-specific main script
         self.mba = mba # controller io modbus address if dc6888
@@ -97,7 +95,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
 
         self.udpcomm_scheduler.start()
         self.regular_scheduler.start()
-        self.di_scheduler.start()
+        ##self.di_scheduler.start() # jonksutab, esialgu ei kasuta
         self.ai_scheduler.start()
         #self.cal_scheduler.start()# FIXME move here from iomain
         log.info('ControllerApp instance created. '+self.AVV)
@@ -105,7 +103,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
 
     def buslog(self, token, subject, message): # self, token, subject, message
         ''' Simple logger. Usable as an example for everything listening msgbus ''' 
-        log.info('from msgbus token %s, subject %s, message %s', token, subject, str(message))
+        log.debug('from msgbus token %s, subject %s, message %s', token, subject, str(message))
         
     
     def get_AVV(self, frm):

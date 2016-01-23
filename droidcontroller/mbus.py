@@ -1,5 +1,6 @@
 # This Python file uses the following encoding: utf-8
 # last change  6.9.2015, added crc chk
+# use d4c/mbus/mbus.py instead! class MBus
 
 ''' 
 mbys.py - query and process kamstrup, sensus or axis heat meters via Mbus protocol, 2400 8E1
@@ -52,7 +53,7 @@ class Mbus:
         Decoding is different, see mb_decode().
     '''
 
-    def __init__(self, port='auto', autokey='FTDI', tout=3, speed=2400, model='sensusPE'):  # tout 1 too small! win port like 'COM27'
+    def __init__(self, port='/dev/ttyUSB0', autokey='FTDI', tout=3, speed=2400, model='sensusPE'):  # tout 1 too small! win port like 'COM27'
         ports = list(serial.tools.list_ports.comports())
         #found = 0
         if port == 'auto':
@@ -341,6 +342,8 @@ class Mbus:
         if self.model == 'kamstrup602':
             start = 27 # check with mtools and compare with debug output
             key = '0406' # 2 hex bytes before data, to be sure
+            hex = 2   # n jan 2016, kooli jaoks
+            length = 4 # n jan 2016, kooli jaoks
         elif self.model == 'kamstrup402': # tapselt nagu axisSKS3
             start = 27 # check with mtools and compare with debug output
             key = '0407' # 2 hex bytes before data, to be sure
@@ -559,11 +562,17 @@ class Mbus:
         coeff = [1.0, 1.0, 1.0]
         length = [4, 4, 4] # bytes
         hex = 1
-        if self.model == 'kamstrup602' or self.model == 'kamstrup402': # checked, 402 is similar
+        if self.model == 'kamstrup602' : # checked, 402 is similar
             start = [45, 51, 57]
             key = ['0459', '045D', '0461'] # inlet outlet diff
             coeff = [0.01, 0.01, 0.01] # 10 mK unit
-            hex = 4 # eriti idiootne kodeering, 10 astmetega 16/koodi vaartused liita!
+            length = [2, 2, 2]
+            hex = 2 # ??? kool
+        elif self.model == 'kamstrup402':
+            start = [45, 51, 57]
+            key = ['0459', '045D', '0461'] # inlet outlet diff
+            coeff = [0.01, 0.01, 0.01] # 10 mK unit
+            hex = 4 # 
         elif self.model == 'sensusPE':
             start = [45, 49, 53] 
             key = ['0a5a', '0a5e', '0b60']

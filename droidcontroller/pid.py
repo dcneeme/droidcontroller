@@ -296,20 +296,19 @@ class PID:
         if dt > 0:                              # no div by zero
             Cd = de/dt                     # derivative term
             if self.out != None:
-                if abs(Cd) < abs(self.out): # seems normal
+                if abs(Cd) < (self.outMax - self.outMin): # seems normal
                     self.Cd = Cd
                 else:
-                    log.warning('IGNORED too large Cd '+str(Cd)+', de '+str(de)+', dt '+str(dt)+', while previous out was '+str(self.out))
+                    log.warning('IGNORED too large Cd '+str(Cd)+', de '+str(de)+', dt '+str(dt)+' above allowed output span')
 
         self.prevtm = self.currtime               # save t for next pass
         self.prev_err = self.error                   # save t-1 self.error
 
         out = self.Cp + (self.Ki * self.Ci) + (self.Kd * self.Cd) # sum the terms and return the result
 
-        log.error('pid debug outMin '+str(self.outMin)+', outMax '+str(self.outMax)) ##
-        #if self.outMax != None and self.outMin != None:
-        #    if self.outMax < self.outMin: # avoid faulty limits
-        #        log.error(self.name+' illegal outmin, outmax values:'+str(self.outMin)+', '+str(self.outMax))
+        if self.outMax != None and self.outMin != None:
+            if self.outMax < self.outMin or self.outMax == self.outMin: # avoid faulty limits
+                log.error(self.name+' illegal outmin, outmax values:'+str(self.outMin)+', '+str(self.outMax))
 
         if self.outMax != None:
             if out > self.outMax:

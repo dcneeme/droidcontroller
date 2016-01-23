@@ -9,7 +9,7 @@ import logging
 log = logging.getLogger(__name__)
 
 class IT5888pwm(object):
-    ''' Takes new periodical PWM values and resends them if changed '''
+    ''' Takes new periodical PWM values and resends them if changed. Use external PID instance for value generation. '''
 
     def __init__(self, d, mbi=0, mba=1, name='IT5888', period=1000, bits=[8], phases=[0], periodics=[], per_reg=150):
         ''' One instance per I/O-module, as period is shared! Define the PWM channels via the bits list.

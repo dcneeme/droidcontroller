@@ -16,7 +16,7 @@ log = logging.getLogger(__name__)
 
 class MbusWaterMeter(object): # FIXME averaging missing!
     ''' Publish values to services via msgbus '''  # FIXME use IOloop too
-    def __init__(self, msgbus, svclist=[['XYW',1,1,'undefined']]): # svc, member, id, name
+    def __init__(self, msgbus=None, svclist=[['XYW',1,1,'undefined']]): # svc, member, id, name
         self.msgbus = msgbus # all communication via msgbus, not to ac  directly!
         self.svclist = svclist # svc, member, id, name
 
@@ -37,7 +37,7 @@ class MbusWaterMeter(object): # FIXME averaging missing!
             reply = self.mbus.recv_frame()
             reply_data = self.mbus.frame_data_parse(reply)
             xml_buff = self.mbus.frame_data_xml(reply_data)
-            #print(xml_buff)
+            print(xml_buff) ##
         except:
             log.error('FAILED to get data from mbus')
             return 1
@@ -58,7 +58,8 @@ class MbusWaterMeter(object): # FIXME averaging missing!
                 if int(x['@id']) == svc[2]:
                     vs = x['Value'] # , x['Unit']) ## key 'Unit' not found?  
                     log.info('found value with id '+str(svc[2])+': '+vs ) # str
-                    self.msgbus.publish(svc[0], {'values': [ int(vs) ], 'status': 0}) # msgbus.publish(val_reg, {'values': values, 'status': status})
+                    if self.msgbus:
+                        self.msgbus.publish(svc[0], {'values': [ int(vs) ], 'status': 0}) # msgbus.publish(val_reg, {'values': values, 'status': status})
                     found += 1
         if found > 0:
             return 0

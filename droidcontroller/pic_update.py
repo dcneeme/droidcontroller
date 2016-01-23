@@ -291,12 +291,17 @@ class PicUpdate(object): # using the existing mb instance
                 
             try:
                 uptime = self.mb[self.mbi].read(self.mba,498,2)[1] # read 32 bit always, use LSB
+                self.mb[self.mbi].write(self.mba, 276, value = 512) # timeout modbus comm 5V pause
+                self.mb[self.mbi].write(self.mba, 277, value = 9) # 5v pause len
+                self.mb[self.mbi].write(self.mba, 278, value = 768) # pic restart timeput if no modbus comm
+                touts = self.mb[self.mbi].read(self.mba, 276, 3) # read 32 bit always, use LSB
                 if uptime < 20 and uptime > 0:
                     #self.log.debug('upload done, pic autorestarted and responsive')
                     log.debug('upload done, pic autorestarted and responsive')
                     ver = self.mb[self.mbi].read(self.mba,257,1)[0]
                     #self.log.info('successfully updated pic fw from '+format("%04x" % oldver)+'h ('+str(oldver)+') to '+format("%04x" % ver)+'h ('+str(ver)+')')
                     log.info('successfully updated pic fw from '+format("%04x" % oldver)+'h ('+str(oldver)+') to '+format("%04x" % ver)+'h ('+str(ver)+')')
+                    log.info('timeout registers 276..278: '+str(touts))
                     return 0
                 else:
                     #self.log.warning('pic uptime incorrect: ' + str(uptime))

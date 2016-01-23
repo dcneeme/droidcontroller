@@ -7,7 +7,8 @@ import time
 import traceback
 #import struct  # struct.unpack for float from hex
 from droidcontroller.pid import PID
-#from droidcontroller.pid import it5888pwm.py
+from droidcontroller.statekeeper import StateKeeper # state
+
 
 import sys, logging
 log = logging.getLogger(__name__)
@@ -15,17 +16,20 @@ log = logging.getLogger(__name__)
 class Diff2Pwm(object):
     ''' React on invalues difference using PID, write to pwm register. period register 150 (IT5888).  '''
 
-    def __init__(self, mb, name='undefined', out_ch=[0,1,115], min=0, max=499, period=500, P=1, I=1): # period ms
+    def __init__(self, mb, name='undefined', out_ch=[0,1,115], outMin=0, outMax=499, period=500, P=1, I=1, D=0, upspeed=None, dnspeed=None): # period ms
         ''' try to use the resact() input values pair for pwm on one output periodic channel.  '''
         res = 1 # initially not ok
-        self.pwm = 0
+        self.pwm = None
         self.mb = mb # CommModbus instance
         self.name = name
+        self.state = StateKeeper()
+        self.upspeed = upspeed
+        self.dnspeed = dnspeed
         self.mbi = out_ch[0] # modbus channel, the same for input and output!
         self.mba = out_ch[1] # slave address for do
         self.reg = out_ch[2] # register for pwm channel
-        self.min = min
-        self.max = max
+        self.outMin = outMin
+        self.outMax = outMax
                 
         try:
             res = self.mb[self.mbi].write(self.mba, 150, value=period)
@@ -33,41 +37,62 @@ class Diff2Pwm(object):
             log.error('FAILED to write period into register 150 at mbi.mba '+str(self.mbi)+'.'+str(self.mba))
             
         # setpoint = 0, P = 1.0, I = 0.01, D = 0.0, min = None, max = None, outmode = 'nolist', name='undefined', dead_time = 0, inv=False):
-        self.pid = PID(name=name, P=P, I=I, min=min, max=max, outmode='list') # for fast pwm control
-        if res == 0:
-            log.info('Diff2Pwm instance created and ready') # pwm higher if the first in_svc member is higher than the second
+        self.pid = PID(name=name, P=P, I=I, D=D, min=self.outMin, max=self.outMax, outmode='list') # for fast pwm control. D mainly for change speed!
+            
+            
+    def react(self, invalues, outMin=None): 
+        if outMin != None:
+            if outMin != self.outMin:
+                self.outMin = outMin
+                self.pid.setMin(self.outMin)
+                log.info(self.name+' new min '+str(self.outMin))
+        if self.outMin != None and ('float' in str(type(self.outMin)) or 'int' in str(type(self.outMin))):
+            pass
         else:
-            log.error('PROBLEM with Diff2Pwm instance! res '+str(res))
-            time.sleep(3)
+            log.error('INVALID self.outMin in '+self.name+' react(): '+str(self.outMin))
+        if self.outMax != None and ('float' in str(type(self.outMax)) or 'int' in str(type(self.outMax))):
+            pass
+        else:
+            log.error('INVALID self.outMax in '+self.name+' react(): '+str(self.outMax))
             
-            
-    def react(self, invalues, min=None): 
-        if min != None:
-            if min != self.min:
-                self.min = min
-                self.pid.setMin(self.min)
-                log.info('set new pid min '+str(self.min))
         if len(invalues) == 2: # ok
+            if self.outMin > 0 or (invalues[0] > invalues[1]):
+                self.state.up() # igal juhul lubatud
             self.pid.setSetpoint(invalues[0])
             self.pid.set_actual(invalues[1])
             pidout = self.pid.output()
             pwm = int(pidout[0])
             pidcomp = pidout[1:4]
-            if pwm > self.max:
-                log.warning('fixing pid output '+str(pwm)+' to max '+str(self.max))
-                pwm = self.max
-            if pwm < self.min:
-                log.warning('fixing pid output '+str(pwm)+' to min '+str(self.min))
-                pwm = self.min
+            chgspeed = pidcomp[2] # p, i, d
+            if self.upspeed != None and self.upspeed > 0:
+                if chgspeed > self.upspeed: # error decreasing fast
+                    self.state.up()
+                    pwm = self.outMax # used for kitchen ventilation
+                    log.warning('fast change up, state up, max pwm '+str(pwm)+', chgspeed '+str(chgspeed)+', upspeed '+str(self.upspeed))
+            if self.dnspeed != None and self.dnspeed < 0:
+                if chgspeed < self.dnspeed and self.outMin == 0:
+                    self.state.dn()
+                    log.warning('fast change down, state dn, chgspeed '+str(chgspeed)+', dnspeed '+str(self.dnspeed))
+            if pwm > self.outMax:
+                log.warning('fixing pid output '+str(pwm)+' to max '+str(self.outMax))
+                pwm = self.outMax
+            if pwm < self.outMin:
+                log.warning('fixing pid output '+str(pwm)+' to min '+str(self.outMin))
+                pwm = self.outMin
             if pwm != self.pwm:
                 self.pwm = pwm
-                res = self.output(pwm)
-                if res == 0:
-                    log.info(self.name+' new pwm value '+str(pwm)+' sent, pidcomp '+str(pidcomp))
-                else:
-                    log.info(self.name+' pwm value unchanged, '+str(pwm)+', pidcomp '+str(pidcomp))
-                    
-            return self.pwm
+            if pwm == 0:
+                self.state.dn()
+                
+            
+            statetuple = self.state.get_state()
+            if statetuple[0] != 1: # not ON
+                pwm = 0 
+            res = self.output(pwm)
+            if pwm != self.pwm:
+                self.pwm = pwm
+                log.info(self.name+' new pwm value '+str(pwm)+' sent, pidcomp '+str(pidcomp))
+            return self.pwm, [pidcomp], statetuple[0] # pidcom is list
             
             
     def output(self, pwm):

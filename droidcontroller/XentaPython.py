@@ -36,7 +36,7 @@ class HTMLDataParser(HTMLParser):
     def handle_starttag(self, tag, attrs):
         if tag == "input":
             if ('type', 'text') in attrs:
-                d = ['','']
+                d = ['','','']
                 for attr_name, attr_value in attrs:
                     if attr_name == 'name':
                         #print('Name: ' + attr_value)
@@ -44,13 +44,15 @@ class HTMLDataParser(HTMLParser):
                     if attr_name == 'value':
                         #print('Value: ' + attr_value)
                         d[1] = attr_value
+                    if attr_name == 'title':
+                        d[2] = attr_value
                 self.data.append(d)
 
 #Data sending to Xenta controller
 def SendData(Url, Cookies, ParsedData):
     #Data extraction (array to string)
     datastring = ''    
-    for variable,value in ParsedData:
+    for variable,value,title in ParsedData:
             datastring += variable + '=' + value + '&'
     datastring += 'Submit=Submit'
     
@@ -66,6 +68,7 @@ def SLSOptimizationRequest(StartValue, MinValue, MaxValue, MinPower, MaxPower, d
         raise NameError('Optimization schedule request SLS server failed!')
     
     #Conversion to format [title, timestamp, value]
+    #NOTE: Power is in MW-s!
     Power_json = []
     for t in range(0, len(PowerSchedule.power)-1):
         Power_json.append({"Title": "Power", "timestamp": PowerSchedule.timeStamps[t][6:-2], "value": PowerSchedule.power[t]})
@@ -80,7 +83,7 @@ def SLSSendData(ValueInside, ValueOutside, Power, deviceID, ConnectionString):
         raise NameError('Data sending to SLS server failed!')
     return
 
-#MD5 ENCRYPTION (Reverse engineered JavaScript)
+#MD5 ENCRYPTION (Reverse engineered from JavaScript)
 #Get data for MD5 encryption
 m = hashlib.md5()
 r_md5 = requests.get(siteUrl + '/sys/GetLoginData.js')
@@ -111,12 +114,13 @@ html_data = r_data.content.decode('utf-8')
 #   Parse html
 parser = HTMLDataParser()
 parser.feed(html_data)
+print(parser.data) # neeme / saadud
 
 #Example: Data sending to Xenta interface
 inputdata = SendData(siteUrl + '/sys/ssi', r_cookie.cookies, parser.data)
 
 #Example: Send data to SLS server
-SLSSendData('10', '10', '1', SLS_deviceID, SLS_DataConnectionString)
+##SLSSendData('10', '10', '1', SLS_deviceID, SLS_DataConnectionString)
 
 #Example: Optimization Request from SLS server
-powerJSON = SLSOptimizationRequest('40', '30', '50', '0.0018', '0.0018', SLS_deviceID)
+##powerJSON = SLSOptimizationRequest('40', '30', '50', '0.0018', '0.0018', SLS_deviceID)

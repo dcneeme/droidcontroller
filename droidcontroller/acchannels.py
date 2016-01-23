@@ -1023,6 +1023,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             if self.msgbus != None:
                 try:
                     self.msgbus.publish(val_reg, {'values': values, 'status': status})
+                    log.info('published to msgbus: '+str(val_reg)+' values '+str(values)+', status '+str(status)) ##
                 except:
                     traceback.print_exc()
             return sendtuple # for regular send or status check
