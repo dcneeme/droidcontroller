@@ -1,6 +1,6 @@
 # This Python file uses the following encoding: utf-8
 
-'''  control pwm based on temp difference using io it5888 '''
+'''  control pwm based on values difference using pid and io it5888 '''
 
 #from codecs import encode # for encode to work in py3
 import time
@@ -43,22 +43,26 @@ class Diff2Pwm(object):
         if len(invalues) == 2: # ok
             self.pid.setSetpoint(invalues[0])
             self.pid.set_actual(invalues[1])
-            outvalue = int(self.pid.output())
-            res = self.output(outvalue)
+            pwm = int(self.pid.output())
+            if pwm != self.pwm:
+                res = self.output(pwm)
+                self.pwm = pwm
+            else: # no change
+                log.info('no change for pwm '+str(pwm))
             return 0
         else:
             log.error('INVALID invalues: '+str(invalues))
             return 1
             
             
-    def output(self, value):
-        fullvalue = int(value + 0x8000 + 0x4000) # phase lock needed for periodic...
+    def output(self, pwm):
+        fullvalue = int(pwm + 0x8000 + 0x4000) # phase lock needed for periodic...
         res = self.mb[self.mbi].write(self.mba, self.reg, value=fullvalue) # write to pwm register of it5888
         if res == 0:
-            log.info('sent pwm value '+str(value)+', fullvalue '+str(fullvalue)+' to '+str(self.mbi)+'.'+str(self.mba)+'.'+str(self.reg))
+            log.info('sent pwm value '+str(pwm)+', fullvalue '+str(fullvalue)+' to '+str(self.mbi)+'.'+str(self.mba)+'.'+str(self.reg))
         else:
             log.error('FAILURE to send pwm fullvalue '+str(fullvalue)+' to '+str(self.mbi)+'.'+str(self.mba)+'.'+str(self.reg))
-            return res # 0 is ok
+            return res
 
     def test(self, invalues = [0, 0]):
         self.pid.setSetpoint(invalues[0]+self.diff)
