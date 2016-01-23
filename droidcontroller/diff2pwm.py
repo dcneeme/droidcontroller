@@ -24,6 +24,8 @@ class Diff2Pwm(object):
         self.mbi = out_ch[0] # modbus channel, the same for input and output!
         self.mba = out_ch[1] # slave address for do
         self.reg = out_ch[2] # register for pwm channel
+        self.min = min
+        self.max = max
         
         try:
             res = self.mb[self.mbi].write(self.mba, 150, value=period)
@@ -44,9 +46,17 @@ class Diff2Pwm(object):
             self.pid.setSetpoint(invalues[0])
             self.pid.set_actual(invalues[1])
             pwm = int(self.pid.output())
+            if pwm > self.max:
+                log.warning('fixing pid output '+str(pwm)+' to max '+str(self.max))
+                pwm = self.max
+            if pwm < self.min:
+                log.warning('fixing pid output '+str(pwm)+' to min '+str(self.min))
+                pwm = self.min
             if pwm != self.pwm:
-                res = self.output(pwm)
                 self.pwm = pwm
+                res = self.output(pwm)
+                if res == 0:
+                    log.info(self.name+' new pwm value '+str(pwm)+' sent')
             return self.pwm
             
             
