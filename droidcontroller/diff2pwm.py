@@ -47,12 +47,7 @@ class Diff2Pwm(object):
             if pwm != self.pwm:
                 res = self.output(pwm)
                 self.pwm = pwm
-            else: # no change
-                log.info('no change for pwm '+str(pwm))
-            return 0
-        else:
-            log.error('INVALID invalues: '+str(invalues))
-            return 1
+            return self.pwm
             
             
     def output(self, pwm):
