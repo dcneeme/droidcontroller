@@ -41,6 +41,8 @@ class PID:
         self.tsLimit = 0 # timestamp of reaching the saturation
         self.actual = None
         self.out = None
+        self.outMin = min # min allowed output
+        self.outMax = max # max allowed output
         self.setSetpoint(setpoint) # this value will be compared to output() parameter to produce output value
         self.setKp(P)
         self.setKi(I)
@@ -53,7 +55,8 @@ class PID:
         self.noint = 0 # internal saturation-initiated dead time signal to prevent outer loop integration in one direction
         self.Initialize()
         msg=str(self.getvars())
-        log.info(msg)
+        log.info(self.name+' init done, '+msg)
+        time.sleep(2)
 
 
     def set_actual(self, invar):
@@ -174,17 +177,11 @@ class PID:
 
     def setMin(self, invar):
         ''' Set lower limit for output    '''
-        try:
-            #print('pid: trying to set new outMin '+str(invar)+' while outMax='+str(self.outMax)) # debug
-            if self.Ki > 0 and invar != None  and self.outMin != invar:
-                log.info('pid: setMin with initialize to '+str(invar))
-                self.outMin = invar
-                self.Initialize()
-            else:
-                self.outMin = invar
-        except:
+        if invar != None and ('float' in str(type(invar)) or 'int' in str(type(invar))):
+            log.info('pid: outMin set to '+str(invar))
             self.outMin = invar
-
+        else:
+            log.error('INVALID value for outMin: '+str(invar))
 
     def getMin(self):
         return self.outMin
@@ -192,16 +189,11 @@ class PID:
 
     def setMax(self, invar):
         ''' Set upper limit for output    '''
-        try:
-            #print('pid: trying to set new outMax '+str(invar)+' while outMin='+str(self.outMin)) # debug
-            if self.Ki > 0 and invar != None  and self.outMax != invar:
-                log.info('pid: setMax with initialize '+str(invar))
-                self.outMax = invar
-                self.Initialize()
-            else:
-                self.outMax = invar
-        except:
+        if invar != None and ('float' in str(type(invar)) or 'int' in str(type(invar))):
+            log.info('outMin set to '+str(invar))
             self.outMax = invar
+        else:
+            log.error('INVALID value for outMax: '+str(invar))
 
 
     def getMax(self):
@@ -302,18 +294,24 @@ class PID:
 
         self.Cd = 0
         if dt > 0:                              # no div by zero
-            self.Cd = de/dt                     # derivative term
+            Cd = de/dt                     # derivative term
+            if self.out != None:
+                if abs(Cd) < abs(self.out): # seems normal
+                    self.Cd = Cd
+                else:
+                    log.warning('IGNORED too large Cd '+str(Cd)+', de '+str(de)+', dt '+str(dt)+', while previous out was '+str(self.out))
 
         self.prevtm = self.currtime               # save t for next pass
         self.prev_err = self.error                   # save t-1 self.error
 
         out = self.Cp + (self.Ki * self.Ci) + (self.Kd * self.Cd) # sum the terms and return the result
 
-        if self.outMax is not None and self.outMin is not None:
-            if not self.outMax > self.outMin: # avoid faulty limits
-                log.warning(self.name+' illegal outmin, outmax values:'+str(self.outMin)+', '+str(self.outMax)) # important notice!
+        log.error('pid debug outMin '+str(self.outMin)+', outMax '+str(self.outMax)) ##
+        #if self.outMax != None and self.outMin != None:
+        #    if self.outMax < self.outMin: # avoid faulty limits
+        #        log.error(self.name+' illegal outmin, outmax values:'+str(self.outMin)+', '+str(self.outMax))
 
-        if self.outMax is not None:
+        if self.outMax != None:
             if out > self.outMax:
                 out = self.outMax
                 if self.onLimit != 1:
@@ -351,9 +349,9 @@ class PID:
 
         self.out = out
         if self.outmode == 'list':
-            return out, self.Cp, (self.Ki * self.Ci), (self.Kd * self.Cd), self.error, self.onLimit, self.extnoint
+            return round(out), round(self.Cp), round(self.Ki * self.Ci), round(self.Kd * self.Cd), round(self.error), self.onLimit, self.extnoint
         else:
-            return out # this will be the only way
+            return out # summary value only
 
 
 class ThreeStep:
