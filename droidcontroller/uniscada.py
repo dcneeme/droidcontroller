@@ -436,7 +436,7 @@ class UDPchannel():
         ts_created = 0 # local
         svc_count = 0 # local
         sendstring = ''
-        cur = self.conn.cursor()
+        #cur = self.conn.cursor()
         cur2 = self.conn.cursor()
         limit = self.sk.get_state()[0] * 9 + 1  ## 1 key:value to try if conn down, 5 if up. 100 is too much, above 1 kB ##
         age = 0 # the oldest, will be self.age later
@@ -462,15 +462,15 @@ class UDPchannel():
 
         self.unsent()  # delete too old lines, count the rest
 
-        Cmd = "BEGIN IMMEDIATE TRANSACTION" # buff2server
+        Cmd = "BEGIN IMMEDIATE TRANSACTION" # buff2server first try to send, assigning inum
         try:
             self.conn.execute(Cmd)
             #Cmd = 'select min(ts_created+0) from '+self.table # the oldest timestamp
             Cmd = 'select ts_created from '+self.table+' group by ts_created limit '+str(limit) # find the oldest creation timestamp(s)
             #log.info(Cmd) ##
-            cur.execute(Cmd)
+            self.cur.execute(Cmd)
 
-            for row in cur: # ts alusel, iga ts jaoks oma in
+            for row in self.cur: # ts alusel, iga ts jaoks oma in
                 ts_created = int(round(row[0],0)) if row[0] != '' else 0 # should be int
 
                 #if age == 0: # vanim, vaid esimesel lugemisel
@@ -583,16 +583,19 @@ class UDPchannel():
             Returns the number of waiting to be deleted messages, the earliest and the latest timestamps. '''
         if mode == 0: # just print the waiting messages
             Cmd ="SELECT * from "+self.table
-            cur = self.conn.cursor()
-            cur.execute(Cmd)
+            self.cur.execute(Cmd)
             for row in cur:
                 print(repr(row))
         elif mode == 1: # stats
             Cmd ="SELECT count(ts_created),min(ts_created),max(ts_created) from "+self.table
-            cur = self.conn.cursor()
-            cur.execute(Cmd)
+            self.cur.execute(Cmd)
             for row in cur:
                 return row[0],row[1],row[2] # print(repr(row))
+        elif mode == 2: # sent but not acked
+            Cmd ="SELECT count(ts_created) from "+self.table+" where inum>0" # not deleted due to no ack received
+            self.cur.execute(Cmd)
+            for row in self.cur:
+                return row[0]
 
 
     def datasplit(self, data):
