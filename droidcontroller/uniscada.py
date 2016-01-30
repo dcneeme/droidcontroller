@@ -40,7 +40,7 @@ class UDPchannel():
 
     '''
 
-    def __init__(self, id ='000000000000', ip='127.0.0.1', port=44445, receive_timeout=0.1, retrysend_delay=3, loghost='0.0.0.0', logport=514, copynotifier=None): # delays in seconds
+    def __init__(self, id ='000000000000', ip='127.0.0.1', port=44445, receive_timeout=0.1, retrysend_delay=5, loghost='0.0.0.0', logport=514, copynotifier=None): # delays in seconds
         #from droidcontroller.connstate import ConnState
         from droidcontroller.statekeeper import StateKeeper
         self.sk = StateKeeper(off_tout=300, on_tout=0) # conn state with up/down times based on udp received
@@ -266,7 +266,7 @@ class UDPchannel():
             Cmd = "select max(inum) from "+self.table
             self.cur.execute(Cmd)
             for row in self.cur:
-                self.inum = row[0] + 1
+                self.inum = row[0] + 1 if row[0] != None else 1
                 log.warning('makebuffer has set inum to '+str(self.inum))
             return 0
 
@@ -440,28 +440,31 @@ class UDPchannel():
         cur2 = self.conn.cursor()
         limit = self.sk.get_state()[0] * 9 + 1  ## 1 key:value to try if conn down, 5 if up. 100 is too much, above 1 kB ##
         age = 0 # the oldest, will be self.age later
-        #log.info('...trying to select and send max '+str(limit)+' buffer lines')
+        #first find out if there are unacked rows in the buffer. if there is, these should be resent.
+        unacked = self.read_buffer(mode = 2)
+        if unacked > 0:
+            if self.sk.get_state()[0] == 0: # no conn
+                timetoretry = int(self.ts_udpunsent + 3 * self.retrysend_delay) # try less often during conn break
+            else: # conn ok
+                timetoretry = int(self.ts_udpsent + self.retrysend_delay) ### FIXME  use age to add delay?
+                
+            if self.ts_udpsent > self.ts_udpunsent:
+                log.debug('resend need, using shorter retrysend_delay, conn ok') ##
+                timetoretry = int(self.ts_udpsent + self.retrysend_delay)
+            else:
+                log.warning('resend need, using longer retrysend_delay, conn NOT ok') ##
+                timetoretry = int(self.ts_udpunsent + 10 * self.retrysend_delay) # longer retry delay with no conn
 
-        if self.sk.get_state()[0] == 0: # no conn
-            timetoretry = int(self.ts_udpunsent + 3 * self.retrysend_delay) # try less often during conn break
-        else: # conn ok
-            timetoretry = int(self.ts_udpsent + self.retrysend_delay) ### FIXME  use age to add delay?
+            if self.ts < timetoretry: # too early to send again
+                log.info('resend need, conn state '+str(self.sk.get_state()[0])+'. wait with buff_resend until timetoretry '+str(int(timetoretry))) ##
+                return 0 # perhaps next time
             
-        if self.ts_udpsent > self.ts_udpunsent:
-            log.debug('using shorter retrysend_delay, conn ok') ##
-            timetoretry = int(self.ts_udpsent + self.retrysend_delay)
-        else:
-            log.warning('using longer retrysend_delay, conn NOT ok') ##
-            timetoretry = int(self.ts_udpunsent + 10 * self.retrysend_delay) # longer retry delay with no conn
-
-        if self.ts < timetoretry: # too early to send again
-            log.debug('conn state '+str(self.sk.get_state()[0])+'. wait with buff2server until timetoretry '+str(int(timetoretry))) ##
-            return 0 # perhaps next time
-        else:
-            log.debug('buff2server execution due to time '+str(self.ts-timetoretry)+' s past timetoretry '+str(timetoretry))
-
-        self.unsent()  # delete too old lines, count the rest
-
+            log.info('buff_resend execution due to time '+str(self.ts-timetoretry)+' s past timetoretry '+str(timetoretry))
+            self.buff_resend()
+            self.unsent()  # delete too old lines, count the rest
+            return 0
+        
+        ## no unacked rows found, lets try to send next rows
         Cmd = "BEGIN IMMEDIATE TRANSACTION" # buff2server first try to send, assigning inum
         try:
             self.conn.execute(Cmd)
@@ -522,9 +525,72 @@ class UDPchannel():
             traceback.print_exc()
             return 1
 
+    def buff_resend(self):
+        ''' Used to resend the unacked rows, delays sending newer data via buffer '''
+        age =0
+        cur2 = self.conn.cursor()
+        ts_created = 0 # local
+        svc_count = 0 # local
+        sendstring = ''
+        Cmd = "BEGIN IMMEDIATE TRANSACTION" # buff2server first try to send, assigning inum
+        try:
+            self.conn.execute(Cmd)
+            Cmd = 'select inum, ts_created from '+self.table+' where inum>0 group by inum'
+            #log.info(Cmd) ##
+            self.cur.execute(Cmd)
+
+            for row in self.cur: # iga inum jaoks oma teenused
+                inum = row[0]
+                ts_created = row[1]
+
+                if (self.ts - ts_created) > age:
+                    age = int(self.ts - ts_created) # find the oldest in the group
+
+                log.debug('resending row with inum '+str(inum)+', age '+str(self.ts - ts_created)+', the oldest age '+str(age))
+                sendstr = "in:" + str(inum) + ","+str(ts_created)+"\n" # start the new in: block
+                Cmd = 'SELECT * from '+self.table+' where inum='+str(inum)
+                log.debug('selecting rows for inum'+str(self.inum)+': '+Cmd) # debug
+                cur2.execute(Cmd)
+                self.age = age # the oldest in these grouped timestamps
+
+                for srow in cur2:
+                    svc_count += 1
+                    sta_reg = srow[0]
+                    status = srow[1] if srow[1] != '' else 0
+                    val_reg = srow[2]
+                    value = srow[3]
+                    if val_reg != '':
+                        sendstr += val_reg+":"+str(value)+"\n"
+                    if sta_reg != '':
+                        sendstr += sta_reg+":"+str(status)+"\n"
+
+                if len(sendstr) > 0:
+                    sendstring += sendstr
+                    #log.debug('added to sendstring in related sendstr: '+sendstr.replace('\n',' ')) ###
+                    Cmd = "update "+self.table+" set ts_tried="+str(int(self.ts))+" where inum="+str(self.inum)
+                    log.debug('buffer update cmd: '+Cmd) # update all rows with this ts_creted together
+                    self.conn.execute(Cmd)
+                else:
+                    log.warning('!! NO sendstring?')
+
+            # ts loop end
+            self.conn.commit() # buff2server transaction end
+
+            if svc_count > 0: # there is something to be sent!
+                sendstring = "id:" + str(self.host_id) + "\n" + sendstring # alustame sellega datagrammi
+                log.debug('going to udpsend AGAIN from buff2server, svc_count '+str(svc_count)) ##
+                self.udpsend(sendstring, self.age, resend=True) # sending away. self.age is used by baV svc too.
+            return 0
 
 
-    def udpsend(self, sendstring = '', age = 0): # actual udp sending, no resend. give message as parameter. used by buff2server too.
+        except:
+            log.warning('PROBLEM with creating message to be sent based on '+self.table)
+            traceback.print_exc()
+            return 1
+
+        
+
+    def udpsend(self, sendstring = '', age = 0, resend=False): # actual udp sending, no resend. give message as parameter. used by buff2server too.
         ''' Sends UDP data immediately, without buffer, adding self.inum if ask_ack == True. DO NOT MISUSE, prevents gap filling!
             Only the key:value pairs with similar timestamp are combined into one message!
             Common for all included keyvalue pairs (ts) should be included in the string to send.
@@ -540,8 +606,12 @@ class UDPchannel():
             sendstring = 'id:'+str(self.host_id)+'\n'+sendstring
             log.warning('added id to the sendstring to '+str(self.saddr)+': '+sendstring)
 
-        self.traffic[1] = self.traffic[1] + len(sendstring) # adding to the outgoing UDP byte counter
-
+        if resend:
+            log.info('going to REsend '+str(len(sendstring))+' bytes: '+sendstring.replace('\n',' '))
+        else:
+            log.info('going to send '+str(len(sendstring))+' bytes')
+        
+        
         if 'led' in dir(self):
             self.led.commLED(0) # off, blinking shows sending and time to ack
 
@@ -556,7 +626,10 @@ class UDPchannel():
         try:
             sendlen = self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr) # tagastab saadetud baitide arvu
             self.traffic[1] += sendlen # traffic counter udp out
-            msg = '==>> sent ' +str(sendlen)+' bytes with age '+str(age)+' to '+str(repr(self.saddr))+' '+sendstring.replace('\n',' ')   # show as one line
+            if resend:
+                msg = '==>> REsent ' +str(sendlen)+' bytes with age '+str(age)+' to '+str(repr(self.saddr))+' '+sendstring.replace('\n',' ')   # show as one line
+            else:
+                msg = '==>> sent ' +str(sendlen)+' bytes with age '+str(age)+' to '+str(repr(self.saddr))+' '+sendstring.replace('\n',' ')   # show as one line
             log.info(msg)
             #syslog(msg)
             sendstring = ''
@@ -564,13 +637,11 @@ class UDPchannel():
             self.sk_send.up() # send success
             return int(sendlen)
         except:
-            #msg = 'udp send failure to '+str(repr(self.saddr))+' for '+str(int(self.ts - self.ts_udpsent))+' s, '+str(self.linecount)+' rows dumped, '+str(self.undumped)+' undumped' # cannot send, problem with connectivity
-            #syslog(msg)
             msg = 'send FAILURE to'+str(self.saddr)+' for '+str(int(self.ts - self.ts_udpsent))+' s, '+str(self.linecount)+' dumped rows'
             log.warning(msg)
             self.sk_send.dn() # FIXME this should be used instead of below...
             self.ts_udpunsent = self.ts # last UNsuccessful udp send
-            #traceback.print_exc()
+            traceback.print_exc()
 
             if 'led' in dir(self):
                 self.led.alarmLED(1) # send failure
@@ -644,7 +715,7 @@ class UDPchannel():
         if len(datagram) > 0: # something arrived
             #log.info('>>> got from receiver '+str(repr(data)))
             self.traffic[0] = self.traffic[0]+len(datagram) # adding top the incoming UDP byte counter
-            log.info('<<<< got from server '+str(datagram.replace('\n', ' ')))
+            log.info('<<== got from server '+str(datagram.replace('\n', ' ')))
 
             if (int(raddr[1]) < 1 or int(raddr[1]) > 65536):
                 msg='illegal remote port '+str(raddr[1])+' in the message received from '+raddr[0]
