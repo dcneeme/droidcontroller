@@ -72,7 +72,7 @@ class UDPchannel():
         self.UDPSock = socket(AF_INET,SOCK_DGRAM)
         self.UDPSock.settimeout(receive_timeout)
         self.retrysend_delay = retrysend_delay
-        self.inum = 0 # sent message counter
+        self.inum = 10000 # initially, sent message counter - MUST BE bigger than the highest 'in:' in the buffer!
 
         self.UDPlogSock = socket(AF_INET,SOCK_DGRAM)
         self.UDPlogSock.settimeout(None) # for syslog
@@ -96,7 +96,7 @@ class UDPchannel():
         self.ts_udpunsent = self.ts # failed send timestamp
 
         self.conn = sqlite3.connect(':memory:')
-        #self.cur=self.conn.cursor() # cursors to read data from tables / cursor can be local
+        self.cur = self.conn.cursor() # local cursors can be added if needed
         self.makebuffer() # create buffer table for unsent messages
         self.linecount = 0 # lines in buffer
         self.undumped = 0 # not yet dumped into buff2server.sql
@@ -209,8 +209,8 @@ class UDPchannel():
                 log.warning('invalid bytes_out',bytes_out)
 
 
-    def set_inum(self,inum = 0): # set message counter
-        self.inum=inum
+    def set_inum(self, inum = 0): # set message counter, hardly needed...
+        self.inum = inum
 
 
     def get_inum(self):  #get message counter
@@ -224,7 +224,7 @@ class UDPchannel():
     def sqlread(self, table): # drops table and reads from file <table>.sql that must exist
         ''' restore buffer from dump. basically the same as in sqlgeneral.py '''
         sql = ''
-        filename=table+'.sql' # the file to read from
+        filename = table+'.sql' # the file to read from
         try:
             if os.path.getsize(filename) > 50:
                 msg = 'found '+filename
@@ -259,10 +259,15 @@ class UDPchannel():
 
 
     def makebuffer(self): # rereads buffer dump or creates new empty one if dump does not exist
-        ''' Old dumped rows in buffer will be sent first if not empty '''
+        ''' Recreates table content from dumped sql and sets the variable self.inum '''
 
         if self.sqlread(self.table) == 0: # dump read ok
             log.info('reusing buffer dump to fill the possible gaps')
+            Cmd = "select max(inum) from "+self.table
+            self.cur.execute(Cmd)
+            for row in self.cur:
+                self.inum = row[0] + 1
+                log.warning('makebuffer has set inum to '+str(self.inum))
             return 0
 
         else: # create new table
@@ -273,6 +278,7 @@ class UDPchannel():
                 self.conn.executescript(sql) # read table into database
                 self.conn.commit()
                 msg='created empty table '+self.table
+                self.inum = 1
                 log.info(msg)
                 return 0
             except:
@@ -282,13 +288,14 @@ class UDPchannel():
                 return 1
 
 
-    def delete_buffer(self): # empty buffer
+    def delete_buffer(self): # empty buffer, NOT USED by anybody? 
         Cmd = 'delete from '+self.table
         try:
             self.conn.execute(Cmd)
             self.conn.commit()
             log.debug('buffer content deleted')
             self.dump_buffer() # empty sql file too!
+            self.inum = 5000
         except:
             traceback.print_exc()
 
@@ -384,7 +391,8 @@ class UDPchannel():
             if linecount > self.linecount + 100: # dump again while the table keeps increasing
                 msg=str(linecount)+' messages to be dumped from table '+self.table+'!'
             elif linecount == 0 and self.linecount > 0: # dump empty table into sql file
-                msg='empty buffer to be dumped from table '+self.table+', sync!'
+                msg='empty buffer to be dumped from table '+self.table+', sync! self.inum became 1'
+                self.inum = 1 # starting from low inum again, so inum indicates the buffer size
 
             if msg != '':
                 log.info(msg)
@@ -420,6 +428,9 @@ class UDPchannel():
 
             buff2server rows successfully sent will be later deleted by udpread()
             (based on one or more in: contained in the received  message).
+            
+            do not try to send and assign inum to next rows if there are undeleted rows with inum.
+            resend the already sent rows only until there are no rows waiting for ack and deletion.
         '''
         timetoretry = 0 # local
         ts_created = 0 # local
@@ -434,7 +445,8 @@ class UDPchannel():
         if self.sk.get_state()[0] == 0: # no conn
             timetoretry = int(self.ts_udpunsent + 3 * self.retrysend_delay) # try less often during conn break
         else: # conn ok
-            timetoretry = int(self.ts_udpsent + self.retrysend_delay)
+            timetoretry = int(self.ts_udpsent + self.retrysend_delay) ### FIXME  use age to add delay?
+            
         if self.ts_udpsent > self.ts_udpunsent:
             log.debug('using shorter retrysend_delay, conn ok') ##
             timetoretry = int(self.ts_udpsent + self.retrysend_delay)
@@ -454,7 +466,7 @@ class UDPchannel():
         try:
             self.conn.execute(Cmd)
             #Cmd = 'select min(ts_created+0) from '+self.table # the oldest timestamp
-            Cmd = 'select ts_created+0 from '+self.table+' group by ts_created limit '+str(limit) # find the oldest creation timestamp(s)
+            Cmd = 'select ts_created from '+self.table+' group by ts_created limit '+str(limit) # find the oldest creation timestamp(s)
             #log.info(Cmd) ##
             cur.execute(Cmd)
 
@@ -467,7 +479,7 @@ class UDPchannel():
 
                 log.debug('processing ts_created '+str(ts_created)+', age '+str(self.ts - ts_created)+', the oldest age '+str(age))
                 #if ts_created > 1433000000: # valid ts AGA kui on vale siis mingu serveri aeg
-                self.inum += 1 # increase the message number  for every ts_created
+                self.inum += 1 # increase the message number  for every ts_created (forever?)
                 sendstr = "in:" + str(self.inum) + ","+str(ts_created)+"\n" # start the new in: block
                 Cmd = 'SELECT * from '+self.table+' where ts_created='+str(ts_created)
                 log.debug('selecting rows for inum'+str(self.inum)+': '+Cmd) # debug
@@ -501,7 +513,7 @@ class UDPchannel():
                 #sendstring = "in:" + str(self.inum) + ","+str(ts_created)+"\n" + sendstring # in alusel vastuses toimub puhvrist kustutamine
                 sendstring = "id:" + str(self.host_id) + "\n" + sendstring # alustame sellega datagrammi
                 log.debug('going to udpsend from buff2server, svc_count '+str(svc_count)+', row limit: '+str(limit)) ##
-                self.udpsend(sendstring, self.age) # sending away
+                self.udpsend(sendstring, self.age) # sending away. self.age is used by baV svc too.
             return 0
 
 
@@ -611,6 +623,7 @@ class UDPchannel():
             If the received datagram contains more data, these key:value pairs are
             returned as dictionary.
         '''
+        cur = self.conn.cursor()  # testlugemiseks mida kustutama hakatakse
         datagram = ''
         indata =[]
         data = ''
@@ -683,11 +696,19 @@ class UDPchannel():
                                         Cmd="BEGIN IMMEDIATE TRANSACTION" # buff2server, to delete acknowledged rows from the buffer
                                         self.conn.execute(Cmd) # buff2server ack transactioni algus, loeme ja kustutame saadetud read
                                         #Cmd="DELETE from "+self.table+" WHERE inum='"+str(inumm)+"'"  # deleting all rows where inum matches server ack
-                                        Cmd="DELETE from "+self.table+" WHERE inum='"+str(inumm)+"' or ts_created = '"+str(in_ts)+"'"  # deleting also rows ts_created 
+                                        #Cmd="DELETE from "+self.table+" WHERE inum='"+str(inumm)+"' or ts_created = '"+str(in_ts)+"'"  # deleting also rows ts_created 
+                                        #Cmd="DELETE from "+self.table+" WHERE inum+0="+str(inumm)+" or ts_created+0<"+str(in_ts)+"-60 or inum+0<"+str(inumm)+"-20"  # deleting also rows ts_created 
+                                        ## uurime miks buffer age kasvama hakkab...
+                                        Cmd="SELECT * from "+self.table+" WHERE inum>0 and (inum="+str(inumm)+" or ts_created<"+str(in_ts)+"-60 or inum<"+str(inumm)+"-20)"  # deleting also rows ts_created 
+                                        self.cur.execute(Cmd) ##
+                                        rows2delete = self.cur.fetchall() ##
+                                        print('rows to delete from buffer',rows2delete) ##
+                                        
+                                        Cmd="DELETE from "+self.table+" WHERE inum>0 and (inum="+str(inumm)+" or ts_created<"+str(in_ts)+"-60 or inum<"+str(inumm)+"-20)"  # deleting also rows ts_created 
                                         #  which match with in_ts! 12.1.2016 neeme
                                         #  trying to avoid repeating messages generation with the same old ts_created... happens if new copy will be created before ack arrives
                                         
-                                        log.debug(Cmd)
+                                        log.info(Cmd) ## in_ts and delete debug
                                         try:
                                             self.conn.execute(Cmd) # deleted
                                         except:
