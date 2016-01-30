@@ -263,7 +263,12 @@ class Commands(SQLgeneral): # p
                             s.report_setup() # let the server know about new setup
                 else: # wrong number of parameters
                     todocode = 1
-
+            
+            elif TODO == 'dump_buffer':
+                todocode = udp.dump_buffer()
+                log.info('dump_buffer tried, todocode '+str(todocode))
+                
+                    
             elif TODO.split(',')[0] == 'RMLOG': # delete log files in working directory (d4c)
                 files = glob.glob('*.log')
                 try:
