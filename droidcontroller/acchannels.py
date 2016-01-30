@@ -302,7 +302,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     result = mb[mbi].read(mba, regadd, count=count, type=regtype) # client.read_holding_registers(address=regadd, count=1, unit=mba)
                     msg += ', raw: '+str(result)
                     if self.msgbus != None:
-                        self.msgbus.publish('di_grp_result', {'mbi': mbi, 'mba': mba, 'regadd': regadd, 'result': result})
+                        self.msgbus.publish('ai_grp_result', {'mbi': mbi, 'mba': mba, 'regadd': regadd, 'result': result})
                 else:
                     msg += ' -- no mb[]!'
 
@@ -1023,7 +1023,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             if self.msgbus != None:
                 try:
                     self.msgbus.publish(val_reg, {'values': values, 'status': status})
-                    log.info('published to msgbus: '+str(val_reg)+' values '+str(values)+', status '+str(status)) ##
+                    #log.debug('published to msgbus: '+str(val_reg)+' values '+str(values)+', status '+str(status)) ##
                 except:
                     traceback.print_exc()
             return sendtuple # for regular send or status check

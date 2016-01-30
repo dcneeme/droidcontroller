@@ -65,7 +65,7 @@ class Diff2Pwm(object):
             pidcomp = pidout[1:4]
             chgspeed = pidcomp[2] # p, i, d
             if self.upspeed != None and self.upspeed > 0:
-                if chgspeed > self.upspeed: # error decreasing fast
+                if chgspeed > self.upspeed and outMin > 0: # error decreasing fast
                     self.state.up()
                     pwm = self.outMax # used for kitchen ventilation
                     log.warning('fast change up, state up, max pwm '+str(pwm)+', chgspeed '+str(chgspeed)+', upspeed '+str(self.upspeed))

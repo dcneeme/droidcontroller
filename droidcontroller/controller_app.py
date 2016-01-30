@@ -60,7 +60,7 @@ log = logging.getLogger(__name__)
 
 class ControllerApp(object): # default modbus address of io in controller = 1
     ''' '''
-    def __init__(self, app, ostype='archlinux', mba=1, mbi=0, ai_readperiod=3, ai_sendperiod=20): # 3s ai reading, 20s send
+    def __init__(self, app, ostype='archlinux', mba=1, mbi=0, ai_readperiod=3, ai_sendperiod=20): # mbi, mba for master iocard
         self.msgbus = MsgBus()
         self.msgbus.subscribe('debug', 'di_grp_result', 'debugger', self.buslog) ###
         #self.msgbus.subscribe('app_debug1', 'TKW', 'debugger', self.buslog) ### ajutine
@@ -95,7 +95,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
 
         self.udpcomm_scheduler.start()
         self.regular_scheduler.start()
-        ##self.di_scheduler.start() # jonksutab, esialgu ei kasuta
+        self.di_scheduler.start()
         self.ai_scheduler.start()
         #self.cal_scheduler.start()# FIXME move here from iomain
         log.info('ControllerApp instance created. '+self.AVV)
