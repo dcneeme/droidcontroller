@@ -40,7 +40,7 @@ class UDPchannel():
 
     '''
 
-    def __init__(self, id ='000000000000', ip='127.0.0.1', port=44445, receive_timeout=0.1, retrysend_delay=5, 
+    def __init__(self, id ='000000000000', ip='127.0.0.1', port=44445, receive_timeout=0.1, retrysend_delay=5,
         loghost='0.0.0.0', logport=514, mtu=1000, limit = 5, copynotifier=None): # delays in seconds
         #from droidcontroller.connstate import ConnState
         from droidcontroller.statekeeper import StateKeeper
@@ -59,7 +59,7 @@ class UDPchannel():
         self.sk_send.dn()
         self.mtu = mtu  # max data unit for udp to send, used for limit calc
         self.limit = limit # initially, will be changed in buff2server()
-        
+
         self.set_copynotifier(copynotifier) # parallel to uniscada notification in another format
         self.host_id = id # controller ip as tun0 wlan0 eth0 127.0.0.1
         self.ip = ip # monitoring server
@@ -435,6 +435,7 @@ class UDPchannel():
             do not try to send and assign inum to next rows if there are undeleted rows with inum.
             resend the already sent rows only until there are no rows waiting for ack and deletion.
         '''
+        log.info('buff2server start')
         timetoretry = 0 # local
         ts_created = 0 # local
         svc_count = 0 # local
@@ -442,6 +443,7 @@ class UDPchannel():
         stop = False # stop loop
         #cur = self.conn.cursor()
         cur2 = self.conn.cursor()
+        sendlenn = 0
         ##limit = self.sk.get_state()[0] * 5 + 1  ##  unique ts number to try if conn down, 6 if up. ##
         age = 0 # the oldest, will be self.age later
         #first find out if there are unacked rows in the buffer. if there is, these should be resent.
@@ -470,11 +472,11 @@ class UDPchannel():
 
         ## no unacked rows found, lets try to send next rows
         Cmd = "BEGIN IMMEDIATE TRANSACTION" # buff2server first try to send, assigning inum
-        try:
-            self.conn.execute(Cmd)
-            while stop: ## reduce the limit until the message is small enough 
-                Cmd = 'select ts_created from '+self.table+' group by ts_created limit '+str(self.limit) # find the oldest creation timestamp(s)
-                #log.info(Cmd) ##
+        self.conn.execute(Cmd)
+        #while stop: ## reduce the limit until the message is small enough
+        while stop == False: ## reduce the limit until the message is small enough
+            Cmd = 'select ts_created from '+self.table+' group by ts_created limit '+str(self.limit) # find the oldest creation timestamp(s)
+            try:
                 self.cur.execute(Cmd)
 
                 for row in self.cur: # ts alusel, iga ts jaoks oma in
@@ -516,31 +518,36 @@ class UDPchannel():
                 if sendlenn > self.mtu:
                     if self.limit > 1:
                         sendstring = '' # empty a dn try again
-                        self.limit -= 1  # cycle through the loop once again 
+                        self.limit -= 1  # cycle through the loop once again
                         log.info('== self.limit reduced to '+str(self.limit)+' due to sendlenn '+str(sendlenn)+', but mtu '+str(self.mtu))
                     elif self.limit == 1:
                        stop = True # no more loop
+                    else:
+                       log.error('illegal limit='+str(self.limit)+', last sendlenn '+str(sendlenn))
                 else: # sendlenn below or equal self.mtu
                     stop = True
-                    
-            # end loop, seems sendlenn was below self.mtu
-            self.conn.commit() # buff2server transaction end
-            
-            if len(sendstring) > self.mtu:
-                log.warning('sendlenn '+str(sendlenn)+' still bigger than self.mtu '+str(self.mtu)+', self.limit'+str(self.limit))
-                
-            if svc_count > 0: # there is something to be sent!
-                #sendstring = "in:" + str(self.inum) + ","+str(ts_created)+"\n" + sendstring # in alusel vastuses toimub puhvrist kustutamine
-                sendstring = "id:" + str(self.host_id) + "\n" + sendstring # alustame sellega datagrammi
-                log.debug('going to udpsend from buff2server, svc_count '+str(svc_count)+', row limit: '+str(self.limit)) ##
-                self.udpsend(sendstring, self.age) # sending away. self.age is used by baV svc too.
-            return 0
 
 
-        except:
-            log.warning('PROBLEM with creating message to be sent based on '+self.table)
-            traceback.print_exc()
-            return 1
+            except:
+                log.warning('PROBLEM with creating message to be sent based on '+selftablet)
+                traceback.print_exc()
+                return 1
+
+        # end loop, seems sendlenn was below self.mtu
+        self.conn.commit() # buff2server transaction end
+
+        if len(sendstring) > self.mtu:
+            log.warning('sendlenn '+str(sendlenn)+' still bigger than self.mtu '+str(self.mtu)+', self.limit'+str(self.limit))
+
+        if svc_count > 0: # there is something to be sent!
+            #sendstring = "in:" + str(self.inum) + ","+str(ts_created)+"\n" + sendstring # in alusel vastuses toimub puhvrist kustutamine
+            sendstring = "id:" + str(self.host_id) + "\n" + sendstring # alustame sellega datagrammi
+            log.debug('going to udpsend from buff2server, svc_count '+str(svc_count)+', row limit: '+str(self.limit)) ##
+            self.udpsend(sendstring, self.age) # sending away. self.age is used by baV svc too.
+            log.info('buff2server end, sendlenn '+str(sendlenn)+', limit '+str(self.limit))
+        else:
+            log.info('buff2server ABNORMAL end, sendlenn '+str(sendlenn)+', limit '+str(self.limit)+', stop '+str(stop))
+        return 0
 
     def buff_resend(self):
         ''' Used to resend the unacked rows, delays sending newer data via buffer '''
@@ -552,7 +559,7 @@ class UDPchannel():
         Cmd = "BEGIN IMMEDIATE TRANSACTION" # buff2server first try to send, assigning inum
         try:
             self.conn.execute(Cmd)
-            Cmd = 'select inum, ts_created from '+self.table+' where inum>0 group by inum'
+            Cmd = 'sedect inum, ts_created from '+self.table+' where inum>0 group by inum'
             #log.info(Cmd) ##
             self.cur.execute(Cmd)
 
@@ -1208,4 +1215,3 @@ class TCPchannel(UDPchannel): # used this parent to share self.syslog()
         except:
             traceback.print_exc()
             return None
-
