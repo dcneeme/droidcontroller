@@ -138,6 +138,15 @@ class UDPchannel():
         ''' returns server ip for this instance '''
         return self.ip
 
+        
+    def set_ioloop(self, invar): 
+        ''' sets ioloop flag to avoid some delays in uniscada.buff2server() '''
+        if 'bool' in str(type(invar)):
+            self.ioloop = invar
+            log.info('self.ioloop set to '+str(invar))
+        else:
+            log.error('INVALID parameter '+str(invar)+' for set_ioloop!')
+
 
     def get_age(self):
         ''' age of oldest unsent message in buffer '''

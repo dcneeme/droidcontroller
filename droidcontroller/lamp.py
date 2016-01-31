@@ -8,7 +8,8 @@ import logging
 log = logging.getLogger(__name__)
 
 class DO(object): # parent for Lamp instances 
-    def __init__(self, mbi=0, mba=1, reg=0, bits=[8,9,10,11,12,13,14,15])
+    def __init__(self, mbi=0, mba=1, reg=0, bits=[8,9,10,11,12,13,14,15]):
+        pass # FIXME
         
 
 

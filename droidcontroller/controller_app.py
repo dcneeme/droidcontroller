@@ -37,6 +37,7 @@ except:
 
 log.info('got mac '+mac+' from '+filee)
 udp.setID(mac) # kontrolleri id
+udp.set_ioloop(True) # to avoid delay calculation as before ioloop usage 
 tcp.setID(mac) # kas tcp seda kasutabki?
 
 
