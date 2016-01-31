@@ -606,10 +606,10 @@ class UDPchannel():
             sendstring = 'id:'+str(self.host_id)+'\n'+sendstring
             log.warning('added id to the sendstring to '+str(self.saddr)+': '+sendstring)
 
-        if resend:
-            log.info('going to REsend '+str(len(sendstring))+' bytes: '+sendstring.replace('\n',' '))
-        else:
-            log.info('going to send '+str(len(sendstring))+' bytes')
+        #if resend:
+        #    log.info('going to REsend '+str(len(sendstring))+' bytes: '+sendstring.replace('\n',' '))
+        #else:
+        #    log.info('going to send '+str(len(sendstring))+' bytes')
         
         
         if 'led' in dir(self):
@@ -773,11 +773,11 @@ class UDPchannel():
                                         ints.append(in_ts)
                                         if inumm > self.inum:
                                             self.inum = inumm
-                    if len(inums) > 0:
-                        data_dict.update({ 'inums' : inums }) # inum list
-                        data_dict.update({ 'ints' : ints }) # in_ts list
-                        self.reducebuffer(data_dict) # delete rows from buffer                          
-                return data_dict # possible key:value pairs here for setup change or commands.
+            if len(inums) > 0:
+                data_dict.update({ 'inums' : inums }) # inum list
+                data_dict.update({ 'ints' : ints }) # in_ts list
+                self.reducebuffer(data_dict) # delete rows from buffer                          
+            return data_dict # possible key:value pairs here for setup change or commands.
         else:
             return None
 
@@ -789,29 +789,30 @@ class UDPchannel():
             
         inums = data_dict['inums']
         ints = data_dict['ints']
-        log.info('reducebuffer going to delete rows with in: '+str(inums))
+        log.debug('reducebuffer going to delete rows with in: '+str(inums)) ##
         Cmd="BEGIN IMMEDIATE TRANSACTION" # buff2server, to delete acknowledged rows from the buffer
         self.conn.execute(Cmd) # buff2server ack transactioni algus, loeme ja kustutame saadetud read
         
         for i in range(len(inums)):
             inumm = inums[i]
             in_ts = ints[i]
-            Cmd="SELECT * from "+self.table+" WHERE inum>0 and (inum="+str(inumm)+" or ts_created<"+str(in_ts)+"-60 or inum<"+str(inumm)+"-20)"  
-            self.cur.execute(Cmd) ##
-            rows2delete = self.cur.fetchall() ##
-            print('rows to delete from buffer', rows2delete) ##
+            #Cmd="SELECT * from "+self.table+" WHERE inum>0 and (inum="+str(inumm)+" or ts_created<"+str(in_ts)+"-60 or inum<"+str(inumm)+"-20)"  
+            #self.cur.execute(Cmd) ##
+            #rows2delete = self.cur.fetchall() ##
+            #print('rows to delete from buffer', rows2delete) ##
             
             Cmd="DELETE from "+self.table+" WHERE inum>0 and (inum="+str(inumm)+" or ts_created<"+str(in_ts)+"-60 or inum<"+str(inumm)+"-20)"  
             log.info(Cmd) ## in_ts and delete debug
             try:
                 self.conn.execute(Cmd) # deleted
-                log.info('deleted from buffer inums: '+str(inums))
+                ##log.info('deleted from buffer inum: '+str(inumm))
             except:
                 msg='problem with '+Cmd+'\n'+str(sys.exc_info()[1])
                 log.error(msg)
                 #syslog(msg)
                 time.sleep(1)
         self.conn.commit() # buff2server transaction end        
+        log.debug('deleted from buffer inums: '+str(inums))
         return 1 # flag that there was something to delete
 
         
