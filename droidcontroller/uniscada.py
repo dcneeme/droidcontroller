@@ -570,7 +570,7 @@ class UDPchannel():
         Cmd = "BEGIN IMMEDIATE TRANSACTION" # buff2server first try to send, assigning inum
         try:
             self.conn.execute(Cmd)
-            Cmd = 'sedect inum, ts_created from '+self.table+' where inum>0 group by inum'
+            Cmd = 'select inum, ts_created from '+self.table+' where inum>0 group by inum'
             #log.info(Cmd) ##
             self.cur.execute(Cmd)
 
