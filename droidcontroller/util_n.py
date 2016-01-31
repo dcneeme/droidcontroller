@@ -45,8 +45,7 @@ class UN(object): # Utilities Neeme, use like UN.val2int(14.4)
         return res
         
         
-    @staticmethod
-    def onewire_hexid(reglist, groupsize=4): # read result from id registers, grouped for each id
+    @statireglist, groupsize=4): # read result from id registers, grouped for each id
         ''' Return onewire hex id list '''
         if len(reglist) % groupsize != 0:
             log.warning('invalid number of registers, not multiple of groupsize '+str(groupsize)+'!')

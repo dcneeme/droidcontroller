@@ -608,7 +608,9 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
 
     def parse_udp(self,data_dict): # search for setup or set di remote control signals
-        ''' Setup change for variables in sql for modbus di channels. Ignore invalid parameters, not defined in self.in_sql! '''
+        ''' Setup change for variables in sql for modbus di channels. Ignore invalid parameters, not defined in self.in_sql!
+            key must end with W, but why?  be aware of inums, ints members in data_dict
+        '''
         cur=conn.cursor()
         setup_changed = 0 # flag general setup change, data to be dumped into sql file
         msg=''

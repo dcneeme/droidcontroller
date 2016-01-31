@@ -30,7 +30,8 @@ class Diff2Pwm(object):
         self.reg = out_ch[2] # register for pwm channel
         self.outMin = outMin
         self.outMax = outMax
-                
+        self.ts_react = 0
+        
         try:
             res = self.mb[self.mbi].write(self.mba, 150, value=period)
         except:
@@ -40,7 +41,13 @@ class Diff2Pwm(object):
         self.pid = PID(name=name, P=P, I=I, D=D, min=self.outMin, max=self.outMax, outmode='list') # for fast pwm control. D mainly for change speed!
             
             
-    def react(self, invalues, outMin=None): 
+    def react(self, invalues, outMin=None, delay=5): 
+        ''' no need to react too often ... keep 5 s delay '''
+        ts = time.time()
+        if ts < self.ts_react + 5:
+            return None # not this time...
+            
+            
         if outMin != None:
             if outMin != self.outMin:
                 self.outMin = outMin
@@ -74,10 +81,10 @@ class Diff2Pwm(object):
                     self.state.dn()
                     log.warning('fast change down, state dn, chgspeed '+str(chgspeed)+', dnspeed '+str(self.dnspeed))
             if pwm > self.outMax:
-                log.warning('fixing pid output '+str(pwm)+' to max '+str(self.outMax))
+                log.warning('fixing pid output for pwm '+str(pwm)+' to max '+str(self.outMax))
                 pwm = self.outMax
             if pwm < self.outMin:
-                log.warning('fixing pid output '+str(pwm)+' to min '+str(self.outMin))
+                log.warning('fixing pid output for pwm '+str(pwm)+' to min '+str(self.outMin))
                 pwm = self.outMin
             if pwm != self.pwm:
                 self.pwm = pwm

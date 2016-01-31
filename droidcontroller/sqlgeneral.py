@@ -255,7 +255,7 @@ class SQLgeneral(UDPchannel): # parent class for ACchannels, Dchannels
                 udp.send(sendtuple) # to uniscada instance. avoid buffer?
 
 
-            conn.commit() # buff2server trans lopp
+            conn.commit() # trans lopp
 
             msg='setup reported'
             log.info(msg)

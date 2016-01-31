@@ -87,7 +87,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         self.loop = tornado.ioloop.IOLoop.instance()
         udp.add_reader_callback(self.udp_reader)
 
-        self.udpcomm_scheduler = tornado.ioloop.PeriodicCallback(self.udp_comm, 2000, io_loop = self.loop) # do not send udp more often than once in 2 sec
+        self.udpcomm_scheduler = tornado.ioloop.PeriodicCallback(self.udp_comm, 20000, io_loop = self.loop) # this is periodical, but ack will lauch immediate send!
         self.regular_scheduler = tornado.ioloop.PeriodicCallback(self.regular_svc, 60000, io_loop = self.loop) # send regular svc
         self.di_scheduler = tornado.ioloop.PeriodicCallback(self.di_reader, 10, io_loop = self.loop) # read DI asap. was 50 ms
         self.ai_scheduler = tornado.ioloop.PeriodicCallback(self.ai_reader, ai_readperiod, io_loop = self.loop) # ai 10 s
@@ -137,17 +137,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         send_state = udp.sk_send.get_state()
         receive_state = udp.sk.get_state()
         #self.reset_sender_timeout() # FIXME
-        #if send_state[0] == 1 and send_state[1] > 30 and receive_state[0] == 0 and receive_state[1] > 30: ## receive problem
-        #    log.warning('** udp send ok but no answer. reading buffer until empty! **') # if read buff not empty then no event from new data!
-        #    udp.sk.up()
-        #    udp.sk.dn() # to restart timer
-        #    got = udp.udpread()
-        #    while got != None and got != {}:
-        #        self.got_parse(got)
-        #        got = udp.udpread()
-        #    log.debug('*** read buffer until empty done wo IOLoop!!!')
-        #    #time.sleep(1)
-            
+                    
 
     def udp_reader(self, udp, fd, events): # no timer! on event!
         ##return None ## test reaction on udp input wo ioloop event
@@ -156,15 +146,16 @@ class ControllerApp(object): # default modbus address of io in controller = 1
             log.error('UDP socket error!')
         elif events & self.loop.READ:
             got = udp.udpread() # loeb ainult!
-            while got != None and got != {}: # read until buffer empty
+            while got != None and got != {}: # read until buffer empty. also inums present in got
                 self.got_parse(got)
                 got = udp.udpread()
     
             if udp.sk.get_state()[3] == 1: # firstup
                 self.firstup()
                 
-            #if self.led != None: # udp sees juba niigi?
-            #    self.led.commLED(1)
+            # ja siia kohe uus saatmine, sest ack on eelmise buffer2server tabelist kustutanud!
+            if 'inums' in got: # included ack, some buffer lines deleted, send retry possible
+                udp.iocomm()  # send next udp block, but only if in: was in ack!
 
     def firstup(self):
         ''' Things to do on the first connectivity establisment after startup '''
@@ -211,7 +202,8 @@ class ControllerApp(object): # default modbus address of io in controller = 1
             if todo != '':
                 log.info('todo '+todo)
                 self.p.todo_proc(todo) # execute possible commands
-
+            
+        
     def di_reader(self): # DI reader
         self.spm.count() # di speed metering via speedometer
         reslist = self.d.doall() # returns di, do, svc signals 0 1 2 = nochg chg err

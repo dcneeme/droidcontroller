@@ -74,37 +74,38 @@ class Commands(SQLgeneral): # p
         sendstring = ''
 
         for key in data_dict:
-            value = data_dict[key]
-            if (key[0] == 'W' or key[0] == 'B' or key[0] == 'S') and key[-1:] != 'S' and key[-1:] != 'V' and key[-1:] != 'W': # can be general setup value
-                if s.change_setup(key,value) == 0: # successful change in memory
-                    setup_changed = 1 # flag the change
-                    msg='general setup changed to '+key+':'+value
-                    print(msg)
-                    udp.syslog(msg)
+            if key != 'inums' and key != 'ints': # ack related data!
+                value = data_dict[key]
+                if (key[0] == 'W' or key[0] == 'B' or key[0] == 'S') and key[-1:] != 'S' and key[-1:] != 'V' and key[-1:] != 'W': # can be general setup value
+                    if s.change_setup(key,value) == 0: # successful change in memory
+                        setup_changed = 1 # flag the change
+                        msg='general setup changed to '+key+':'+value
+                        print(msg)
+                        udp.syslog(msg)
 
-            else: # some program variables to be restored?
-                if key == 'TCW': # traffic volumes to be restored
-                    try:
-                        members = value.split(' ')
-                        if len(members) == 4: # member count for traffic: udpin, udpout, tcpin, tcpout in bytes
-                            udp.set_traffic(bytes_in=int(float(members[0])), bytes_out=int(float(members[1])))
-                            tcp.set_traffic(bytes_in=int(float(members[2])), bytes_out=int(float(members[3])))
-                            log.debug('restored traffic volumes to udp '+str(udp.get_traffic)+' tcp '+str(udp.get_traffic))
-                        else:
-                            log.warning('invalid number of members in value from server: '+key+':'+value)
-                    except:
-                        log.warning('failure in traffic restoration from '+key+':'+value)
+                else: # some program variables to be restored?
+                    if key == 'TCW': # traffic volumes to be restored
+                        try:
+                            members = value.split(' ')
+                            if len(members) == 4: # member count for traffic: udpin, udpout, tcpin, tcpout in bytes
+                                udp.set_traffic(bytes_in=int(float(members[0])), bytes_out=int(float(members[1])))
+                                tcp.set_traffic(bytes_in=int(float(members[2])), bytes_out=int(float(members[3])))
+                                log.debug('restored traffic volumes to udp '+str(udp.get_traffic)+' tcp '+str(udp.get_traffic))
+                            else:
+                                log.warning('invalid number of members in value from server: '+key+':'+value)
+                        except:
+                            log.warning('failure in traffic restoration from '+key+':'+value)
 
-                elif key == 'cmd': # commands
-                    msg='remote command '+key+':'+value+' detected'
-                    log.info(msg)
-                    #udp.syslog(msg)
-                    if TODO == '': # no change if not empty
-                        TODO = value # command content to be parsed and executed
+                    elif key == 'cmd': # commands
+                        msg='remote command '+key+':'+value+' detected'
+                        log.info(msg)
+                        #udp.syslog(msg)
+                        if TODO == '': # no change if not empty
+                            TODO = value # command content to be parsed and executed
 
-                #return immediately the cmd to avoid unnecessary repeated execution
-                sendstring = key+':'+value+'\n' # return exactly the same what we got to clear newstate. must NOT be forwarded to nagios
-                udp.udpsend(sendstring) # no buffering here
+                    #return immediately the cmd to avoid unnecessary repeated execution
+                    sendstring = key+':'+value+'\n' # return exactly the same what we got to clear newstate. must NOT be forwarded to nagios
+                    udp.udpsend(sendstring) # no buffering here
 
 
 

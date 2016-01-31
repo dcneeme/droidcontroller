@@ -695,7 +695,8 @@ class UDPchannel():
         ''' Checks received data for monitoring server to see if the data contains key(s) "in:",
             then deletes the rows with this inum in the sql table.
             If the received datagram contains more data, these key:value pairs are
-            returned as dictionary.
+            returned as dictionary. Also if only in: data in response, output the data_dict, 
+            to continue with reading until buffer empty!
         '''
         cur = self.conn.cursor()  # testlugemiseks mida kustutama hakatakse
         datagram = ''
@@ -703,6 +704,8 @@ class UDPchannel():
         data = ''
         data_dict = {} # possible setup and commands
         sendstring = ''
+        inums = [] # list the "in:" inum values in response, into data_dict as inums
+        ints = [] # list the in_ts values in response, into data_dict as ints
 
         try: # if anything is comes into udp buffer before timepout
             buf = 1024
@@ -744,7 +747,7 @@ class UDPchannel():
                 indata = self.datasplit(datagram)  # into pieces with separate id and in if exists
                 for data in indata:
                     lines=data.splitlines() # split message into key:value lines
-                    for i in range(len(lines)): # looking into every member of incoming message
+                    for i in range(len(lines)): # looking into every member (line) of incoming message
                         if ":" in lines[i]:
                             line = lines[i].split(':')
                             sregister = line[0] # setup reg name
@@ -753,51 +756,65 @@ class UDPchannel():
                             if sregister != 'in' and sregister != 'id': # may be setup or command (cmd:)
                                 msg='got setup/cmd reg:val '+sregister+':'+svalue  # need to reply in order to avoid retransmits of the command(s)
                                 log.info(msg)
-                                data_dict.update({ sregister : svalue }) # in and id are not included in dict
+                                data_dict.update({ sregister : svalue }) # in and id may be included in dict as inums and ints!
 
                             else:
                                 if sregister == "in": # one such a key in message
                                     instr = data[data.find("in:")+3:].splitlines()[0].split(',') # [0]
                                     inumm = int(instr[0]) # loodaks integerit
-                                    in_ts = int(instr[1])  # TS returned
+                                    try:
+                                        in_ts = int(instr[1])  # TS returned
+                                    except:
+                                        in_ts = 1000 # no error in case of missing ts
                                     if inumm > 0:   # valid inum
                                         msg='got ack '+str(instr)+' in message: '+data.replace('\n',' ')
                                         log.debug(msg)
+                                        inums.append(inumm)
+                                        ints.append(in_ts)
                                         if inumm > self.inum:
                                             self.inum = inumm
-                                            log.info('synced self.inum to '+str(self.inum))
-
-                                        Cmd="BEGIN IMMEDIATE TRANSACTION" # buff2server, to delete acknowledged rows from the buffer
-                                        self.conn.execute(Cmd) # buff2server ack transactioni algus, loeme ja kustutame saadetud read
-                                        #Cmd="DELETE from "+self.table+" WHERE inum='"+str(inumm)+"'"  # deleting all rows where inum matches server ack
-                                        #Cmd="DELETE from "+self.table+" WHERE inum='"+str(inumm)+"' or ts_created = '"+str(in_ts)+"'"  # deleting also rows ts_created 
-                                        #Cmd="DELETE from "+self.table+" WHERE inum+0="+str(inumm)+" or ts_created+0<"+str(in_ts)+"-60 or inum+0<"+str(inumm)+"-20"  # deleting also rows ts_created 
-                                        ## uurime miks buffer age kasvama hakkab...
-                                        Cmd="SELECT * from "+self.table+" WHERE inum>0 and (inum="+str(inumm)+" or ts_created<"+str(in_ts)+"-60 or inum<"+str(inumm)+"-20)"  # deleting also rows ts_created 
-                                        self.cur.execute(Cmd) ##
-                                        rows2delete = self.cur.fetchall() ##
-                                        print('rows to delete from buffer',rows2delete) ##
-                                        
-                                        Cmd="DELETE from "+self.table+" WHERE inum>0 and (inum="+str(inumm)+" or ts_created<"+str(in_ts)+"-60 or inum<"+str(inumm)+"-20)"  # deleting also rows ts_created 
-                                        #  which match with in_ts! 12.1.2016 neeme
-                                        #  trying to avoid repeating messages generation with the same old ts_created... happens if new copy will be created before ack arrives
-                                        
-                                        log.info(Cmd) ## in_ts and delete debug
-                                        try:
-                                            self.conn.execute(Cmd) # deleted
-                                        except:
-                                            msg='problem with '+Cmd+'\n'+str(sys.exc_info()[1])
-                                            log.error(msg)
-                                            #syslog(msg)
-                                            time.sleep(1)
-                                        self.conn.commit() # buff2server transaction end
-
+                    if len(inums) > 0:
+                        data_dict.update({ 'inums' : inums }) # inum list
+                        data_dict.update({ 'ints' : ints }) # in_ts list
+                        self.reducebuffer(data_dict) # delete rows from buffer                          
                 return data_dict # possible key:value pairs here for setup change or commands.
-                # returns {} in case of ack with no cmd. datadict does not contain id or in values.
         else:
             return None
 
+            
+    def reducebuffer(self, data_dict):
+        ''' Delete the rows based in inums and ints values in data_dict '''
+        if not 'inums' in data_dict:
+            return 0 # nothing to delete
+            
+        inums = data_dict['inums']
+        ints = data_dict['ints']
+        log.info('reducebuffer going to delete rows with in: '+str(inums))
+        Cmd="BEGIN IMMEDIATE TRANSACTION" # buff2server, to delete acknowledged rows from the buffer
+        self.conn.execute(Cmd) # buff2server ack transactioni algus, loeme ja kustutame saadetud read
+        
+        for i in range(len(inums)):
+            inumm = inums[i]
+            in_ts = ints[i]
+            Cmd="SELECT * from "+self.table+" WHERE inum>0 and (inum="+str(inumm)+" or ts_created<"+str(in_ts)+"-60 or inum<"+str(inumm)+"-20)"  
+            self.cur.execute(Cmd) ##
+            rows2delete = self.cur.fetchall() ##
+            print('rows to delete from buffer', rows2delete) ##
+            
+            Cmd="DELETE from "+self.table+" WHERE inum>0 and (inum="+str(inumm)+" or ts_created<"+str(in_ts)+"-60 or inum<"+str(inumm)+"-20)"  
+            log.info(Cmd) ## in_ts and delete debug
+            try:
+                self.conn.execute(Cmd) # deleted
+                log.info('deleted from buffer inums: '+str(inums))
+            except:
+                msg='problem with '+Cmd+'\n'+str(sys.exc_info()[1])
+                log.error(msg)
+                #syslog(msg)
+                time.sleep(1)
+        self.conn.commit() # buff2server transaction end        
+        return 1 # flag that there was something to delete
 
+        
     def syslog(self, msg,logaddr=()): # sending out syslog message to self.logaddr
         msg = msg+"\n" # add newline to the end
         #print('syslog send to',self.logaddr) # debug
@@ -826,7 +843,7 @@ class UDPchannel():
         self.buff2server() # send away. the ack for this is available on next comm() hopefully
         return udpgot
 
-    def iocomm(self): # for ioloop, send only
+    def iocomm(self): # for ioloop, send only 
         ''' Send to monitoring server, chk the unsent, dump. Read on event! '''
         self.ts = int(round(time.time(),0)) # current time
         unsent_count = self.unsent() # delete too old records, dumps buffer and sync if needed!

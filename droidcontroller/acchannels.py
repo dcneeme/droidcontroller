@@ -79,7 +79,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
     def parse_udp(self,data_dict): # search for setup or set counter values
-        ''' Channels setup change based on message from monitoring server '''
+        ''' Channels setup change based on message from monitoring server. Only accepts keys ending with W in data_dict '''
         cur = conn.cursor()
         setup_changed = 0 # flag general setup change, data to be dumped into sql file
         msg = ''
