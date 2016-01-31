@@ -41,7 +41,7 @@ class UDPchannel():
     '''
 
     def __init__(self, id ='000000000000', ip='127.0.0.1', port=44445, receive_timeout=0.1, retrysend_delay=5,
-        loghost='0.0.0.0', logport=514, mtu=1000, limit = 5, copynotifier=None): # delays in seconds
+        loghost='0.0.0.0', logport=514, mtu=1000, limit = 5, copynotifier=None, ioloop=False): # delays in seconds
         #from droidcontroller.connstate import ConnState
         from droidcontroller.statekeeper import StateKeeper
         self.sk = StateKeeper(off_tout=300, on_tout=0) # conn state with up/down times based on udp received
@@ -59,6 +59,7 @@ class UDPchannel():
         self.sk_send.dn()
         self.mtu = mtu  # max data unit for udp to send, used for limit calc
         self.limit = limit # initially, will be changed in buff2server()
+        self.ioloop = ioloop # flag the event-based operation
 
         self.set_copynotifier(copynotifier) # parallel to uniscada notification in another format
         self.host_id = id # controller ip as tun0 wlan0 eth0 127.0.0.1
@@ -425,7 +426,7 @@ class UDPchannel():
         time.sleep(1)
 
 
-    def buff2server(self): # send the buffer content
+    def buff2server(self): # send the buffer content. wait is used before ioloop!
         ''' ONE UDP monitoring message creation and sending (using self.udpsend).
             Based on already existing buff2server data, starting from the oldest rows.
 
@@ -448,24 +449,25 @@ class UDPchannel():
         age = 0 # the oldest, will be self.age later
         #first find out if there are unacked rows in the buffer. if there is, these should be resent.
         unacked = self.read_buffer(mode = 2)
-        if unacked > 0:
-            if self.sk.get_state()[0] == 0: # no conn
-                timetoretry = int(self.ts_udpunsent + 3 * self.retrysend_delay) # try less often during conn break
-            else: # conn ok
-                timetoretry = int(self.ts_udpsent + self.retrysend_delay) ### FIXME  use age to add delay?
+        if unacked > 0: # some rows are waiting for ack
+            if self.ioloop == False: # this delay calc is not needed for ioloop
+                if self.sk.get_state()[0] == 0: # no conn
+                    timetoretry = int(self.ts_udpunsent + 3 * self.retrysend_delay) # try less often during conn break
+                else: # conn ok
+                    timetoretry = int(self.ts_udpsent + self.retrysend_delay) ### FIXME  use age to add delay?
 
-            if self.ts_udpsent > self.ts_udpunsent:
-                log.debug('resend need, using shorter retrysend_delay, conn ok') ##
-                timetoretry = int(self.ts_udpsent + self.retrysend_delay)
-            else:
-                log.warning('resend need, using longer retrysend_delay, conn NOT ok') ##
-                timetoretry = int(self.ts_udpunsent + 10 * self.retrysend_delay) # longer retry delay with no conn
+                if self.ts_udpsent > self.ts_udpunsent:
+                    log.debug('resend need, using shorter retrysend_delay, conn ok') ##
+                    timetoretry = int(self.ts_udpsent + self.retrysend_delay)
+                else:
+                    log.warning('resend need, using longer retrysend_delay, conn NOT ok') ##
+                    timetoretry = int(self.ts_udpunsent + 10 * self.retrysend_delay) # longer retry delay with no conn
 
-            if self.ts < timetoretry: # too early to send again
-                log.info('resend need, conn state '+str(self.sk.get_state()[0])+'. wait with buff_resend until timetoretry '+str(int(timetoretry))) ##
-                return 0 # perhaps next time
+                if self.ts < timetoretry: # too early to send again
+                    log.info('resend need, conn state '+str(self.sk.get_state()[0])+'. wait with buff_resend until timetoretry '+str(int(timetoretry))) ##
+                    return 0 # perhaps next time
 
-            log.info('buff_resend execution due to time '+str(self.ts-timetoretry)+' s past timetoretry '+str(timetoretry))
+            log.info('buff_resend execution now') ##
             self.buff_resend()
             self.unsent()  # delete too old lines, count the rest
             return 0
