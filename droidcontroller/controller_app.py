@@ -1,3 +1,4 @@
+# This Python file uses the following encoding: utf-8
 ''' This is a class to handle event-based flow of application. Droid4control 2015  '''
 
 import sys, os, traceback, inspect, datetime
@@ -37,7 +38,7 @@ except:
 
 log.info('got mac '+mac+' from '+filee)
 udp.setID(mac) # kontrolleri id
-udp.set_ioloop(True) # to avoid delay calculation as before ioloop usage 
+udp.set_ioloop(True) # to avoid delay calculation as before ioloop usage
 tcp.setID(mac) # kas tcp seda kasutabki?
 
 
@@ -142,6 +143,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
 
     def udp_reader(self, udp, fd, events): # no timer! on event!
         ##return None ## test reaction on udp input wo ioloop event
+        gotack = False
         self.running = 1 # ioloop must be running if udp_reader was called
         if events & self.loop.ERROR:
             log.error('UDP socket error!')
@@ -149,8 +151,10 @@ class ControllerApp(object): # default modbus address of io in controller = 1
             got = udp.udpread() # loeb ainult!
             while got != None and got != {}: # read until buffer empty. also inums present in got
                 self.got_parse(got)
-                got = udp.udpread()
                 if 'inums' in got:
+                    gotack = True
+                got = udp.udpread()
+                if gotack:
                     log.info('send more from buffer as something was deleted')
                     udp.iocomm()  # send next udp block, but only if in: was in ack!
                     self.reset_sender_timeout() # next retry delayed
@@ -254,7 +258,13 @@ class ControllerApp(object): # default modbus address of io in controller = 1
 
 
     def reset_sender_timeout(self): # FIXME
-        ''' Resetting ioloop timer '''
+        ''' Resetting ioloop timer
+        [31.01.16 15:24] Marko Veelma (marko.veelma@gmail.com): lisamisel jatad timeri meelde
+        self.timer = self.ioloop.add_timeout(datetime.timedelta(seconds=self.timeout), self._timeout)
+        ja enne uuesti lisamist eemaldad vana
+        if self.timer:
+        self.ioloop.remove_timeout(self.timer)
+        '''
         ##print('FIXME timer reset')
         pass # IOLoop.add_timeout(15000, self.udp_sender) # ???
 
