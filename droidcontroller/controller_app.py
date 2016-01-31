@@ -150,14 +150,13 @@ class ControllerApp(object): # default modbus address of io in controller = 1
             while got != None and got != {}: # read until buffer empty. also inums present in got
                 self.got_parse(got)
                 got = udp.udpread()
-
+                if 'inums' in got:
+                    log.info('send more from buffer as something was deleted')
+                    udp.iocomm()  # send next udp block, but only if in: was in ack!
+                    self.reset_sender_timeout() # next retry delayed
             if udp.sk.get_state()[3] == 1: # firstup
-                self.firstup()
+                self.firstup() # udp connectivity state to up
 
-            # ja siia kohe uus saatmine, sest ack on eelmise buffer2server tabelist kustutanud!
-            if got != None and 'inums' in got: # due to ack some buffer lines are deleted, send retry reasonable
-                udp.iocomm()  # send next udp block, but only if in: was in ack!
-                self.reset_sender_timeout() # next retry delayed
 
     def firstup(self):
         ''' Things to do on the first connectivity establisment after startup '''
