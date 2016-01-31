@@ -438,7 +438,7 @@ class UDPchannel():
         sendstring = ''
         #cur = self.conn.cursor()
         cur2 = self.conn.cursor()
-        limit = self.sk.get_state()[0] * 9 + 1  ## 1 key:value to try if conn down, 5 if up. 100 is too much, above 1 kB ##
+        limit = self.sk.get_state()[0] * 5 + 1  ##  unique ts number to try if conn down, 6 if up. ##
         age = 0 # the oldest, will be self.age later
         #first find out if there are unacked rows in the buffer. if there is, these should be resent.
         unacked = self.read_buffer(mode = 2)
