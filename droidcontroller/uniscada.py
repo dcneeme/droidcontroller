@@ -802,7 +802,7 @@ class UDPchannel():
             #print('rows to delete from buffer', rows2delete) ##
 
             Cmd="DELETE from "+self.table+" WHERE inum>0 and (inum="+str(inumm)+" or ts_created<"+str(in_ts)+"-60 or inum<"+str(inumm)+"-20)"
-            log.info(Cmd) ## in_ts and delete debug
+            #log.info(Cmd) ## in_ts and delete debug
             try:
                 self.conn.execute(Cmd) # deleted
                 ##log.info('deleted from buffer inum: '+str(inumm))
@@ -812,7 +812,7 @@ class UDPchannel():
                 #syslog(msg)
                 time.sleep(1)
         self.conn.commit() # buff2server transaction end
-        log.debug('deleted from buffer inums: '+str(inums))
+        log.info('deleted from buffer inums: '+str(inums))
         return 1 # flag that there was something to delete
 
 
