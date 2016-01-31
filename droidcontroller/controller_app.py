@@ -129,7 +129,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
             self.AVV += '0\n'
 
 
-    def udp_comm(self): # only send
+    def udp_comm(self): # only send, started by timer or udp_read
         sys.stdout.write('U') # dot without newline
         sys.stdout.flush()
         udp.iocomm() # chk buff and send to monitoring
@@ -154,8 +154,9 @@ class ControllerApp(object): # default modbus address of io in controller = 1
                 self.firstup()
 
             # ja siia kohe uus saatmine, sest ack on eelmise buffer2server tabelist kustutanud!
-            if 'inums' in got: # included ack, some buffer lines deleted, send retry possible
+            if got != None and 'inums' in got: # due to ack some buffer lines are deleted, send retry reasonable
                 udp.iocomm()  # send next udp block, but only if in: was in ack!
+                self.reset_sender_timeout() # next retry delayed
 
     def firstup(self):
         ''' Things to do on the first connectivity establisment after startup '''
@@ -255,16 +256,8 @@ class ControllerApp(object): # default modbus address of io in controller = 1
     def reset_sender_timeout(self): # FIXME
         ''' Resetting ioloop timer '''
         ##print('FIXME timer reset')
-        ##IOLoop.add_timeout(5000, self.udp_sender) # last line! recalls itself after timeout 5 s
+        pass # IOLoop.add_timeout(15000, self.udp_sender) # ???
 
-
-    #def app_main(self, attentioncode=0): # application-specific app() in iomain_xxx.py
-    #    ''' ehk on vaja param anda mis muutus, may call udp_sender '''
-    #   ##print('app_main')
-    #    res = self.app(sys._getframe().f_code.co_name, attentioncode) # self selleks, et vahet teha erinevatel kaivitustel, valjakutsutavale lisaparam
-    #    #attentioncode on = bitmap d, a muutuste/tootlusvajaduste kohta
-    #    # if res... # saab otsustada kas saata vms.
-    #    self.udp_comm() ## kas on vaja siin?
 
     def commtest(self):
         ''' Use for testing from iomain_xxx, cua.ca.commtest() '''
