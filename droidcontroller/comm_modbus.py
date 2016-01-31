@@ -535,27 +535,3 @@ class CommModbus(Comm):
             except:
                 log.warning('update_datadict error')
                 traceback.print_exc()
-
-    def udpread(self): # not to be called from outside of this method, used only by udpsend() above
-        ''' Read npe_io over socat or other udp channel. Register will be returned as the first value, may NOT be the one asked last! '''
-        data = ['','']
-        #print('udpread: trying to get udp data from '+str(self.saddr)) # debug
-        try: # if anything is comes into udp buffer before timeout
-            buf = 256
-            rdata,raddr = self.UDPSock.recvfrom(buf)
-            #print('udpread got rdata: ',rdata) # debug
-            data=rdata.replace(' ','|',1).strip('\n').split('|')
-            #print('udpread got data to return: ',data) # debug
-            return data
-        except:
-            #print('no new udp data this time') # debug
-            #traceback.print_exc() # debug
-            return None
-
-        if len(data) > 0: # something arrived
-            if raddr[0] != self.ip:
-                msg = 'illegal_sender'+str(raddr[0])+' for message: '+str(data)  # ignore the data received!
-                print(msg)
-                #syslog(msg)
-                return None
-
