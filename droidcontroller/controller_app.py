@@ -39,7 +39,7 @@ log.info('got mac '+mac+' from '+filee)
 udp.setID(mac) # kontrolleri id
 tcp.setID(mac) # kas tcp seda kasutabki?
 
-  
+
 try:
     monip = os.environ['MONIP'] # env variable ID
 except:
@@ -64,7 +64,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         self.msgbus = MsgBus()
         self.msgbus.subscribe('debug', 'di_grp_result', 'debugger', self.buslog) ###
         #self.msgbus.subscribe('app_debug1', 'TKW', 'debugger', self.buslog) ### ajutine
-        
+
         self.app = app # client-specific main script
         self.mba = mba # controller io modbus address if dc6888
         self.mbi = mbi # io channel for controller
@@ -79,11 +79,11 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         except:
             log.warning('GPIOLED not imported')
             self.led = None
-  
+
         self.running = 0 # 999 feed enabled if running only
         self.spm = SpeedoMeter(windowsize = 100) # to see di speed
         self.get_AVV(inspect.stack()[1]) # caller name and hw version
-        
+
         self.loop = tornado.ioloop.IOLoop.instance()
         udp.add_reader_callback(self.udp_reader)
 
@@ -99,13 +99,13 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         self.ai_scheduler.start()
         #self.cal_scheduler.start()# FIXME move here from iomain
         log.info('ControllerApp instance created. '+self.AVV)
-        
+
 
     def buslog(self, token, subject, message): # self, token, subject, message
-        ''' Simple logger. Usable as an example for everything listening msgbus ''' 
+        ''' Simple logger. Usable as an example for everything listening msgbus '''
         log.debug('from msgbus token %s, subject %s, message %s', token, subject, str(message))
-        
-    
+
+
     def get_AVV(self, frm):
         ''' Get the name of calling customer-specific script and controller hw version as self.AVV '''
         #frm = inspect.stack()[1]
@@ -137,7 +137,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         send_state = udp.sk_send.get_state()
         receive_state = udp.sk.get_state()
         #self.reset_sender_timeout() # FIXME
-                    
+
 
     def udp_reader(self, udp, fd, events): # no timer! on event!
         ##return None ## test reaction on udp input wo ioloop event
@@ -149,10 +149,10 @@ class ControllerApp(object): # default modbus address of io in controller = 1
             while got != None and got != {}: # read until buffer empty. also inums present in got
                 self.got_parse(got)
                 got = udp.udpread()
-    
+
             if udp.sk.get_state()[3] == 1: # firstup
                 self.firstup()
-                
+
             # ja siia kohe uus saatmine, sest ack on eelmise buffer2server tabelist kustutanud!
             if 'inums' in got: # included ack, some buffer lines deleted, send retry possible
                 udp.iocomm()  # send next udp block, but only if in: was in ack!
@@ -172,9 +172,9 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         log.warning(msg)
         if self.led != None:
             self.led.alarmLED(1)
-            
+
         udp.dump_buffer() # save unsent messages as file
-         
+
         with open("/root/d4c/appd.log", "a") as logfile:
             logfile.write(msg)
         try:
@@ -202,8 +202,8 @@ class ControllerApp(object): # default modbus address of io in controller = 1
             if todo != '':
                 log.info('todo '+todo)
                 self.p.todo_proc(todo) # execute possible commands
-            
-        
+
+
     def di_reader(self): # DI reader
         self.spm.count() # di speed metering via speedometer
         reslist = self.d.doall() # returns di, do, svc signals 0 1 2 = nochg chg err
@@ -214,27 +214,30 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         else:
             sys.stdout.write('D') # some change
             sys.stdout.flush() # flush now, when something was changed
-        
-        if (reslist[0] & 1):  # change in di 
-            di_dict = self.d.get_chg_dict()
-            log.info('di change detected: '+str(di_dict)+', reslist '+str(reslist)) # mis siin on , chg voi svc?
-            self.app(sys._getframe().f_code.co_name, attentioncode = 1) # d, a attention bits
-        if (reslist[1] & 1):  # change in do 
-            di_dict = self.d.get_chg_dict()
-            log.info('do change detected: '+str(di_dict)+', reslist '+str(reslist)) # mis siin on , chg voi svc?
-            self.app(sys._getframe().f_code.co_name, attentioncode = 1) # d, a attention bits
-        if (reslist[2] & 1):  # change in di services
-            di_dict = self.d.get_chg_dict()
-            log.info('di svc to send: '+str(di_dict)+', reslist '+str(reslist))
-            self.udp_comm() # should reset timer too!
-            
+
+            if (reslist[0] & 1):  # change in di
+                di_dict = self.d.get_chg_dict()
+                log.info('di change detected: '+str(di_dict)+', reslist '+str(reslist)) # mis siin on , chg voi svc?
+                self.app(sys._getframe().f_code.co_name, attentioncode = 1) # d, a attention bits
+            if (reslist[1] & 1):  # change in do
+                di_dict = self.d.get_chg_dict()
+                log.info('do change detected: '+str(di_dict)+', reslist '+str(reslist)) # mis siin on , chg voi svc?
+                self.app(sys._getframe().f_code.co_name, attentioncode = 1) # d, a attention bits
+            if (reslist[2] & 1):  # change in di services
+                di_dict = self.d.get_chg_dict()
+                log.info('di svc to send: '+str(di_dict)+', reslist '+str(reslist))
+
+            self.udp_comm() # immediate notification, should reset timer too!
+
 
     def ai_reader(self): # AICO reader
         self.ac.doall()
         self.app(sys._getframe().f_code.co_name, attentioncode = 2) # d, a attention bits / use msgbus instead
         if self.led: # ajutine
             self.led.alarmLED(0)
-    
+        #FIXME ai olekute / value suurte muudatuste avastamisel korral kaivita self.udpcomm()
+
+
     def regular_svc(self): # FIXME - send on change too! pakkida?
         sys.stdout.write('R') #
         sys.stdout.flush()
@@ -242,6 +245,8 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         skstate = udp.sk.get_state() # udp conn statekeeper
         if self.running != 0 and skstate[0] == 0 and skstate[1] > 300 + skstate[2] * 300: # total 10 min down, cold reboot needed
             self.powerbreak() # 999 feed to restart via 5V break
+        # siin pole self.udpcomm() kaivitus vist oluline
+
 
     def cal_reader(self): # gcal  refresh, call ed by customer_app
         print('FIXME cal sync')
@@ -277,12 +282,12 @@ class ControllerApp(object): # default modbus address of io in controller = 1
             if udp.sk.get_state()[3] == 1: # firstup
                 self.firstup()
 
-       
+
     #def apptest(self):
     #    ''' testing app part in the iomain script'''
     #    self.app(inspect.currentframe().f_code.co_name, attentioncode = 3)
-        
-    def apptest(self): # kiireim 
+
+    def apptest(self): # kiireim
         #testides python -m timeit -s 'import inspect, sys' 'inspect.stack()[0][0].f_code.co_name'
         ''' testing app part in the iomain script'''
         self.app(sys._getframe().f_code.co_name, attentioncode = 2)

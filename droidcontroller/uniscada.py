@@ -22,7 +22,7 @@ except:
     log.warning('no requests imported, TCPchannel not usable!')
     time.sleep(2)
 from  functools import partial # for add_reader_callback()
-    
+
 import logging
 log = logging.getLogger(__name__)
 try:
@@ -288,7 +288,7 @@ class UDPchannel():
                 return 1
 
 
-    def delete_buffer(self): # empty buffer, NOT USED by anybody? 
+    def delete_buffer(self): # empty buffer, NOT USED by anybody?
         Cmd = 'delete from '+self.table
         try:
             self.conn.execute(Cmd)
@@ -428,7 +428,7 @@ class UDPchannel():
 
             buff2server rows successfully sent will be later deleted by udpread()
             (based on one or more in: contained in the received  message).
-            
+
             do not try to send and assign inum to next rows if there are undeleted rows with inum.
             resend the already sent rows only until there are no rows waiting for ack and deletion.
         '''
@@ -447,7 +447,7 @@ class UDPchannel():
                 timetoretry = int(self.ts_udpunsent + 3 * self.retrysend_delay) # try less often during conn break
             else: # conn ok
                 timetoretry = int(self.ts_udpsent + self.retrysend_delay) ### FIXME  use age to add delay?
-                
+
             if self.ts_udpsent > self.ts_udpunsent:
                 log.debug('resend need, using shorter retrysend_delay, conn ok') ##
                 timetoretry = int(self.ts_udpsent + self.retrysend_delay)
@@ -458,12 +458,12 @@ class UDPchannel():
             if self.ts < timetoretry: # too early to send again
                 log.info('resend need, conn state '+str(self.sk.get_state()[0])+'. wait with buff_resend until timetoretry '+str(int(timetoretry))) ##
                 return 0 # perhaps next time
-            
+
             log.info('buff_resend execution due to time '+str(self.ts-timetoretry)+' s past timetoretry '+str(timetoretry))
             self.buff_resend()
             self.unsent()  # delete too old lines, count the rest
             return 0
-        
+
         ## no unacked rows found, lets try to send next rows
         Cmd = "BEGIN IMMEDIATE TRANSACTION" # buff2server first try to send, assigning inum
         try:
@@ -588,7 +588,7 @@ class UDPchannel():
             traceback.print_exc()
             return 1
 
-        
+
 
     def udpsend(self, sendstring = '', age = 0, resend=False): # actual udp sending, no resend. give message as parameter. used by buff2server too.
         ''' Sends UDP data immediately, without buffer, adding self.inum if ask_ack == True. DO NOT MISUSE, prevents gap filling!
@@ -610,8 +610,8 @@ class UDPchannel():
         #    log.info('going to REsend '+str(len(sendstring))+' bytes: '+sendstring.replace('\n',' '))
         #else:
         #    log.info('going to send '+str(len(sendstring))+' bytes')
-        
-        
+
+
         if 'led' in dir(self):
             self.led.commLED(0) # off, blinking shows sending and time to ack
 
@@ -695,7 +695,7 @@ class UDPchannel():
         ''' Checks received data for monitoring server to see if the data contains key(s) "in:",
             then deletes the rows with this inum in the sql table.
             If the received datagram contains more data, these key:value pairs are
-            returned as dictionary. Also if only in: data in response, output the data_dict, 
+            returned as dictionary. Also if only in: data in response, output the data_dict,
             to continue with reading until buffer empty!
         '''
         cur = self.conn.cursor()  # testlugemiseks mida kustutama hakatakse
@@ -776,32 +776,32 @@ class UDPchannel():
             if len(inums) > 0:
                 data_dict.update({ 'inums' : inums }) # inum list
                 data_dict.update({ 'ints' : ints }) # in_ts list
-                self.reducebuffer(data_dict) # delete rows from buffer                          
+                self.reducebuffer(data_dict) # delete rows from buffer
             return data_dict # possible key:value pairs here for setup change or commands.
         else:
             return None
 
-            
+
     def reducebuffer(self, data_dict):
         ''' Delete the rows based in inums and ints values in data_dict '''
         if not 'inums' in data_dict:
             return 0 # nothing to delete
-            
+
         inums = data_dict['inums']
         ints = data_dict['ints']
         log.debug('reducebuffer going to delete rows with in: '+str(inums)) ##
         Cmd="BEGIN IMMEDIATE TRANSACTION" # buff2server, to delete acknowledged rows from the buffer
         self.conn.execute(Cmd) # buff2server ack transactioni algus, loeme ja kustutame saadetud read
-        
+
         for i in range(len(inums)):
             inumm = inums[i]
             in_ts = ints[i]
-            #Cmd="SELECT * from "+self.table+" WHERE inum>0 and (inum="+str(inumm)+" or ts_created<"+str(in_ts)+"-60 or inum<"+str(inumm)+"-20)"  
+            #Cmd="SELECT * from "+self.table+" WHERE inum>0 and (inum="+str(inumm)+" or ts_created<"+str(in_ts)+"-60 or inum<"+str(inumm)+"-20)"
             #self.cur.execute(Cmd) ##
             #rows2delete = self.cur.fetchall() ##
             #print('rows to delete from buffer', rows2delete) ##
-            
-            Cmd="DELETE from "+self.table+" WHERE inum>0 and (inum="+str(inumm)+" or ts_created<"+str(in_ts)+"-60 or inum<"+str(inumm)+"-20)"  
+
+            Cmd="DELETE from "+self.table+" WHERE inum>0 and (inum="+str(inumm)+" or ts_created<"+str(in_ts)+"-60 or inum<"+str(inumm)+"-20)"
             log.info(Cmd) ## in_ts and delete debug
             try:
                 self.conn.execute(Cmd) # deleted
@@ -811,11 +811,11 @@ class UDPchannel():
                 log.error(msg)
                 #syslog(msg)
                 time.sleep(1)
-        self.conn.commit() # buff2server transaction end        
+        self.conn.commit() # buff2server transaction end
         log.debug('deleted from buffer inums: '+str(inums))
         return 1 # flag that there was something to delete
 
-        
+
     def syslog(self, msg,logaddr=()): # sending out syslog message to self.logaddr
         msg = msg+"\n" # add newline to the end
         #print('syslog send to',self.logaddr) # debug
@@ -844,7 +844,7 @@ class UDPchannel():
         self.buff2server() # send away. the ack for this is available on next comm() hopefully
         return udpgot
 
-    def iocomm(self): # for ioloop, send only 
+    def iocomm(self): # for ioloop, send only
         ''' Send to monitoring server, chk the unsent, dump. Read on event! '''
         self.ts = int(round(time.time(),0)) # current time
         unsent_count = self.unsent() # delete too old records, dumps buffer and sync if needed!
