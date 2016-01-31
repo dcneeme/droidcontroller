@@ -40,7 +40,8 @@ class UDPchannel():
 
     '''
 
-    def __init__(self, id ='000000000000', ip='127.0.0.1', port=44445, receive_timeout=0.1, retrysend_delay=5, loghost='0.0.0.0', logport=514, copynotifier=None): # delays in seconds
+    def __init__(self, id ='000000000000', ip='127.0.0.1', port=44445, receive_timeout=0.1, retrysend_delay=5, 
+        loghost='0.0.0.0', logport=514, mtu=1000, limit = 5, copynotifier=None): # delays in seconds
         #from droidcontroller.connstate import ConnState
         from droidcontroller.statekeeper import StateKeeper
         self.sk = StateKeeper(off_tout=300, on_tout=0) # conn state with up/down times based on udp received
@@ -56,7 +57,9 @@ class UDPchannel():
         self.receive_timeout = receive_timeout
         self.sk.dn() # initially no comm success registered
         self.sk_send.dn()
-
+        self.mtu = mtu  # max data unit for udp to send, used for limit calc
+        self.limit = limit # initially, will be changed in buff2server()
+        
         self.set_copynotifier(copynotifier) # parallel to uniscada notification in another format
         self.host_id = id # controller ip as tun0 wlan0 eth0 127.0.0.1
         self.ip = ip # monitoring server
@@ -436,9 +439,10 @@ class UDPchannel():
         ts_created = 0 # local
         svc_count = 0 # local
         sendstring = ''
+        stop = False # stop loop
         #cur = self.conn.cursor()
         cur2 = self.conn.cursor()
-        limit = self.sk.get_state()[0] * 5 + 1  ##  unique ts number to try if conn down, 6 if up. ##
+        ##limit = self.sk.get_state()[0] * 5 + 1  ##  unique ts number to try if conn down, 6 if up. ##
         age = 0 # the oldest, will be self.age later
         #first find out if there are unacked rows in the buffer. if there is, these should be resent.
         unacked = self.read_buffer(mode = 2)
@@ -468,54 +472,67 @@ class UDPchannel():
         Cmd = "BEGIN IMMEDIATE TRANSACTION" # buff2server first try to send, assigning inum
         try:
             self.conn.execute(Cmd)
-            #Cmd = 'select min(ts_created+0) from '+self.table # the oldest timestamp
-            Cmd = 'select ts_created from '+self.table+' group by ts_created limit '+str(limit) # find the oldest creation timestamp(s)
-            #log.info(Cmd) ##
-            self.cur.execute(Cmd)
+            while stop: ## reduce the limit until the message is small enough 
+                Cmd = 'select ts_created from '+self.table+' group by ts_created limit '+str(self.limit) # find the oldest creation timestamp(s)
+                #log.info(Cmd) ##
+                self.cur.execute(Cmd)
 
-            for row in self.cur: # ts alusel, iga ts jaoks oma in
-                ts_created = int(round(row[0],0)) if row[0] != '' else 0 # should be int
+                for row in self.cur: # ts alusel, iga ts jaoks oma in
+                    ts_created = int(round(row[0],0)) if row[0] != '' else 0 # should be int
 
-                #if age == 0: # vanim, vaid esimesel lugemisel
-                if (self.ts - ts_created) > age:
-                    age = int(self.ts - ts_created) # find the oldest in the group
+                    #if age == 0: # vanim, vaid esimesel lugemisel
+                    if (self.ts - ts_created) > age:
+                        age = int(self.ts - ts_created) # find the oldest in the group
 
-                log.debug('processing ts_created '+str(ts_created)+', age '+str(self.ts - ts_created)+', the oldest age '+str(age))
-                #if ts_created > 1433000000: # valid ts AGA kui on vale siis mingu serveri aeg
-                self.inum += 1 # increase the message number  for every ts_created (forever?)
-                sendstr = "in:" + str(self.inum) + ","+str(ts_created)+"\n" # start the new in: block
-                Cmd = 'SELECT * from '+self.table+' where ts_created='+str(ts_created)
-                log.debug('selecting rows for inum'+str(self.inum)+': '+Cmd) # debug
-                cur2.execute(Cmd)
-                self.age = age # the oldest in these grouped timestamps
+                    log.debug('processing ts_created '+str(ts_created)+', age '+str(self.ts - ts_created)+', the oldest age '+str(age))
+                    #if ts_created > 1433000000: # valid ts AGA kui on vale siis mingu serveri aeg
+                    self.inum += 1 # increase the message number  for every ts_created (forever?)
+                    sendstr = "in:" + str(self.inum) + ","+str(ts_created)+"\n" # start the new in: block
+                    Cmd = 'SELECT * from '+self.table+' where ts_created='+str(ts_created)
+                    log.debug('selecting rows for inum'+str(self.inum)+': '+Cmd) # debug
+                    cur2.execute(Cmd)
+                    self.age = age # the oldest in these grouped timestamps
 
-                for srow in cur2:
-                    svc_count += 1
-                    sta_reg = srow[0]
-                    status = srow[1] if srow[1] != '' else 0
-                    val_reg = srow[2]
-                    value = srow[3]
-                    if val_reg != '':
-                        sendstr += val_reg+":"+str(value)+"\n"
-                    if sta_reg != '':
-                        sendstr += sta_reg+":"+str(status)+"\n"
+                    for srow in cur2:
+                        svc_count += 1
+                        sta_reg = srow[0]
+                        status = srow[1] if srow[1] != '' else 0
+                        val_reg = srow[2]
+                        value = srow[3]
+                        if val_reg != '':
+                            sendstr += val_reg+":"+str(value)+"\n"
+                        if sta_reg != '':
+                            sendstr += sta_reg+":"+str(status)+"\n"
 
-                if len(sendstr) > 0:
-                    sendstring += sendstr
-                    log.debug('added to sendstring in related sendstr: '+sendstr.replace('\n',' ')) ###
-                    Cmd = "update "+self.table+" set ts_tried="+str(int(self.ts))+",inum="+str(self.inum)+" where ts_created="+str(ts_created)
-                    log.debug('buffer update cmd: '+Cmd) # update all rows with this ts_creted together
-                    self.conn.execute(Cmd)
-                else:
-                    log.warning('!! NO svc data for ts selection with limit'+str(limit))
-
-            # ts loop end
+                    if len(sendstr) > 0:
+                        sendstring += sendstr
+                        log.debug('added to sendstring in related sendstr: '+sendstr.replace('\n',' ')) ###
+                        Cmd = "update "+self.table+" set ts_tried="+str(int(self.ts))+",inum="+str(self.inum)+" where ts_created="+str(ts_created)
+                        log.debug('buffer update cmd: '+Cmd) # update all rows with this ts_creted together
+                        self.conn.execute(Cmd)
+                    else:
+                        log.warning('!! NO svc data for ts selection with limit'+str(self.limit))
+                sendlenn = len(sendstring)
+                if sendlenn > self.mtu:
+                    if self.limit > 1:
+                        sendstring = '' # empty a dn try again
+                        self.limit -= 1  # cycle through the loop once again 
+                        log.info('== self.limit reduced to '+str(self.limit)+' due to sendlenn '+str(sendlenn)+', but mtu '+str(self.mtu))
+                    elif self.limit == 1:
+                       stop = True # no more loop
+                else: # sendlenn below or equal self.mtu
+                    stop = True
+                    
+            # end loop, seems sendlenn was below self.mtu
             self.conn.commit() # buff2server transaction end
-
+            
+            if len(sendstring) > self.mtu:
+                log.warning('sendlenn '+str(sendlenn)+' still bigger than self.mtu '+str(self.mtu)+', self.limit'+str(self.limit))
+                
             if svc_count > 0: # there is something to be sent!
                 #sendstring = "in:" + str(self.inum) + ","+str(ts_created)+"\n" + sendstring # in alusel vastuses toimub puhvrist kustutamine
                 sendstring = "id:" + str(self.host_id) + "\n" + sendstring # alustame sellega datagrammi
-                log.debug('going to udpsend from buff2server, svc_count '+str(svc_count)+', row limit: '+str(limit)) ##
+                log.debug('going to udpsend from buff2server, svc_count '+str(svc_count)+', row limit: '+str(self.limit)) ##
                 self.udpsend(sendstring, self.age) # sending away. self.age is used by baV svc too.
             return 0
 
