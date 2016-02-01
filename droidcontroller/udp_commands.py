@@ -542,7 +542,7 @@ class RegularComm(SQLgeneral): # r
             age = udp.get_age() # send buffer age from uniscada
 
             agestatus = 1
-            if age < 20 and age >= 0:
+            if age < 60 and age >= 0:
                 agestatus = 0
             sendstring = 'baV:'+str(age)+'\nbaS:'+str(agestatus)+'\n' # msh cannot contain colon or newline
             udp.udpsend(sendstring) # SEND AWAY directly, omitting buffer
