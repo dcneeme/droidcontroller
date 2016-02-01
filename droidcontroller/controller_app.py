@@ -7,6 +7,7 @@ import tornado.ioloop
 import logging
 log = logging.getLogger(__name__)
 
+from droidcontroller.periodiccallback import PeriodicCallback # run_now tekitamiseks
 from droidcontroller.udp_commands import * # sellega alusta, kaivitab ka SQlgeneral
 from droidcontroller.uniscada import * # UDPchannel, TCPchannel
 from droidcontroller.statekeeper import *
@@ -89,16 +90,18 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         self.loop = tornado.ioloop.IOLoop.instance()
         udp.add_reader_callback(self.udp_reader)
 
-        self.udpcomm_scheduler = tornado.ioloop.PeriodicCallback(self.udp_comm, 20000, io_loop = self.loop) # this is periodical, but ack will lauch immediate send!
-        self.regular_scheduler = tornado.ioloop.PeriodicCallback(self.regular_svc, 60000, io_loop = self.loop) # send regular svc
-        self.di_scheduler = tornado.ioloop.PeriodicCallback(self.di_reader, 10, io_loop = self.loop) # read DI asap. was 50 ms
-        self.ai_scheduler = tornado.ioloop.PeriodicCallback(self.ai_reader, ai_readperiod, io_loop = self.loop) # ai 10 s
-        #self.cal_scheduler = tornado.ioloop.PeriodicCallback(self.cal_reader, 1800000, io_loop = self.loop) # gcal 1 h
+        self.udpcomm_scheduler = tornado.ioloop.PeriodicCallback(self.udp_comm, 20000) # this is periodical, but ack will lauch immediate send!
+        self.regular_scheduler = tornado.ioloop.PeriodicCallback(self.regular_svc, 60000) # send regular svc
+        self.di_scheduler = tornado.ioloop.PeriodicCallback(self.di_reader, 10) # read DI asap. was 50 ms
+        self.ai_scheduler = tornado.ioloop.PeriodicCallback(self.ai_reader, ai_readperiod) # ai 10 s
+        #self.cal_scheduler = tornado.ioloop.PeriodicCallback(self.cal_reader, 1800000) # gcal 1 h
 
-        self.udpcomm_scheduler.start()
+        self.udpcomm_scheduler.start() # ykskok kumba kasutada startimiseks, run_now kaib kohe labi
+        #self.udpcomm_scheduler.run_now() # 
         self.regular_scheduler.start()
         self.di_scheduler.start()
-        self.ai_scheduler.start()
+        #self.ai_scheduler.start()
+        self.ai_scheduler.run_now()
         #self.cal_scheduler.start()# FIXME move here from iomain
         log.info('ControllerApp instance created. '+self.AVV)
 
@@ -156,8 +159,8 @@ class ControllerApp(object): # default modbus address of io in controller = 1
                 got = udp.udpread()
                 if gotack:
                     log.info('send more from buffer as something was deleted')
-                    udp.iocomm()  # send next udp block, but only if in: was in ack!
-                    self.reset_sender_timeout() # next retry delayed
+                    self.udpcomm_scheduler.run_now() # immediate, then next time after normal delay
+                    
             if udp.sk.get_state()[3] == 1: # firstup
                 self.firstup() # udp connectivity state to up
 
