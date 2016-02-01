@@ -71,7 +71,7 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
     
     def listen_proc(self, token, subject, message):
         ''' Returns the value of received service member '''
-        log.info('lamp received from msgbus for '+self.name+':'+subject+', '+str(message))
+        log.debug('lamp received from msgbus for '+self.name+':'+subject+', '+str(message))
         values = message['values'] # member index starting from 0
         self.inproc(subject, values)
       
@@ -152,9 +152,9 @@ class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbu
                 #print('out change from '+str(self.out)+' to '+str(out))
                 log.info('lamp out change to '+str(out)+', to svc '+str(self.out_svc[0])+'.'+str(self.out_svc[1]))
                 print('lamp out change to '+str(out)+', to svc '+str(self.out_svc[0])+'.'+str(self.out_svc[1]))
-                with open('inproc.log', 'a') as handle: # ei logi msgbus teate puhul???
-                    handle.write('lamp out change to '+str(out)+', to svc '+str(self.out_svc[0])+'.'+str(self.out_svc[1])+ '\n')
-                self.d.set_dovalue(self.out_svc[0], self.out_svc[1], out) # svc, member, value
+                #with open('inproc.log', 'a') as handle: # ei logi msgbus teate puhul???
+                #    handle.write('lamp out change to '+str(out)+', to svc '+str(self.out_svc[0])+'.'+str(self.out_svc[1])+ '\n')
+                self.d.set_dovalue(self.out_svc[0], self.out_svc[1], out) # svc, member, value AEGLANE, kirjuta otse?
                 self.out = out
             #if self.msgbus:
             #    self.msgbus.publish(self.out_svc[0], {'values': [self.out], 'status': 0}) # 
