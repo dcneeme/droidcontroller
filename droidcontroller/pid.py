@@ -54,10 +54,9 @@ class PID:
         self.extnoint = 0 # from outside, on output()
         self.noint = 0 # internal saturation-initiated dead time signal to prevent outer loop integration in one direction
         self.Initialize()
-        msg=str(self.getvars())
-        log.info(self.name+' init done, '+msg)
-        time.sleep(2)
-
+        #msg=str(self.getvars())
+        log.info('PID '+self.name+' init done')
+        
 
     def set_actual(self, invar):
         if invar != None:
