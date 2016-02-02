@@ -90,19 +90,17 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         self.loop = tornado.ioloop.IOLoop.instance()
         udp.add_reader_callback(self.udp_reader)
 
+        # ioloop timers for regular execution
         self.udpcomm_scheduler = PeriodicCallback(self.udp_comm, 20000) # this is periodical, but ack will lauch immediate send!
         self.regular_scheduler = PeriodicCallback(self.regular_svc, 60000) # send regular svc
         self.di_scheduler = PeriodicCallback(self.di_reader, 10) # read DI asap. was 50 ms
         self.ai_scheduler = PeriodicCallback(self.ai_reader, ai_readperiod) # ai 10 s
-        #self.cal_scheduler = tornado.ioloop.PeriodicCallback(self.cal_reader, 1800000) # gcal 1 h
+        #self.cal_scheduler = tornado.ioloop.PeriodicCallback(self.cal_reader, 1800000) # selle kasutus iomain sest! nagu ka mbus jms
 
-        self.udpcomm_scheduler.start() # ykskok kumba kasutada startimiseks, run_now kaib kohe labi
-        #self.udpcomm_scheduler.run_now() # 
+        self.udpcomm_scheduler.start() #self.udpcomm_scheduler.run_now() # starts immediately main loop on import?
         self.regular_scheduler.start()
         self.di_scheduler.start()
-        #self.ai_scheduler.start()
-        self.ai_scheduler.run_now()
-        #self.cal_scheduler.start()# FIXME move here from iomain
+        self.ai_scheduler.start()
         log.info('ControllerApp instance created. '+self.AVV)
 
 
@@ -260,18 +258,6 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         print('FIXME cal sync')
 
 
-    def reset_sender_timeout(self): # FIXME
-        ''' Resetting ioloop timer
-        [31.01.16 15:24] Marko Veelma (marko.veelma@gmail.com): lisamisel jatad timeri meelde
-        self.timer = self.ioloop.add_timeout(datetime.timedelta(seconds=self.timeout), self._timeout)
-        ja enne uuesti lisamist eemaldad vana
-        if self.timer:
-        self.ioloop.remove_timeout(self.timer)
-        '''
-        ##print('FIXME timer reset')
-        pass # IOLoop.add_timeout(15000, self.udp_sender) # ???
-
-
     def commtest(self):
         ''' Use for testing from iomain_xxx, cua.ca.commtest() '''
         log.info('testing modbus and udp communication')
@@ -289,11 +275,67 @@ class ControllerApp(object): # default modbus address of io in controller = 1
                 self.firstup()
 
 
-    #def apptest(self):
-    #    ''' testing app part in the iomain script'''
-    #    self.app(inspect.currentframe().f_code.co_name, attentioncode = 3)
-
-    def apptest(self): # kiireim
+    def apptest(self): # kiireim / mis see on?
         #testides python -m timeit -s 'import inspect, sys' 'inspect.stack()[0][0].f_code.co_name'
         ''' testing app part in the iomain script'''
         self.app(sys._getframe().f_code.co_name, attentioncode = 2)
+        
+        
+    def cal2set(self, conf_dict): # checks sql and updates setpoint services.
+        ''' Takes setup params like
+            {'name':'2k_MB', 'set_svc':['T8W',1], 'cal_svc':'T8SW', 'cal_title':'Tmb', 'rel_svc': ['TAW',1]} # like loop config
+               cal_svc alati 0 2 liiget! list of noevent and event values, juhtimiseks tyhja evendiga
+               kui olemas rel_svc, siis selle suhtes antakse nihe, kas evendi polt valitud cal_svc voi title kaudu. tulemus set_svc vaartuseks. 
+        '''
+        if self.ac and self.cfg:
+            pass
+        else:
+            log.error('cal2svc() method is not usable without self.ac. and self.cfg!')
+            return None
+
+        for i in range(len(self.cfg)): # calendar control for air loop setpoints
+            title = self.cfg[i]['cal_title']
+            rel_svc = None
+            if title and title != '':
+                res = self.check(title)
+                try:
+                    setvalues = self.ac.get_aivalues(self.cfg[i]['cal_svc']) # list of noevent and event values
+                    if len(setvalues) == 2: # [noevent , event] values
+                        if 'rel_svc' in self.cfg[i]: # relative to this service setpoint shift
+                            rel_svc = self.cfg[i]['rel_svc']
+                            rel_value = self.ac.get_aivalue(self.cfg[i]['rel_svc'][0], self.cfg[i]['rel_svc'][1])[0] # svc and member
+                            if rel_value: # not none
+                                setvalues = [ rel_value + x for x in setvalues ] # memberwise calc
+                                log.info('calculated relative to '+str(rel_svc)+' with value '+str(rel_value)+' absolute setvalues '+str(setvalues)+' for '+title)
+                            else:
+                                log.warning('rel_value None, using shift value as setpoint')
+                        log.info('absolute setvalues '+str(setvalues)+' for '+title)
+                        # list memberwise calc example         d = [ x+y for x, y in zip(a,b)  ]
+                        # adding to every member a constant    d = [ 1+x for x in a  ]
+                    else:
+                        log.error('no cal_svc defined for '+title)
+                        break # next i
+                except:
+                    log.warning('calendar values not defined for '+title)
+                    break # next i
+
+                if res != None and res != '' and res != '-': # an event for the current time exists
+                    if res != '1': # value given, assuming temperature in degrees!
+                        if rel_svc and rel_value:
+                            value = int(10 * float(res) + rel_value) # relative shift in calendar
+                        else:
+                            value = int(10 * float(res)) # for temperature, absolute setpoint
+                    else: # from
+                        value = setvalues[1]
+                else: # use default value for no event time
+                    value = setvalues[0]
+                    log.info('using default setpoint of '+str(value)+' for '+self.cfg[i]['name'])
+
+                try:
+                    self.ac.set_aivalue(self.cfg[i]['set_svc'][0], self.cfg[i]['set_svc'][1], value) # svc, member, value
+                    log.info('stored setpoint '+str(value)+' for '+self.cfg[i]['name']+' into '+ str(self.cfg[i]['set_svc']))
+                except:
+                    log.warning('FAILED to set '+str(self.cfg[i]['set_svc'][0])+'.'+str(self.cfg[i]['set_svc'][1])+' to '+str(value))
+                    traceback.print_exc()
+
+

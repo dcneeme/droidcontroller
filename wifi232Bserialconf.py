@@ -20,12 +20,12 @@ import serial.tools.list_ports
 # [('/dev/ttyUSB1', 'FTDI TTL232R FTH8AIQ9', 'USB VID:PID=0403:6001 SNR=FTH8AIQ9')]
 
 class SerialConf:
-    ''' Configure USR IOT products via serial port 
+    ''' Configure USR IOT products via serial port
         If setting wskey is not successful, comment the according update line below and set manually via web while in AP mode
         passwd Pargi.09 for Lasteaed
     '''
     def __init__(self, port='auto', autokey='FTDI', tout=1,
-        
+
         ip='10.0.0.4', defgw='10.0.0.253', speed=9600, parity='None',
             ssid='gembird', passwd='villakooguit', model='WIFI232B', conf={
                 'FUDLX': 'on',
@@ -35,6 +35,7 @@ class SerialConf:
             ):
         self.ip = ip # to be used for ping
         self.defgw = defgw # to be used for ping
+
         conf.update({'UART': str(speed)+',8,1,'+parity+',NFC'})
         conf.update({'WANN': 'static,'+ip+',255.255.255.0,'+defgw}) # sta mode network params
         conf.update({'WSSSID': ssid})
@@ -116,7 +117,7 @@ class SerialConf:
                 res = ''
                 got = 0
                 minsize = 6
-                
+
                 j = 0
                 sys.stdout.write(' ') # delimit from command
                 while res == '' and j < 100: # receive loop
@@ -125,15 +126,15 @@ class SerialConf:
                     if inbytes > minsize: # '\r\n\r+ok=WPA2PSK,AES,villakooguit\r\n\r\n'
                         got = 1
                         break # read all with timeout
-                    else: 
+                    else:
                         if got == 0: # still waiting
-                            sys.stdout.write('.') # to see retries
+                            sys.stdout.write('.') # to indicate waiting
                             sys.stdout.flush()
                         else: # got == 1 but got no more
                             break
                     j += 1
                 time.sleep(delay) # time to get the whole message
-                res = self.ser.read(256).decode('utf-8') 
+                res = self.ser.read(256).decode('utf-8')
                 if not silent:
                     sys.stdout.write(' '+res.replace('\r\n',' ').replace('\r','').replace('\n','')+'\n') ## to see every answer during retries
                     sys.stdout.flush() ##
@@ -148,12 +149,12 @@ class SerialConf:
 
     def crlf(self):
         self.ser.write('\r\n'.encode('ascii'))
-        
+
 
     def conn(self):
         ''' try +++a '''
         print(str(self.ser))
-        
+
         res = '' # response string, bytes
         self.ser.flushInput()
         self.ser.write('+++'.encode('ascii'))
@@ -162,7 +163,7 @@ class SerialConf:
             res = self.ser.read(1).decode('utf-8') # echo
         except:
             traceback.print_exc() # pass
-        
+
         if res == '+': # already in at cmd mode
             print('device already in at mode')
             self.crlf() # finish the cmd
@@ -184,8 +185,8 @@ class SerialConf:
         else:
             log.warning('FAILED to get serial connectivity at this time')
             return 1
-        
-        
+
+
     def set_mode(self): # ALWAYS TO SER CONF, USE AT+Z or AT+ENTM TO get into TRANSPARENT mode!
         ''' test and set the mode to AT command '''
         self.reopen(self.speed, self.parity) # reopen at targeted speed, even if already using this
@@ -194,33 +195,33 @@ class SerialConf:
             print('trying to connect at speed '+str(self.ispeed))
             self.reopen(self.ispeed, self.iparity) # try factory default parameters 57k6 8N1
             res = self.conn()
-            
+
         if res != 0: # no success with current speed
             log.info('FAILED to connect with '+self.model+'. try /reset!')
             return 1
         else:
-            print('serial connected')        
+            print('serial connected')
         return 0
 
-    
+
     def reset_mode(self): # back to transparent
         cmd='AT+ENTM'
         res = self.comm(cmd, expect_string='+ok', delay = 1, retries = 2)
         print(res)
-        
-        
+
+
     def set_2ap(self):
-        ''' sets to ap mode ''' 
+        ''' sets to ap mode '''
         self.comm('AT+WMODE=AP')
         self.comm('AT+Z')
-    
+
     def set_2sta(self):
-        ''' sets to sta mode ''' 
+        ''' sets to sta mode '''
         self.comm('AT+WMODE=sta')
         self.comm('AT+Z')
-    
-    
-    
+
+
+
     def set_conf(self):
         ''' write config as at command '''
         for key in self.conf:
@@ -232,7 +233,7 @@ class SerialConf:
         time.sleep(1)
         self.comm('AT+Z') # restart
         print('module restarted, the communication at targeted speed and transparent mode can be tried soon')
-        
+
 
     def get_conf(self):
         ''' read config via AT command '''
