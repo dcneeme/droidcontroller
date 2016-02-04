@@ -443,7 +443,7 @@ class UDPchannel():
             (based on one or more in: contained in the received  message).
 
             do not try to send and assign inum to next rows if there are undeleted rows with inum.
-            resend the already sent rows only until there are no rows waiting for ack and deletion.
+            resend the already sent (long enough time ago) rows only until there are no rows waiting for ack and deletion.
         '''
         log.info('buff2server start')
         timetoretry = 0 # local
@@ -456,27 +456,27 @@ class UDPchannel():
         sendlenn = 0
         ##limit = self.sk.get_state()[0] * 5 + 1  ##  unique ts number to try if conn down, 6 if up. ##
         age = 0 # the oldest, will be self.age later
-        #first find out if there are unacked rows in the buffer. if there is, these should be resent.
+        #first find out if there are unacked rows in the buffer. if there is, these should be resent if they were sent more that retrysend_delay ago.
         unacked = self.read_buffer(mode = 2)
         if unacked > 0: # some rows are waiting for ack
-            if self.ioloop == False: # this delay calc is not needed for ioloop
-                if self.sk.get_state()[0] == 0: # no conn
-                    timetoretry = int(self.ts_udpunsent + 3 * self.retrysend_delay) # try less often during conn break
-                else: # conn ok
-                    timetoretry = int(self.ts_udpsent + self.retrysend_delay) ### FIXME  use age to add delay?
+            ##if self.ioloop == False: # this delay calc is used in both cases
+            if self.sk.get_state()[0] == 0: # no conn
+                timetoretry = int(self.ts_udpunsent + 3 * self.retrysend_delay) # try less often during conn break
+            else: # conn ok
+                timetoretry = int(self.ts_udpsent + self.retrysend_delay) ### FIXME  use age to add delay?
 
-                if self.ts_udpsent > self.ts_udpunsent:
-                    log.debug('resend need, using shorter retrysend_delay, conn ok') ##
-                    timetoretry = int(self.ts_udpsent + self.retrysend_delay)
-                else:
-                    log.warning('resend need, using longer retrysend_delay, conn NOT ok') ##
-                    timetoretry = int(self.ts_udpunsent + 10 * self.retrysend_delay) # longer retry delay with no conn
+            if self.ts_udpsent > self.ts_udpunsent:
+                log.debug('resend need, using shorter retrysend_delay, conn ok') ##
+                timetoretry = int(self.ts_udpsent + self.retrysend_delay)
+            else:
+                log.warning('resend need, using longer retrysend_delay, conn NOT ok') ##
+                timetoretry = int(self.ts_udpunsent + 10 * self.retrysend_delay) # longer retry delay with no conn
 
-                if self.ts < timetoretry: # too early to send again
-                    log.info('resend need, conn state '+str(self.sk.get_state()[0])+'. wait with buff_resend until timetoretry '+str(int(timetoretry))) ##
-                    return 0 # perhaps next time
+            if self.ts < timetoretry: # too early to send again
+                log.info('==wait '+str(int(timetoretry - self.ts))+' s with buff_resend, conn state '+str(self.sk.get_state()[0])) ##
+                return 0 # perhaps next time
 
-            log.info('buff_resend execution now') ##
+            log.info('==buff_resend execution now, '+str(int(self.ts - timetoretry))+' s past timetoretry') ##
             self.buff_resend()
             self.unsent()  # delete too old lines, count the rest
             return 0
