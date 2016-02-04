@@ -296,7 +296,7 @@ class PID:
             Cd = de/dt                     # derivative term
             if self.out != None:
                 if abs(Cd) < (self.outMax - self.outMin): # seems normal
-                    self.Cd = Cd
+                    self.Cd = (Cd + self.Cd) / 2 # averaging to make the differential spikes smoother
                 else:
                     log.warning('IGNORED too large Cd '+str(Cd)+', de '+str(de)+', dt '+str(dt)+' above allowed output span')
 
