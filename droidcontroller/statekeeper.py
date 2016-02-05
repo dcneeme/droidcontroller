@@ -102,6 +102,7 @@ class StateKeeper(object): #
 
     def get_state(self):
         ''' Returns state and the age of this state since last state change '''
+        age= None
         if self.state == 0:  # conn state down
             age = round(time.time() - self.ts_dn,0) # s
             time2down = 0
@@ -114,7 +115,7 @@ class StateKeeper(object): #
                     age = 0
                     time2down = 0
                     log.info('state changed to down due to timeout')
-
+            
 
         if self.neverup == -1 and self.state == 1: # generate pulse to restore variables from the server
             firstup = 1
