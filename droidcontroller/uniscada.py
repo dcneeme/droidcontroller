@@ -4,9 +4,7 @@
 # able to restore unsent history from buffer2server.sql when connectivity restored
 ## FIXME - led usage via method, chk if GPIO usable
 
-import logging
-#logging.basicConfig(stream=sys.stderr, level=logging.INFO) # temporary
-log = logging.getLogger(__name__)
+from droidcontroller.statekeeper import StateKeeper
 
 import time, datetime
 import sqlite3
@@ -42,11 +40,10 @@ class UDPchannel():
 
     def __init__(self, id ='000000000000', ip='127.0.0.1', port=44445, receive_timeout=0.1, retrysend_delay=5,
         loghost='0.0.0.0', logport=514, mtu=1000, limit = 5, copynotifier=None, ioloop=False): # delays in seconds
-        #from droidcontroller.connstate import ConnState
-        from droidcontroller.statekeeper import StateKeeper
-        self.sk = StateKeeper(off_tout=300, on_tout=0) # conn state with up/down times based on udp received
-        self.sk_send = StateKeeper(off_tout=300, on_tout=0) # conn state with up/down times based on udp send
-        # it is possible that send is sucessful but nothing is received. try udp_reset then.
+        self.sk = StateKeeper(off_tout=300, on_tout=0, name='udp_conn_state') # 1 if udp ack received in 300 s
+        self.sk_send = StateKeeper(off_tout=300, on_tout=0, name='udp_send_state') # last send in 300 s successful if 1
+        self.sk_buff = StateKeeper(off_tout=None, on_tout=0, name='buff_dumped') # dumped not empty buffer if state 1
+        # NOTE: it is possible that udp send is sucessful but nothing is received. try udp_reset then.
 
         try:
             from droidcontroller.gpio_led import GPIOLED
@@ -138,8 +135,8 @@ class UDPchannel():
         ''' returns server ip for this instance '''
         return self.ip
 
-        
-    def set_ioloop(self, invar): 
+
+    def set_ioloop(self, invar):
         ''' sets ioloop flag to avoid some delays in uniscada.buff2server() '''
         if 'bool' in str(type(invar)):
             self.ioloop = invar
@@ -308,13 +305,13 @@ class UDPchannel():
             self.conn.commit()
             log.debug('buffer content deleted')
             self.dump_buffer() # empty sql file too!
-            self.inum = 5000
+            #self.inum = 5000
         except:
             traceback.print_exc()
 
     def dump_buffer(self):
         ''' Writes the buffer table into a SQL-file to keep unsent data. syncs too! '''
-        msg=self.table+' dump into '+self.table+'.sql'
+        msg="=="+self.table+' dump into '+self.table+'.sql' # using "==" marker for udp send/receive related msg
         log.info(msg)
         try:
             with open(self.table+'.sql', 'w') as f:
@@ -325,8 +322,8 @@ class UDPchannel():
             time.sleep(0.1)
             return 0
         except:
-            msg = 'FAILURE dumping '+self.table+'! '+str(sys.exc_info()[1])
-            log.warning(msg)
+            msg = '=FAILURE dumping '+self.table+'! '+str(sys.exc_info()[1])
+            log.error(msg)
             traceback.print_exc()
             time.sleep(1)
             return 1
@@ -403,15 +400,12 @@ class UDPchannel():
             #if self.sk.get_state()[0] == 0: # no conn
             if linecount > self.linecount + 100: # dump again while the table keeps increasing
                 msg=str(linecount)+' messages to be dumped from table '+self.table+'!'
-            elif linecount == 0 and self.linecount > 0: # dump empty table into sql file
-                msg='empty buffer to be dumped from table '+self.table+', sync! self.inum became 1'
-                self.inum = 1 # starting from low inum again, so inum indicates the buffer size
-
-            if msg != '':
                 log.info(msg)
                 self.dump_buffer() # dump to add more lines into sql file, syncs too
-                self.linecount = linecount # dumped rows
-            self.undumped = linecount - self.linecount
+                self.linecount = linecount # already dumped rows. cleared together with sk_buff(dn)
+                self.sk_buff(up) # flag the not-empty sql file
+
+            #self.undumped = linecount - self.linecount  # not used anywhere
             self.conn.commit() # buff2server transaction end
             return linecount # 0
 
@@ -482,6 +476,12 @@ class UDPchannel():
             return 0
 
         ## no unacked rows found, lets try to send next rows
+        if self.sk_buff.get_state()[0] > 0: # sql not emptied yet
+            msg='empty buffer to be dumped from table '+self.table+', sync! self.inum became 1'
+            self.dump_buffer() # empty sql file
+            self.sk_buff(dn)
+            self.inum = 1 # starting from low inum again, so inum indicates the sql buffer size / age...
+
         Cmd = "BEGIN IMMEDIATE TRANSACTION" # buff2server first try to send, assigning inum
         self.conn.execute(Cmd)
         #while stop: ## reduce the limit until the message is small enough
@@ -631,7 +631,6 @@ class UDPchannel():
             Common for all included keyvalue pairs (ts) should be included in the string to send.
 
             Sendstring must be terminated with newline!
-
         '''
         if sendstring == '': # nothing to send
             log.warning('nothing to send!')
