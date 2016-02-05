@@ -39,7 +39,7 @@ class UDPchannel():
     '''
 
     def __init__(self, id ='000000000000', ip='127.0.0.1', port=44445, receive_timeout=0.1, retrysend_delay=5,
-        loghost='0.0.0.0', logport=514, mtu=1000, limit = 5, copynotifier=None, ioloop=False): # delays in seconds
+        loghost='0.0.0.0', logport=514, mtu=1000, limit = 25, copynotifier=None, ioloop=False): # delays in seconds
         self.sk = StateKeeper(off_tout=300, on_tout=0, name='udp_conn_state') # 1 if udp ack received in 300 s
         self.sk_send = StateKeeper(off_tout=300, on_tout=0, name='udp_send_state') # last send in 300 s successful if 1
         self.sk_buff = StateKeeper(off_tout=None, on_tout=0, name='buff_dumped') # dumped not empty buffer if state 1
@@ -525,18 +525,18 @@ class UDPchannel():
                         self.conn.execute(Cmd)
                     else:
                         log.warning('!! NO svc data for ts selection with limit'+str(self.limit))
-                sendlenn = len(sendstring)
-                if sendlenn > self.mtu:
-                    if self.limit > 1:
-                        sendstring = '' # empty a dn try again
-                        self.limit -= 1  # cycle through the loop once again
-                        log.info('== self.limit reduced to '+str(self.limit)+' due to sendlenn '+str(sendlenn)+', but mtu '+str(self.mtu))
-                    elif self.limit == 1:
-                       stop = True # no more loop
-                    else:
-                       log.error('illegal limit='+str(self.limit)+', last sendlenn '+str(sendlenn))
-                else: # sendlenn below or equal self.mtu
-                    stop = True
+                #sendlenn = len(sendstring) # no need for decreasing limit, gzip in use!
+                #if sendlenn > self.mtu:
+                #    if self.limit > 1:
+                #        sendstring = '' # empty a dn try again
+                #        self.limit -= 1  # cycle through the loop once again
+                #        log.info('== self.limit reduced to '+str(self.limit)+' due to sendlenn '+str(sendlenn)+', but mtu '+str(self.mtu))
+                #    elif self.limit == 1:
+                #       stop = True # no more loop
+                #    else:
+                #       log.error('illegal limit='+str(self.limit)+', last sendlenn '+str(sendlenn))
+                #else: # sendlenn below or equal self.mtu
+                #    stop = True
 
 
             except:
@@ -658,12 +658,17 @@ class UDPchannel():
             self.udpreset() # recreating socket
 
         try:
-            sendlen = self.UDPSock.sendto(sendstring.encode('utf-8'),self.saddr) # tagastab saadetud baitide arvu
+            sendbin = sendstring.encode('utf-8')
+            sendlen1 = len(sendbin)
+            if sendlen1 > 500:
+                sendbin = gzip.compress(sendbin) # gzip compression to the whole datagram to be sent
+                
+            sendlen = self.UDPSock.sendto(sendbin,self.saddr) # tagastab saadetud baitide arvu
             self.traffic[1] += sendlen # traffic counter udp out
             if resend:
-                msg = '==>> REsent ' +str(sendlen)+' bytes with age '+str(age)+' to '+str(repr(self.saddr))+' '+sendstring.replace('\n',' ')   # show as one line
+                msg = '==>> REsent ' +str(sendlen1)+'/'+str(sendlen)+' bytes with age '+str(age)+' to '+str(repr(self.saddr))+' '+sendstring.replace('\n',' ')   # show as one line
             else:
-                msg = '==>> sent ' +str(sendlen)+' bytes with age '+str(age)+' to '+str(repr(self.saddr))+' '+sendstring.replace('\n',' ')   # show as one line
+                msg = '==>> sent ' +str(sendlen1)+'/'+str(sendlen)+' bytes with age '+str(age)+' to '+str(repr(self.saddr))+' '+sendstring.replace('\n',' ')   # show as one line
             log.info(msg)
             #syslog(msg)
             sendstring = ''
