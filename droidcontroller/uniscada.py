@@ -403,7 +403,7 @@ class UDPchannel():
                 log.info(msg)
                 self.dump_buffer() # dump to add more lines into sql file, syncs too
                 self.linecount = linecount # already dumped rows. cleared together with sk_buff(dn)
-                self.sk_buff(up) # flag the not-empty sql file
+                self.sk_buff.up() # flag the not-empty sql file
 
             #self.undumped = linecount - self.linecount  # not used anywhere
             self.conn.commit() # buff2server transaction end
@@ -479,7 +479,7 @@ class UDPchannel():
         if self.sk_buff.get_state()[0] > 0: # sql not emptied yet
             msg='empty buffer to be dumped from table '+self.table+', sync! self.inum became 1'
             self.dump_buffer() # empty sql file
-            self.sk_buff(dn)
+            self.sk_buff.dn()
             self.inum = 1 # starting from low inum again, so inum indicates the sql buffer size / age...
 
         Cmd = "BEGIN IMMEDIATE TRANSACTION" # buff2server first try to send, assigning inum
