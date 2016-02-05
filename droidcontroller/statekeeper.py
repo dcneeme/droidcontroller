@@ -12,6 +12,7 @@ class StateKeeper(object): #
         Toggle input toggle() forces immediate state change.
         Timeout 0 turns state down on next get_state(), tout None means never time out.
         TODO: add upfilter, time to get another up, must be smaller than off_tout
+        TODO: add upfilter, time to get another up, must be smaller than off_tout
         '''
 
     def __init__(self, name='undefined', off_tout = 120, on_tout = 0): # falls to down (connstate = 0) after no setting up for off_tout
@@ -33,7 +34,7 @@ class StateKeeper(object): #
         self.ts_dnlast = time.time()
         self.upwait = 0 # intermediate state used between down to up transition
         self.state = 0 # down initially
-        log.info('StateKeeper instance created')
+        log.info('StateKeeper instance created with name '+self.name)
 
 
     def get_tout(self):
@@ -58,16 +59,16 @@ class StateKeeper(object): #
                 self.state = 1
                 self.ts_up = time.time()
                 if self.neverup == 1:
-                    log.info('state 1st ON')
+                    log.info(self.name+' state 1st ON')
                     self.neverup = -1
 
             else:
                 if self.upwait == 1 and time.time() - self.ts_uplast < self.on_tout: # sure on
-                    log.debug('switching ON')
+                    log.debug(self.name+' switching ON')
                     self.state = 1
                     self.ts_up = time.time()
                     if self.neverup == 1:
-                        log.info('state 1st ON')
+                        log.info(self.name+' state 1st ON')
                         self.neverup = -1
 
                 else:
@@ -79,7 +80,7 @@ class StateKeeper(object): #
         if self.state == 1:
             self.state = 0
             self.ts_dn = time.time()
-            log.info('state changed to down')
+            log.info(self.name+' state changed to down')
 
 
     def toggle(self):
@@ -88,17 +89,17 @@ class StateKeeper(object): #
             self.state = 0
             self.ts_dn = time.time()
             self.ts_dnlast = time.time()
-            log.info('state changed to down by toggle signal')
+            log.info(self.name+' state changed to down by toggle signal')
         elif self.state == 0:
             self.state = 1
             self.ts_up = time.time()
             self.ts_uplast = time.time()
 
             if self.neverup == 1:
-                log.info('state changed to first-time up by the toggle signal')
+                log.info(self.name+' state changed to first-time up by the toggle signal')
                 self.neverup = -1
             else:
-                log.info('state changed to up by toggle signal')
+                log.info(self.name+' state changed to up by toggle signal')
 
     def get_state(self):
         ''' Returns state and the age of this state since last state change '''
@@ -115,7 +116,7 @@ class StateKeeper(object): #
                     self.dn()
                     age = 0
                     time2down = 0
-                    log.info('state changed to down due to timeout')
+                    log.info(self.name+' state changed to down due to timeout')
             
 
         if self.neverup == -1 and self.state == 1: # generate pulse to restore variables from the server
