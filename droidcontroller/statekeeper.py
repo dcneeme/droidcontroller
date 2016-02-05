@@ -103,6 +103,7 @@ class StateKeeper(object): #
     def get_state(self):
         ''' Returns state and the age of this state since last state change '''
         age= None
+        time2down = None
         if self.state == 0:  # conn state down
             age = round(time.time() - self.ts_dn,0) # s
             time2down = 0
