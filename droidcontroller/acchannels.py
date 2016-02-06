@@ -743,15 +743,15 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 val_reg=row[0] # teenuse nimi
                 #sta_reg=val_reg[:-1]+"S" # nimi ilma viimase symbolita ja S - statuse teenuse nimi, analoogsuuruste ja temp kohta
 
-                sendtuple = self.make_svc(val_reg) # returns like ['T1S', 0, 'T1W', '170 218 164']
-                if sendtuple != None and sendtuple != []: #
-                    udp.send(sendtuple) # can send to buffer double if make_svc found change. no dbl sending if ts is the same.
-                    log.debug('buffered for reporting: '+str(sendtuple)) ##
-                else:
-                    msg = 'FAILED to report due to empty sendtuple for svc '+val_reg
-                    if self.msg != msg:
-                        self.msg = msg
-                        log.warning(msg)
+                self.make_svc(val_reg) # sends to buffer ['T1S', 0, 'T1W', '170 218 164']
+                #if sendtuple != None and sendtuple != []: #
+                #    udp.send(sendtuple) # can send to buffer double if make_svc found change. no dbl sending if ts is the same.
+                #    log.debug('buffered for reporting: '+str(sendtuple)) ##
+                #else:
+                #   msg = 'FAILED to report due to empty sendtuple for svc '+val_reg
+                #    if self.msg != msg:
+                #        self.msg = msg
+                #        log.warning(msg)
                     # return 1 # other services still need to be reported, commit needs to be done.
 
             conn.commit() # aicochannels svc_report transaction end
@@ -780,11 +780,13 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         mstatus = 0
         cur = conn.cursor()
         lisa = ''
+        olisa = ''
         value = None
         hilim = None
         lolim = None
         nolim = 0
         values = [] # to be reported via msgbus
+
         
         if sta_reg == '' and (val_reg[-1] == 'W' or val_reg[-1] == 'V'):
             sta_reg = val_reg[0:-1]+'S' # assuming S in the end
@@ -800,7 +802,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
         for srow in cur: # go through service members
             log.debug(repr(srow))
-
+            repeat = False # earlier values will be sent with shifted time if True
             mba = -1 #
             regadd = -1
             member = 0
@@ -931,8 +933,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
                             if (cfg & 256) and (abs(value - ovalue) > abs(value / 5.0)): # change more than 20% detected, use num w comma!
                                 log.debug('### value change (was '+str(ovalue)+', became '+str(value)+') for '+val_reg+'.'+str(member)+', need to send')
+                                repeat = True
                                 self.chg += 1
-
+                                
 
                             # counter2power and scaling done, status check begins ##########
                             if cfg & 8192: # use hysteresis from block
@@ -998,10 +1001,14 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
             if lisa != '': # not the first member
                 lisa += ' ' # separator between member values
-
+                olisa += ' ' # old value to repeat
+                
             try: # what if None? exception?
                 lisa += str(int(round(value))) # adding member values into one string
-                values.append(int(round(value))) # for msgbus
+                olisa += str(int(round(ovalue))) # adding member values into one string
+                
+                values.append(int(round(value))) # for msgbus the latest only
+                
             except:
                 msg = 'invalid value '+str(value)+' found for service '+val_reg+'.'+str(member)
                 if self.msg != msg:
@@ -1019,18 +1026,22 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
         # service members done, check if all of them valid to use in svc tuple
         if rowproblemcount == 0: # all members valid
+            if repeat: # > 20% change was detected from ovalue to value
+                sendtuple = [sta_reg, status, val_reg, olisa] # repeat the earlier service to buffer, with last status though
+                udp.send(sendtuple, timeadd = -self.readperiod) # send earlier too due to change since last reading
+                log.info('==repeating earlier sendtuple before new with shifted time, ovalue '+str(ovalue)+', value '+str(value))
             sendtuple = [sta_reg, status, val_reg, lisa] # sending service to buffer
+            udp.send(sendtuple) # send end result here, possibly the old result was sent once again before 
             if self.msgbus != None:
                 try:
                     self.msgbus.publish(val_reg, {'values': values, 'status': status})
                     #log.debug('published to msgbus: '+str(val_reg)+' values '+str(values)+', status '+str(status)) ##
                 except:
                     traceback.print_exc()
-            return sendtuple # for regular send or status check
+            #return sendtuple # for regular send or status check
         else:
-            log.warning(val_reg+' had '+str(rowproblemcount)+' problematic members, sendtuple NOT created! status '+str(status)+', lisa: '+lisa)
-            return None
-
+            log.warning(val_reg+' had '+str(rowproblemcount)+' problematic members')
+            
 
     def value2status(self,value,cfg,outlo,outhi,ostatus=0,hyst=0):
         ''' Returns svc member status based on value and limits, taking cfg and previous status into account.

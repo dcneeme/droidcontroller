@@ -170,7 +170,7 @@ class FlowRate:
             return 0
 
 
-    def output(self, di_pump, di_pulse, volume = None): # execute often not to lose pulses!
+    def output(self, di_pump, di_pulse, volume = None): # execute this or update often not to lose pulses!
         ''' Returns flow rate l/s based on pulse count slow increment from
             fluid flow meter, usually with symmetrical (50% active) pulse
             output. Use often not to miss any pulses! time counting stops if di_pump == 0.
@@ -203,7 +203,7 @@ class HeatExchange:
         ##self.Tdiff = 0 # degC
         self.energy = 0 # cumulative J
         self.ptime = 0 # cumulative s1
-        self.set_flowrate(flowrate) # may change with temperature change
+        self.set_flowrate(flowrate) # l/s
         self.energypos = 0 # restore from server if used
         self.energyneg = 0 # restore from server if used
         self.energycycle = 0 # sum energy during ongoing cycle
@@ -278,7 +278,7 @@ class HeatExchange:
 
 
     def get_flowrate(self):
-        ''' Returns flow rate for pump based on actual flowmeter pulse processing '''
+        ''' Returns flow rate used  '''
         return self.flowrate
 
     def get_specificheat(self):

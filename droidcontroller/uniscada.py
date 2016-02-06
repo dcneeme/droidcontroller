@@ -39,7 +39,7 @@ class UDPchannel():
     '''
 
     def __init__(self, id ='000000000000', ip='127.0.0.1', port=44445, receive_timeout=0.1, retrysend_delay=5,
-        loghost='0.0.0.0', logport=514, mtu=1000, limit = 25, copynotifier=None, ioloop=False): # delays in seconds
+        loghost='0.0.0.0', logport=514, mtu=1000, limit = 30, copynotifier=None, ioloop=False): # delays in seconds
         self.sk = StateKeeper(off_tout=300, on_tout=0, name='udp_conn_state') # 1 if udp ack received in 300 s
         self.sk_send = StateKeeper(off_tout=300, on_tout=0, name='udp_send_state') # last send in 300 s successful if 1
         self.sk_buff = StateKeeper(off_tout=None, on_tout=0, name='buff_dumped') # dumped not empty buffer if state 1
@@ -331,9 +331,10 @@ class UDPchannel():
 
 
 
-    def send(self, servicetuple): # store service components to buffer for send and resend
+    def send(self, servicetuple, timeadd = 0): # store service components to buffer for send and resend
         ''' Adds service components into buffer table to be sent as a string message
-            the components are sta_reg = '', status = 0, val_reg = '', value = ''
+            the components are sta_reg = '', status = 0, val_reg = '', value = ''.
+            The last parameter (use negative value!) enables to repeat an earlier value on rapid change.
         '''
         if servicetuple == None or len(servicetuple) != 4:
             log.warning('send() ignored INVALID servicetuple (with value None or length other than 4): '+str(servicetuple))
@@ -345,7 +346,7 @@ class UDPchannel():
             val_reg = str(servicetuple[2])
             value = str(servicetuple[3])
             self.ts = int(round(time.time(), 0)) # no decimals
-            Cmd = "INSERT into "+self.table+" values('"+sta_reg+"',"+str(status)+",'"+val_reg+"','"+value+"',"+str(self.ts)+",0,0)" # inum and ts_tried left initially empty
+            Cmd = "INSERT into "+self.table+" values('"+sta_reg+"',"+str(status)+",'"+val_reg+"','"+value+"',"+str(int(self.ts+timeadd))+",0,0)" # inum and ts_tried left initially empty
             #print(Cmd) # debug
             self.conn.execute(Cmd)
             #self.last = servicetuple

@@ -10,7 +10,7 @@ import time
 import logging, sys
 log = logging.getLogger(__name__)
 
-class Counter2Power():
+class Counter2Power(): # returns power in W (and more)
     ''' Accepts input as raw counter value and returns value in W based on count and time in s increments since last execution.
         Missing pulse count increments will start off-state if time from last execution has been enough to detect drop below 1/3 of ON-state power.
         On-state is started if count has increased at least by one since last execution.
@@ -20,7 +20,7 @@ class Counter2Power():
 
     def __init__(self, svc_name='undefined', svc_member=1, off_tout=100, pulses4kWh=1000):  # 100s corresponds to 36W threshold if 1000 pulses per kWh
         self.svc_name = svc_name # just for checking the identity
-        self.svc_member=svc_member # just for checking the identity
+        self.svc_member = svc_member # just for checking the identity
         self.state = 0 # OFF
         self.power = None # initially
         
@@ -56,7 +56,7 @@ class Counter2Power():
 
 
     def calc(self, count):  #  ts, count, ts_now = None):
-        ''' Return power, and state based on counter value, taking previous values into account '''
+        ''' Return power in W and state based on counter value increment, taking previous values into account '''
         ts = time.time() # current timestamp, calculate in real time only
         chg=0 # change flag, 1 means on, -1 means off. 0 means no change.
         
@@ -88,7 +88,7 @@ class Counter2Power():
 
         # add new item into dictionary
         if count > self.count_last and timedelta > 0: # both count and ts must be monothonic
-            log.debug('consider_on: ts, ts_last, off_tout '+str(int(round(ts)))+', '+str(int(round(self.ts_last)))+', '+str(self.off_tout)) # debug
+            log.debug(self.svc_name+' consider_on: ts, ts_last, off_tout '+str(int(round(ts)))+', '+str(int(round(self.ts_last)))+', '+str(self.off_tout)) # debug
             self.inc_dict[round(ts,2)] = count # added new item
             ##count_inc = count - self.countfrom if count > self.countfrom else 0
             ##ts_inc = ts - self.timefrom if ts - self.timefrom > 0 else 0
@@ -99,33 +99,33 @@ class Counter2Power():
                     self.state = 1  # swithed ON #######################################################################
                     chg = 1
                 self.power = round((3600000.0 / self.pulses4kWh)*(1.0*count_inc/ts_inc),3) # use buffer (with time-span close to off_tout) for increased precision
-                log.debug('calculated power '+str(self.power)+' W')
+                log.debug(self.svc_name+' calculated power '+str(self.power)+' W')
                 self.count_last = count
                 self.ts_last = ts
-                log.debug('sure ON')
+                log.debug(self.svc_name+' sure ON')
                 return self.power, self.state, chg, round(ts_inc,2), count_inc, 'sure ON'
             else:
                 self.count_last = count
                 self.ts_last = ts
-                log.debug('no switch ON or off yet')
+                log.debug(self.svc_name+'no switch ON or off yet')
                 return None, self.state, chg, timedelta, 0, 'no switch ON or off yet'
 
         elif count == self.count_last: # no count increase, no change in count_last or ts_last!
             if (timedelta > 1.01 * self.off_tout): # no new pulses, possible switch OFF with hysteresis 1%
-                log.debug('consider_off: ts, ts_last, off_tout'+str(int(round(ts)))+', '+str(int(round(self.ts_last)))+', '+str(self.off_tout)) # debug
+                log.debug(self.svc_name+' consider_off: ts, ts_last, off_tout'+str(int(round(ts)))+', '+str(int(round(self.ts_last)))+', '+str(self.off_tout)) # debug
                 if self.state >0:
                     self.state = 0 # swithed OFF #######################################################################
                     chg = -1
-                log.debug('sure OFF')
+                log.debug(self.svc_name+' sure OFF')
                 return 0, 0, chg, round(ts - self.ts_last,2), 0, 'sure OFF'  # definitely OFF
             elif timedelta < 0.1 * self.off_tout:
                 return self.power, self.state, chg, round(ts_inc,2), count_inc, 'almost sure ON'
             else:
-                log.debug('no switch OFF yet')
+                log.debug(self.svc_name+' no switch OFF yet')
                 return None, self.state, chg, timedelta, 0, 'no switch OFF yet'
 
         else:
-            log.warning('unexpected state: count='+str(count)+', count_last='+str(self.count_last)+', timedelta='+str(timedelta)+', initializing!')
+            log.error(self.svc_name+' unexpected state: count='+str(count)+', count_last='+str(self.count_last)+', timedelta='+str(timedelta)+', initializing!')
             self.init()
             return None, self.state, chg, timedelta, 0, 'unexpected (negative?) count/time change, initialized!'  # no power can be calculated, no state change for now
 

@@ -39,25 +39,14 @@ except:
 
     self.gcal_scheduler = tornado.ioloop.PeriodicCallback(self.gcal.run, 30000, io_loop = self.loop) # every 30 minutes (3 for tst) # using future
     self.gcal_scheduler.start()
-
-
-    TESTING
-    >>> gcal.cfg
-        [{'set_svc': ['TAW', 2], 'name': 'aula', 'cal_svc': 'TASW', 'cal_title': 'AU'}]
-        >>> gcal.ac
-        >>> gcal.sync()
-        >>> gcal.check('AU')
-        >>> gcal.cal2svc()
-
+    
 '''
 
 class Gcal(object):
     ''' Class containing methods to read events from monitoring server handing access to google calendar '''
 
     def __init__(self, host_id, days=3, table='calendar', user='barix', password='controller'):
-        ''' Calendar data from gcal, processed to simpler wo overlaps by itvilla.ee
-            cfg and ac must both exist for cal2svc() to function! interval in s
-        '''
+        ''' Calendar data from gcal, processed to simpler wo overlaps by itvilla.ee    '''
         self.host_id = host_id
         #self.asyncenable = asyncenable
         self.user = user
@@ -79,7 +68,7 @@ class Gcal(object):
             self.conn.execute(Cmd)
             self.conn.commit()
             log.info('created new calendar table')
-        log.info('gcal instance for cal/host_id '+self.host_id+' created. cfg '+str(self.cfg))
+        log.info('gcal instance created')
 
 
     def sqlread(self, table): # drops table and reads from file <table>.sql that must exist
