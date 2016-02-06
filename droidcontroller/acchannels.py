@@ -623,7 +623,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             ts_created = int(eval(row[1])) if row[1] != '' and row[1] != None else 0 # will be stalled
             regtype= row[2]
             found = 1
-            if ((self.ts - ts_created < maxage and row[1] != '' and row[1] != None) or (regtype[0] == 's')) and row[0] != None :
+            if ((self.ts - ts_created < maxage and row[1] != '' and row[1] != None) or (regtype[0] == 's')) and row[0] != '' :
                 values.append(int(row[0]))
             else:
                 values.append(None)
@@ -889,16 +889,16 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                             log.info('going to calc power for mba.regadd '+str(mba)+'.'+str(regadd)+' using cp['+str(self.cpi)+']') ## debug
                             #res = self.cp[self.cpi].calc(ots, raw, ts_now = self.ts) # power calculation based on raw counter increase
                             res = self.cp[self.cpi].calc(raw) # based on current ts only!
-
-                            log.info('got calc power result from cp['+str(self.cpi)+']: '+str(res)+', based on raw '+str(raw))  ## debug
-                            if (cfg&128): # on off state from power
-                                raw = res[1] # state on/off 0 or 1
-                                if res[2] != 0: # on/off change
-                                    self.chg += 1 # immediate notification needed due to state change
-                                    log.info('state change in cp['+str(self.cpi)+']')
-                            else: # just power, not state
-                                raw = int(round(res[0],0)) # power in W, res[0] has 3 decimals!
-
+                            if res != None and res[0] != None:
+                                log.info('got calc power result from cp['+str(self.cpi)+']: '+str(res)+', based on raw '+str(raw))  ## debug
+                                if (cfg&128): # on off state from power
+                                    raw = res[1] # state on/off 0 or 1
+                                    if res[2] != 0: # on/off change
+                                        self.chg += 1 # immediate notification needed due to state change
+                                        log.info('state change in cp['+str(self.cpi)+']')
+                                else: # just power, not state
+                                    raw = int(round(res[0],0)) # power in W, res[0] has 3 decimals!
+                            
                         elif (cfg&2048): # 1wire filter. should have cfg bit 4096 as well!
                             if raw == 1360 or raw == 4096:
                                 log.warning('invalid raw value '+str(raw)+' for temp sensor in svc '+val_reg+'.'+str(member)+', replacing with None')
