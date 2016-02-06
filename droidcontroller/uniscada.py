@@ -39,7 +39,7 @@ class UDPchannel():
     '''
 
     def __init__(self, id ='000000000000', ip='127.0.0.1', port=44445, receive_timeout=0.1, retrysend_delay=5,
-        loghost='0.0.0.0', logport=514, mtu=1000, limit = 25, copynotifier=None, ioloop=False): # delays in seconds
+        loghost='0.0.0.0', logport=514, mtu=1000, limit = 5, copynotifier=None, ioloop=False): # delays in seconds
         self.sk = StateKeeper(off_tout=300, on_tout=0, name='udp_conn_state') # 1 if udp ack received in 300 s
         self.sk_send = StateKeeper(off_tout=300, on_tout=0, name='udp_send_state') # last send in 300 s successful if 1
         self.sk_buff = StateKeeper(off_tout=None, on_tout=0, name='buff_dumped') # dumped not empty buffer if state 1
@@ -447,13 +447,11 @@ class UDPchannel():
         stop = False # stop loop
         #cur = self.conn.cursor()
         cur2 = self.conn.cursor()
-        sendlenn = 0
-        ##limit = self.sk.get_state()[0] * 5 + 1  ##  unique ts number to try if conn down, 6 if up. ##
+        limit = self.sk.get_state()[0] * 5 + 1  ##  unique ts number to try if conn down, 6 if up. ##
         age = 0 # the oldest, will be self.age later
         #first find out if there are unacked rows in the buffer. if there is, these should be resent if they were sent more that retrysend_delay ago.
         unacked = self.read_buffer(mode = 2)
         if unacked > 0: # some rows are waiting for ack
-            ##if self.ioloop == False: # this delay calc is used in both cases
             if self.sk.get_state()[0] == 0: # no conn
                 timetoretry = int(self.ts_udpunsent + 3 * self.retrysend_delay) # try less often during conn break
             else: # conn ok
@@ -525,20 +523,6 @@ class UDPchannel():
                         self.conn.execute(Cmd)
                     else:
                         log.warning('!! NO svc data for ts selection with limit'+str(self.limit))
-                #sendlenn = len(sendstring) # no need for decreasing limit, gzip in use!
-                #if sendlenn > self.mtu:
-                #    if self.limit > 1:
-                #        sendstring = '' # empty a dn try again
-                #        self.limit -= 1  # cycle through the loop once again
-                #        log.info('== self.limit reduced to '+str(self.limit)+' due to sendlenn '+str(sendlenn)+', but mtu '+str(self.mtu))
-                #    elif self.limit == 1:
-                #       stop = True # no more loop
-                #    else:
-                #       log.error('illegal limit='+str(self.limit)+', last sendlenn '+str(sendlenn))
-                #else: # sendlenn below or equal self.mtu
-                #    stop = True
-
-
             except:
                 log.warning('PROBLEM with creating message to be sent based on '+selftablet)
                 traceback.print_exc()
@@ -547,19 +531,13 @@ class UDPchannel():
         # end loop, seems sendlenn was below self.mtu
         self.conn.commit() # buff2server transaction end
 
-        if len(sendstring) > self.mtu:
-            log.warning('sendlenn '+str(sendlenn)+' still bigger than self.mtu '+str(self.mtu)+', self.limit'+str(self.limit))
-
         if svc_count > 0: # there is something to be sent!
             #sendstring = "in:" + str(self.inum) + ","+str(ts_created)+"\n" + sendstring # in alusel vastuses toimub puhvrist kustutamine
             sendstring = "id:" + str(self.host_id) + "\n" + sendstring # alustame sellega datagrammi
             log.debug('going to udpsend from buff2server, svc_count '+str(svc_count)+', row limit: '+str(self.limit)) ##
             self.udpsend(sendstring, self.age) # sending away. self.age is used by baV svc too.
-            log.info('buff2server end, sendlenn '+str(sendlenn)+', limit '+str(self.limit))
-        else:
-            log.info('buff2server ABNORMAL end, sendlenn '+str(sendlenn)+', limit '+str(self.limit)+', stop '+str(stop))
-        return 0
-
+            
+            
     def buff_resend(self):
         ''' Used to resend the unacked rows, delays sending newer data via buffer '''
         age =0
@@ -657,18 +635,31 @@ class UDPchannel():
             self.sk_send.dn() # to restart timer
             self.udpreset() # recreating socket
 
-        try:
-            sendbin = sendstring.encode('utf-8')
-            sendlen1 = len(sendbin)
-            if sendlen1 > 500:
+        sendbin = sendstring.encode('utf-8')
+        sendlenbin = len(sendbin)
+        sendlencomp = sendlenbin
+        if sendlenbin > 300:
+            try: # compression 
                 sendbin = gzip.compress(sendbin) # gzip compression to the whole datagram to be sent
+                sendlencomp = len(sendbin)
+                #log.info('==compression done, new size '+str(sendlencomp))
+            except:
+                log.error('==compression FAILED')
+                traceback.print_exc()
+
+        if sendlencomp > self.mtu: # no need for decreasing limit, gzip in use!
+            if self.limit > 1:
+                self.limit -= 1  # for next time
+                log.info('== self.limit reduced to '+str(self.limit)+' due to sendlencomp '+str(sendlencomp)+' > mtu '+str(self.mtu))
+        
                 
+        try: # actual send
             sendlen = self.UDPSock.sendto(sendbin,self.saddr) # tagastab saadetud baitide arvu
             self.traffic[1] += sendlen # traffic counter udp out
             if resend:
-                msg = '==>> REsent ' +str(sendlen1)+'/'+str(sendlen)+' bytes with age '+str(age)+' to '+str(repr(self.saddr))+' '+sendstring.replace('\n',' ')   # show as one line
+                msg = '==>> REsent ' +str(sendlen1)+'/'+str(sendlencomp)+' bytes with age '+str(age)+' to '+str(repr(self.saddr))+' '+sendstring.replace('\n',' ')   # show as one line
             else:
-                msg = '==>> sent ' +str(sendlen1)+'/'+str(sendlen)+' bytes with age '+str(age)+' to '+str(repr(self.saddr))+' '+sendstring.replace('\n',' ')   # show as one line
+                msg = '==>> sent ' +str(sendlen1)+'/'+str(sendlencomp)+' bytes with age '+str(age)+' to '+str(repr(self.saddr))+' '+sendstring.replace('\n',' ')   # show as one line
             log.info(msg)
             #syslog(msg)
             sendstring = ''
