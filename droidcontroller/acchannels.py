@@ -886,18 +886,18 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         if (cfg&64): # power, no sign, increment to be calculated! divide increment to time from the last reading to get the power
                             #cpi += 1 # counter2power index, increment BEFORE value validation
 
-                            log.debug('going to calc power for mba.regadd '+str(mba)+'.'+str(regadd)+' using cp['+str(self.cpi)+']')
+                            log.info('going to calc power for mba.regadd '+str(mba)+'.'+str(regadd)+' using cp['+str(self.cpi)+']') ## debug
                             #res = self.cp[self.cpi].calc(ots, raw, ts_now = self.ts) # power calculation based on raw counter increase
                             res = self.cp[self.cpi].calc(raw) # based on current ts only!
 
-                            log.debug('got result from cp['+str(self.cpi)+']: '+str(res)+', '+str(raw))  # debug
+                            log.info('got calc power result from cp['+str(self.cpi)+']: '+str(res)+', based on raw '+str(raw))  ## debug
                             if (cfg&128): # on off state from power
                                 raw = res[1] # state on/off 0 or 1
                                 if res[2] != 0: # on/off change
                                     self.chg += 1 # immediate notification needed due to state change
                                     log.info('state change in cp['+str(self.cpi)+']')
                             else: # just power, not state
-                                raw = res[0] # power
+                                raw = int(round(res[0],0)) # power in W, res[0] has 3 decimals!
 
                         elif (cfg&2048): # 1wire filter. should have cfg bit 4096 as well!
                             if raw == 1360 or raw == 4096:
