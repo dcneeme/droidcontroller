@@ -198,8 +198,9 @@ class HeatExchange:
         self.cp2 = cp2
         self.tp2 = tp2
         self.interval = interval # do not recalculate more often than that during pump on
-        self.ts_last = 0 # not pumped since initialization
+        self.ts_last = 0 # last start?  not pumped since initialization
         self.ts_stop = 0
+        self.ts_outrun = None # last output() run
         ##self.Tdiff = 0 # degC
         self.energy = 0 # cumulative J
         self.ptime = 0 # cumulative s1
@@ -291,7 +292,7 @@ class HeatExchange:
     def output(self, di_pump, Ton, Tret):
         '''Returns tuple of current power W,
         cumulative energy J (updated at the next cycle start!)
-        and cumulative active time s
+        and cumulative active time s plus power derivative W/s,
         based on pump state di_pump (0 or 1, where 1 means both compressor and flow active).
         temperatures Ton, Treturn (temperatures of heat exchange agent),
         flowrate and specific heat of the agent (may depend on temperature!).
@@ -308,8 +309,13 @@ class HeatExchange:
         '''
 
         # average specific heat based on onflow and return temperatures
+        dpwr = 0 # power derivative initially
+        ts_outdiff = 0
         tsnow = time.time()
         ts_diff = tsnow - self.ts_last
+        if self.ts_outrun != None:
+            ts_outdiff = tsnow - self.ts_outrun
+            
         Tdiff = Ton - Tret
         log.debug('timediff', ts_diff, 'tempdiff', Tdiff)
         # interpolated specific energy for heat agent based on
@@ -328,6 +334,8 @@ class HeatExchange:
 
             else: # stop
                 energydelta = ts_diff * Tdiff * self.flowrate * self.cp / self.divisor
+                if ts_diff > 0:
+                    dpwr = energydelta / ts_diff
                 self.energy += energydelta
                 self.energycycle += energydelta # last pumping cycle
                 self.energylast = self.energycycle
@@ -343,11 +351,10 @@ class HeatExchange:
             ##self.Tdiff = Tdiff
         else: # no chg in pump state
             if di_pump == 1: # PUMPING
-                #if (ts_diff > self.interval or
-                #        Tdiff > 1.5 * self.Tdiff or
-                #        Tdiff < 0.5 * self.Tdiff):
-                self.power = self.flowrate * Tdiff * self.cp
+                power = self.flowrate * Tdiff * self.cp
                 energydelta = ts_diff * self.power / self.divisor
+                if ts_diff > 0:
+                    dpwr = energydelta / ts_diff
                 if self.power > 0: # energypos increase
                     self.energypos += energydelta
                 elif self.power < 0:
@@ -358,11 +365,13 @@ class HeatExchange:
                 self.ts_last = tsnow
                 ##self.Tdiff = Tdiff
             else:
-                self.power = 0
+                power = 0
 
-        log.debug('flowrate = %d, Ton = %d, Tret = %d',
-                  self.flowrate, Ton, Tret)
-        return self.power, self.energy, self.ptime, self.energypos, self.energyneg, self.unit # W u s u u
+        dpwr = 1.0 * (power - self.power) / ts_outdiff 
+        self.power = power
+        self.ts_outrun = tsnow
+        log.debug('flowrate = %d, Ton = %d, Tret = %d', self.flowrate, Ton, Tret)
+        return self.power, self.energy, self.ptime, self.energypos, self.energyneg, self.unit, dpwr # last is power derivative W/s
         # last two are for separating the produced heat (energypos) from the production loss for heat pump melting (energyneg)
 
 
