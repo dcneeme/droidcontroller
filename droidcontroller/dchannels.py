@@ -282,7 +282,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         msg = ''
         mba = 0 # local here
         val_reg = ''
-        desc = ''
+        #desc = ''
         comment = ''
         mcount = 0
         ts_created = self.ts # timestamp
@@ -490,61 +490,98 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         # find out which do channels need to be changed based on dichannels and dochannels value differencies
         # and use write_register() write modbus registers (not coils) to get the desired result (all do channels must be also defined as di channels in dichannels table!)
         respcode=0
-        mba=0 # lokaalne siin
+        omba=-1 # lokaalne siin
         #omba=0 # previous value
-        mbi=0
+        ombi=-1
+        oregadd=-1
+        obit=-1
         #ombi=0
         val_reg=''
-        desc=''
-        value=0
-        word=0 # 16 bit register value
+        #desc=''
+        #value = 0
+        word = 0 # 16 bit register value
         #comment=''
-        mcount=0
+        mcount = 0
         #Cmd1=''
         #Cmd3=''
         #Cmd4=''
-        ts_created=self.ts # selle loeme teenuse ajamargiks
-        cur=conn.cursor()
+        ts_created = self.ts # selle loeme teenuse ajamargiks
+        cur = conn.cursor()
         res = 0 # returncode 0 1 2 = nochg chg error
-
         # coils not handled yet
 
         # only write the new word if at least one bits in dochannel is not equal to the corresponding bit in dichannels
-        Cmd="select dochannels.mba, dochannels.regadd, dochannels.bit, dochannels.value, dichannels.value, dichannels.mbi from \
+        Cmd="select dochannels.mbi, dochannels.mba, dochannels.regadd, dochannels.bit, dochannels.value, dichannels.value from \
             dochannels left join dichannels on dochannels.mba = dichannels.mba AND dochannels.mbi = dichannels.mbi AND \
-            dochannels.regadd = dichannels.regadd AND dochannels.bit = dichannels.bit where round(dochannels.value) != round(dichannels.value) and \
+            dochannels.regadd = dichannels.regadd AND dochannels.bit = dichannels.bit where dochannels.value+0 != dichannels.value+0 and \
             not(dichannels.cfg & 32) group by dochannels.mbi, dochannels.mba, dochannels.regadd, dochannels.bit"  # find changes only
         # without round() 1 != 1.0 !
-        #print(Cmd)
+        print(Cmd)
         try:
             cur.execute(Cmd)
-            bit_dict={} # {bit:[do,di]}
-            reg_dict={} # {reg:bit_dict}
+            bit_dict={} # alusta tyhjaga allpool! bit:do_value
+            reg_dict={} # {reg:bit_dict} 
             mba_dict={} # {mba:reg_dict)
             mbi_dict={} # {mbi: mba_dict}
+            found = False
+            
 
             for row in cur: # for every bit, sorted by mbi, mba, regadd, bit
-                tmp_array = [] # do,di bits together
-                log.debug('got row about change needed from dochannels-dichannels left join %s', row)
-                regadd = 0
-                mba = 0
-                bit = 0
-                di_value = 0
-                do_value = 0
-                mbi = 0
-                log.info('do change mba, regadd, bit '+str(int(eval(row[0])))+', '+str(int(eval(row[1])))+', '+str(int(eval(row[2])))+' from '+str(int(eval(row[4])))+' to '+str(int(eval(row[3]))))
+                ##bit_dict={} # bit:do_value
+                log.info('got row from do-di join %s', row) # mba, regadd, bit, do.value, di.value, mbi
+                found = True # at least one row found
+                regnew = False
+                mbanew = False
+                mbinew = False
                 try:
-                    mbi = row[5] if row[5] != '' else 0 # num
-                    mba = int(eval(row[0])) # must be number
-                    regadd = int(eval(row[1])) # must be a number. 0..255
-                    bit = (int(eval(row[2]))) # bit 0..15
-                    tmp_array.append(int(eval(row[3])))  # do_value=int(row[3]) # 0 or 1 to be written
-                    tmp_array.append(int(eval(row[4]))) # di_value=int(row[4]) # 0 or 1 to be written
-                    bit_dict.update({bit : tmp_array}) # regadd:[bit,do,di] dict member
-                    reg_dict.update({regadd : bit_dict})
-                    mba_dict.update({mba : reg_dict})
-                    mbi_dict.update({mbi : mba_dict})
-
+                    mbi = row[0] if row[0] != '' else 0 # num
+                    mba = int(eval(row[1])) # must be number
+                    regadd = int(eval(row[2])) # must be a number. 0..255
+                    bit = int(eval(row[3])) # bit 0..15
+                    do_value = int(eval(row[4]))
+                    di_value = int(eval(row[5])) # eriti pole vaja... ainult logimiseks?
+                    if ombi == -1:
+                        ombi = mbi
+                    if ombi != mbi:
+                        mbinew = True
+                        mbanew = True
+                        regnew = True
+                        
+                    if omba == -1:
+                        omba = mba
+                    if omba != mba:
+                        mbanew = True
+                        regnew = True
+                        
+                    if oregadd == -1:
+                        oregadd = regadd
+                    if oregadd != regadd:
+                        regnew = True
+                        
+                    if regnew: # update reg_dict
+                        reg_dict.update({oregadd : bit_dict}) # previous bit_dict into reg_dict
+                        log.info('final reg_dict for ombi '+str(ombi)+', omba '+str(omba)+', oregadd '+str(oregadd)+': '+str(reg_dict))
+                        bit_dict = {}
+                        
+                    if mbanew: # update mba_dict
+                        mba_dict.update({omba : reg_dict})
+                        log.info('mba_dict after update for ombi '+str(ombi)+', omba '+str(omba)+': '+str(mba_dict))
+                        reg_dict = {}
+                    
+                    if mbinew: # update mbi_dict
+                        mbi_dict.update({ombi : mba_dict})
+                        log.info('mbi_dict after update for ombi '+str(ombi)+': '+str(mbi_dict))
+                        mba_dict = {}
+                    
+                    bit_dict.update({bit : do_value}) # regadd:[bit,do,di] dict member
+                    log.info('bit_dict after update for mbi '+str(mbi)+', mba '+str(mba)+', reg '+str(regadd)+': '+str(bit_dict))
+                   
+                    log.info('do change needed mba '+str(mba)+' regadd '+str(regadd)+' bit '+str(bit)+' values do '+str(do_value)+', di '+str(di_value)) ##
+                    
+                    oregadd = regadd
+                    omba = mba
+                    ombi = mbi
+                    
                 except:
                     msg = 'failure in creating tmp_array '+repr(tmp_array)+' '+str(sys.exc_info()[1])
                     res = (res | 2)# add error bit
@@ -552,45 +589,35 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                     #udp.syslog(msg)
                     traceback.print_exc()
 
-                #print('sync_do mbi_dict',mbi_dict) # debug
+                log.info('final bit_dict for mbi '+str(mbi)+', mba '+str(mba)+', reg '+str(regadd)+': '+str(bit_dict))
+            
+            # loop finished, finalize dictionaries
+            if found:
+                reg_dict.update({regadd : bit_dict})
+                mba_dict.update({mba : reg_dict})
+                mbi_dict.update({mbi : mba_dict})
+            
+            # nested "do_change" dictionary ready, let's process
+            if mbi_dict != {}
+                log.info('final mbi_dict: '+str(mbi_dict)) # make changes to these do channels at this time
+                for mbi in mbi_dict.keys(): # this key is string!
+                    for mba in mbi_dict[mbi]: # this key is string!
+                        for regadd in mbi_dict[mbi][mba]: # chk all output registers defined in dochannels table
+                            word = mb[mbi].read(mba, regadd, count = 1, type = 'h')[0]  # output state before change
+                            for bit in mbi_dict[mbi][mba][regadd]: # chk all output registers defined in dochannels table
+                                bitvalue = mbi_dict[mbi][mba][regadd][bit]
+                                word = s.bit_replace(word,bit,bitvalue) # change the necessary bit in the word directly!
 
-
-
-            # nested dictionaries ready, let's process
-            for mbi in mbi_dict.keys(): # this key is string!
-                #print('processing mbi',mbi)
-                for mba in mba_dict.keys(): # this key is string!
-                    #print('processing mba',mba)
-                    for regadd in reg_dict.keys(): # chk all output registers defined in dochannels table
-                        try:
-                            word = mb[mbi].read(mba, regadd, count = 1, type = 'h')[0]
-                            #print('value of the output',mba,regadd,'before change',format("%04x" % word)) # debug
-                            for bit in bit_dict.keys():
-                                #print('do di bit,[do,di]',bit,bit_dict[bit]) # debug
-                                word2 = s.bit_replace(word,bit,bit_dict[bit][0]) # changed the necessary bit. can't reuse / change word directly!
-                                word = word2
-
-                            try:
-                                respcode = mb[mbi].write(mba, regadd, value=word)
-                                if respcode == 0:
-                                    msg = 'sync_do(): output written - mbi mba regadd value '+str(mbi)+' '+str(mba)+' '+str(regadd)+' '+format("%04x" % word)
-                                    log.info(msg) ##
-                                    res = (res | 1) # change bit
-                                else:
-                                    msg = 'sync_do() FAILED to write register '+str(mba)+'.'+str(regadd)+', value '+str(value)+', respcode '+str(respcode)
-                                    log.error(msg)
-                                    res = (res | 2) # error bit
-                            except:
-                                log.error('sync_do() FAILED to write mba '+str(mba)+', regadd '+str(regadd)+', value '+str(value))
-                                traceback.print_exc()
+                            respcode = mb[mbi].write(mba, regadd, value=word)
+                            if respcode == 0:
+                                msg = 'sync_do(): output written - mbi '+str(mbi)+' mba '+str(mba)+' regadd '+str(regadd)+' word '+str(word)+', bin '+bin(word)[2:].zfill(16)
+                                log.info(msg) ##
+                                res = (res | 1) # change bit
+                            else:
+                                msg = 'sync_do() FAILED to write register '+str(mba)+'.'+str(regadd)+', value '+str(value)+', respcode '+str(respcode)
+                                log.error(msg)
+                                res = (res | 2) # error bit
                                 return 2
-
-                        except:
-                            log.error('sync_do() FAILED too read mbi '+str(mbi)+', mba'+str(mba))
-                            traceback.print_exc()
-                            return 2
-
-                        
 
 
         except:
@@ -692,7 +719,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
     def set_doword(self,mba,regadd,value,mbi=0): # sets holding register without services involvment
         ''' Setting holding register (like pwm channel for pulse or pwm) '''
-        log.info('writing output register mba '+str(mba)+' with word '+str(hex(value)))
+        log.info('writing output register mbi '+str(mbi)+', mba '+str(mba)+', regadd '+str(regadd)+' with word 0x'+str(hex(value)))
         return mb[mbi].write(mba, regadd, value = value)
 
     def get_doword(self,mba,regadd,count=1,mbi=0): # returns list!
