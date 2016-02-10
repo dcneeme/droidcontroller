@@ -51,20 +51,18 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
         else:
             ptime = (time.time() + self.phasedelay) % self.period
             if self.out == 1 and ptime > 30: # valve open for at least 30 s
-                log.info('setting actual to '+self.name+' actual '+str(actual)+' from msgbus '+subject+'.'+str(self.act_svc[1])) ##
+                #log.debug('setting actual to '+self.name+' actual '+str(actual)+' from msgbus '+subject+'.'+str(self.act_svc[1])) ##
                 self.pid.set_actual(actual)
-            else:
-                log.info('setting actual from msgbus for '+self.name+' skipped due to valve state '+str(self.out)+' or too recently (ptime '+str(int(ptime))+') opened valve')
-
+            
 
     def set_setpoint(self, token, subject, message): # subject is svcname
         ''' from msgbus token floorset, subject TBW, message {'values': [210, 168, 250, 210], 'status': 0} '''
         log.debug('setting '+self.name+' setpoint by member '+str(self.set_svc[1])+' from %s, message %s', subject, str(message))
         setpoint = message['values'][self.set_svc[1] - 1] # svc members start from 1
         if setpoint == None:
-            log.warning('INVALID setpoint '+str(setpoint)+' for '+self.name+' extracted from msgbus message '+str(message))
+            log.error('INVALID setpoint '+str(setpoint)+' for '+self.name+' extracted from msgbus message '+str(message))
         else:
-            log.debug('setting setpoint to floor loop '+self.name+': '+str(setpoint)+' from msgbus '+subject+'.'+str(self.set_svc[1]))
+            #log.debug('setting setpoint to floor loop '+self.name+': '+str(setpoint)+' from msgbus '+subject+'.'+str(self.set_svc[1]))
             self.pid.setSetpoint(setpoint)
 
 
