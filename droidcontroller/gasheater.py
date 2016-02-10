@@ -35,7 +35,7 @@ class JunkersHeater(object): # Junkers Euromaxx  FIXME use msgbus for ai svc!
         self.pid.append(PID(P=0.5, I=0.05, D=0, min=5, max=995, name = 'floor_on')) # pwm_gas chan 1
         self.tempvarsG = None
         self.tempvarsH = None
-        self.pwm_values = [None, None]
+        self.pwm_values = [None, None] # heater, onflow
         self.d = d # binary channels modbus
         self.ac = ac # ai modbus, temporary, FIXME
         self.msgbus = msgbus
@@ -109,11 +109,11 @@ class JunkersHeater(object): # Junkers Euromaxx  FIXME use msgbus for ai svc!
         try:
             #noint = -(self.GSW[0] ^ 1) # inversion. no down integration during non-heating
             tmp = self.disvcs[self.svc_hmode] # GSW
-            if tmp != None:
+            if tmp != None and tmp[1] != None:
                 noint = -((tmp[1]) ^ 1) # inversion. no down integration during non-heating
             else:
                 noint = 1 # valid for both heater pid loops
-                log.warning('set noint to 1 due to no valid GSW value yet, '+str(tmp))
+                log.warning('set noint to 1 due to no valid svc '+self.svc_hmode+' value yet: '+str(tmp))
 
             #if noint != 0:
             #    log.info('down int forbidden for gasheater loops based on GSW '+str(tmp)+', noint '+str(noint))
@@ -129,14 +129,21 @@ class JunkersHeater(object): # Junkers Euromaxx  FIXME use msgbus for ai svc!
                 act_h = self.aisvcs[self.svc_Htemp][2]
                 set_h = self.aisvcs[self.svc_Htemp][0] # setpoint for floor_on
 
-                self.pwm_values = [ UN.val2int(self.pid[0].output(act_g, set_g, noint=noint)),
+                if act_g == None or set_g == None:
+                    self.pwm[0] = 500 # 50% pwm, ei sega nuppu
+                    log.error('gasheater act-set problem (temperature?)! hot PWM 50%')
+                elif act_h == None or set_h == None:
+                    self.pwm[1] = 500 # 50% pwm, laseb veidi kytta
+                    log.error('gasheater act-set problem (temperature?)! onflow PWM 50%')
+                else:
+                    self.pwm_values = [ UN.val2int(self.pid[0].output(act_g, set_g, noint=noint)),
                                     UN.val2int(self.pid[1].output(act_h, set_h, noint=noint)) ]
 
-                log.info('gasheater pid variables g: '+str(self.pid[0].getvars()))
-                log.info('gasheater pid variables h: '+str(self.pid[1].getvars()))
-                
-                log.info('gasheater hot set_g %d, act_g %d, pwm %d, onfloor set_h %d, act_h %d, pwm %d, noint %d' %
-                            (set_g, act_g, self.pwm_values[0], set_h, act_h, self.pwm_values[1], noint))
+                    log.info('gasheater pid variables g: '+str(self.pid[0].getvars()))
+                    log.info('gasheater pid variables h: '+str(self.pid[1].getvars()))
+                    
+                    log.info('gasheater hot set_g %d, act_g %d, pwm %d, onfloor set_h %d, act_h %d, pwm %d, noint %d' %
+                                (set_g, act_g, self.pwm_values[0], set_h, act_h, self.pwm_values[1], noint))
                             
             except:
                 log.warning('gasheater pid related FAILURE!')
