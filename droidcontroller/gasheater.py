@@ -130,10 +130,10 @@ class JunkersHeater(object): # Junkers Euromaxx  FIXME use msgbus for ai svc!
                 set_h = self.aisvcs[self.svc_Htemp][0] # setpoint for floor_on
 
                 if act_g == None or set_g == None:
-                    self.pwm[0] = 500 # 50% pwm, ei sega nuppu
+                    self.pwm_values[0] = 500 # 50% pwm, ei sega nuppu
                     log.error('gasheater act-set problem (temperature?)! hot PWM 50%')
                 elif act_h == None or set_h == None:
-                    self.pwm[1] = 500 # 50% pwm, laseb veidi kytta
+                    self.pwm_values[1] = 500 # 50% pwm, laseb veidi kytta
                     log.error('gasheater act-set problem (temperature?)! onflow PWM 50%')
                 else:
                     self.pwm_values = [ UN.val2int(self.pid[0].output(act_g, set_g, noint=noint)),
