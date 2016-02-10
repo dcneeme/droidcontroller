@@ -306,7 +306,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 else:
                     msg += ' -- no mb[]!'
 
-                log.info(msg) ###### See on hea kompaktne raw kontroll
+                #log.info(msg) ###### See on hea kompaktne raw kontroll
 
             except:
                 msg += ' -- FAILED!'
