@@ -214,7 +214,9 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         try:
             Cmd = "BEGIN IMMEDIATE TRANSACTION" # hoiab kinni kuni mb suhtlus kestab? teised seda ei kasuta samal ajal nagunii. iga tabel omaette.
             conn.execute(Cmd)
-            Cmd = "select mba,regadd,mbi,regtype from "+self.in_sql+" where mba != '' and regadd != '' group by mbi,mba,regtype,regadd" # tsykkel lugemiseks, tuleks regadd kasvavasse jrk grupeerida
+            log.info('--di_sync transaction START')
+            Cmd = "select mba,regadd,mbi,regtype from "+self.in_sql+" where mba != '' and regadd != '' group by mbi,mba,regtype,regadd" # sorditud registrid lugemiseks
+            ## kas index mbi, mba, regtype, regadd kiirendaks?
             cur.execute(Cmd) # selle paringu alusel raw update, hiljem teha value arvutused iga teenuseliikme jaoks eraldi
             for row in cur: # find sequential group size to read
                 mba = int(row[0])
@@ -255,12 +257,12 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             #  bit values updated for all dichannels
 
             conn.commit()  # dichannel-bits transaction end
-
+            log.info('--di_sync transaction END')
             return res # can be 3 if some grp changed, some got error! 0 is no change, 1 is change, 2 error
 
         except: # Exception,err:  # python3 ei taha seda viimast
             msg = 'there was a problem with dichannels data reading or processing! '+str(sys.exc_info()[1])
-            udp.syslog(msg)
+            #udp.syslog(msg)
             log.warning(msg)
             traceback.print_exc()
             time.sleep(1)
