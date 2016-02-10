@@ -598,7 +598,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 mbi_dict.update({mbi : mba_dict})
             
             # nested "do_change" dictionary ready, let's process
-            if mbi_dict != {}
+            if mbi_dict != {}:
                 log.info('final mbi_dict: '+str(mbi_dict)) # make changes to these do channels at this time
                 for mbi in mbi_dict.keys(): # this key is string!
                     for mba in mbi_dict[mbi]: # this key is string!
