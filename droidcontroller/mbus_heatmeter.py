@@ -29,7 +29,8 @@ class MbusHeatMeter(object): # FIXME averaging missing!
     def __init__(self, msgbus=None, svclist=[['XYW',1,1,'undefined']]): # svc, member, id, name / =[['WVCV',1,4,'water']]
         self.msgbus = msgbus # all communication via msgbus, not to ac  directly!
         self.svclist = svclist # svc, member, id, name
-
+        self.dict = {} # used by read()
+        
         try:
             self.mbus = MBus(device="/dev/ttyUSB0") ##
             self.mbus.connect() ##
@@ -60,6 +61,7 @@ class MbusHeatMeter(object): # FIXME averaging missing!
         return d
 
     def parse(self, dict, debug = False):
+        ''' Publish all  '''
         found = 0
         for x in dict['MBusData']['DataRecord']:
             if debug == True:
@@ -76,7 +78,7 @@ class MbusHeatMeter(object): # FIXME averaging missing!
         else:
             return 1
 
-
+    
     # methods needed for async comm
     def run(self):
         self.read_async(self.async_reply)
@@ -95,18 +97,31 @@ class MbusHeatMeter(object): # FIXME averaging missing!
         self.parse(result)
 
     ######## compatibility with main_karla  ####
+    # svclist=[['XYW',1,1,'undefined'], ]
+    def read(self): # into self.dict
+        ''' stores info self.dict variable '''
+        self.dict = read_sync()
+    
+    def parse1(self, id):
+        ''' Return one value with matching id '''
+        for x in self.dict['MBusData']['DataRecord']:
+            if int(x['@id']) == id:
+                return x['Value']
 
     def m.get_energy(self):
+        return parse1(1)
 
+    def m.get_power(self);
+        return parse1(2)
 
-    def m.get_power();
+    def m.get_volume(self):
+        return parse1(3)
 
-
-    def m.get_volume():
-
-
-    def m.get_flow():
-
+    def m.get_flow(self):
+        return parse1(4)
 
     def get_temperatures(self):
-
+        ton = parse1(5)
+        tret = parse1(6)
+        return ton, tret
+        
