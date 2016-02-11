@@ -21,14 +21,14 @@ class MbusWaterMeter(object): # FIXME averaging missing!
         self.svclist = svclist # svc, member, id, name
 
         try:
-            self.mbus = MBus(device="/dev/ttyUSB0") ## 
-            self.mbus.connect() ## 
+            self.mbus = MBus(device="/dev/ttyUSB0") ##
+            self.mbus.connect() ##
             log.info('mbus instance created, output to msgbus: '+str(svclist))
         except:
             log.error('Mbus connection NOT possible, probably no suitable USB port found!')
             traceback.print_exc()
             time.sleep(3)
-        
+
     def read_sync(self, debug = False):
         ''' Query mbus device, waits for reply, lists all if debug == True '''
         log.info('sending out a sync mbus query')
@@ -41,14 +41,14 @@ class MbusWaterMeter(object): # FIXME averaging missing!
         except:
             log.error('FAILED to get data from mbus')
             return 1
-                
+
         try:
             d = xmltodict.parse(xml_buff)
         except Exception as ex:
             print("parse error: %s" % ex)
             sys.exit()
         return d
-            
+
     def parse(self, dict, debug = False):
         found = 0
         for x in dict['MBusData']['DataRecord']:
@@ -56,7 +56,7 @@ class MbusWaterMeter(object): # FIXME averaging missing!
                 print(x)
             for svc in self.svclist:
                 if int(x['@id']) == svc[2]:
-                    vs = x['Value'] # , x['Unit']) ## key 'Unit' not found?  
+                    vs = x['Value'] # , x['Unit']) ## key 'Unit' not found?
                     log.info('found value with id '+str(svc[2])+': '+vs ) # str
                     if self.msgbus:
                         self.msgbus.publish(svc[0], {'values': [ int(vs) ], 'status': 0}) # msgbus.publish(val_reg, {'values': values, 'status': status})
@@ -67,15 +67,15 @@ class MbusWaterMeter(object): # FIXME averaging missing!
             return 1
 
 
-    # methods needed for async comm        
+    # methods needed for async comm
     def run(self):
         self.read_async(self.async_reply)
 
     def read_async(self, reply_cb):
         log.info("    mbus_send_request_frame..")
         EXECUTOR.submit(self.read_sync).add_done_callback(lambda future: tornado.ioloop.IOLoop.instance().add_callback(partial(self.callback, future)))
-        #eraldi threadis read_sync, mis ootab vastust. 
-        
+        #eraldi threadis read_sync, mis ootab vastust.
+
     def callback(self, future):
         result = future.result()
         self.async_reply(result)
@@ -83,5 +83,4 @@ class MbusWaterMeter(object): # FIXME averaging missing!
     def async_reply(self, result):
         print("    mbus result: " + str(result))
         self.parse(result)
-        
-        
+
