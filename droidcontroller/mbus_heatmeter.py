@@ -152,3 +152,5 @@ class MbusHeatMeter(object): # FIXME averaging missing!
         tret = self.parse1(5) # ddegC
         return ton, tret
         
+    def get_all(self): 
+        return self.dict
