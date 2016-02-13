@@ -234,7 +234,7 @@ class CommModbus(Comm):
         :param 'format': output word format, 'hex' or 'dec'
 
         '''
-        log.error('going to read from mba '+str(mba)+' reg '+str(reg)+' type '+type+' count '+str(count)) ##
+        ##log.info('going to read from mba '+str(mba)+' reg '+str(reg)+' type '+type+' count '+str(count)) ##
         #dummy=0
         if self.type == 'n' or self.type == 'u':  # type switch for npe_io
             type=self.type  # this instance does not use modbus at all! for npe_io!

@@ -479,7 +479,7 @@ class UDPchannel():
 
         ## no unacked rows found, lets try to send next rows
         buffstate = self.sk_buff.get_state()[0]
-        log.info('no unsent rows in buffer...  buffstate '+str(buffstate))
+        ##log.info('no unsent rows in buffer...  buffstate '+str(buffstate))
         if buffstate > 0: # sql not emptied yet
             log.warning('dumping empty buffer! self.inum to 1, buffstate to 0')
             self.dump_buffer() # empty sql file
