@@ -442,7 +442,7 @@ class UDPchannel():
             do not try to send and assign inum to next rows if there are undeleted rows with inum.
             resend the already sent (long enough time ago) rows only until there are no rows waiting for ack and deletion.
         '''
-        log.info('buff2server start')
+        ##log.info('buff2server start')
         timetoretry = 0 # local
         ts_created = 0 # local
         svc_count = 0 # local
