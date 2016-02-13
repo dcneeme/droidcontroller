@@ -29,12 +29,13 @@ m.get_flow()
 
 class MbusHeatMeter(object): # FIXME averaging missing!
     ''' Publish values to services via msgbus '''  # FIXME use IOloop too
-    def __init__(self, msgbus=None, svclist=[['XYW',1,1,'undefined']]): # svc, member, id, name / =[['WVCV',1,4,'water']]
+    def __init__(self, msgbus=None, model='kamstrup402', svclist=[['XYW',1,1,'undefined']]): # svc2publish, member, id, name
         self.msgbus = msgbus # all communication via msgbus, not to ac  directly!
         self.svclist = svclist # svc, member, id, name
         self.dict = {} # used by read()
         self.errors = 0 # FIXME / currently used for read_sync only!
-        
+        self.model = model
+        self.xml = '' # use for new model debugging
         try:
             self.mbus = MBus(device="/dev/ttyUSB0") ##
             self.mbus.connect() ##
@@ -43,6 +44,10 @@ class MbusHeatMeter(object): # FIXME averaging missing!
             log.error('Mbus connection NOT possible, probably no suitable USB port found!')
             traceback.print_exc()
             time.sleep(3)
+        self.modeldata = {} # define only  what's important, based on xml
+        self.modeldata.update({'kamstrup402': 
+            {1:['Energy (kWh)',1,'kWh'], 2:['Volume (1e-2  m^3)',0.01,'m3'], 4:['Flow temperature (1e-2 deg C)',0.1,'ddegC'], 
+            5:['Return temperature (1e-2 deg C)',0.1,'ddegC'], 7:['Power (100 W)',100,'W'], 9:['Volume flow (m m^3/h)',1,'l/h']}})
 
     def read_sync(self, debug = False):
         ''' Query mbus device, waits for reply, lists all if debug == True '''
@@ -51,24 +56,32 @@ class MbusHeatMeter(object): # FIXME averaging missing!
             self.mbus.send_request_frame(254)
             reply = self.mbus.recv_frame()
             reply_data = self.mbus.frame_data_parse(reply)
-            xml_buff = self.mbus.frame_data_xml(reply_data)
-            print(xml_buff) ##
+            self.xml = self.mbus.frame_data_xml(reply_data)
+            #print(self.xml) ##
         except:
             log.error('FAILED to get data from mbus')
             self.errors += 1
             return 1
 
         try:
-            d = xmltodict.parse(xml_buff)
+            d = xmltodict.parse(self.xml)
         except Exception as ex:
             print("parse error: %s" % ex)
             sys.exit()
         return d
 
+    def get_xml(self): # use read_sync(); get_xml() for debugging
+        return self.xml
+        
+        
     def get_errors(self):
         return self.errors
     
-    def parse(self, dict, debug = False):
+    def get_models():
+        '''return supported models '''
+        return self.modeldata # dict
+    
+    def parse_publish(self, dict, debug = False):
         ''' Publish all  '''
         found = 0
         for x in dict['MBusData']['DataRecord']:
@@ -101,12 +114,12 @@ class MbusHeatMeter(object): # FIXME averaging missing!
         self.async_reply(result)
 
     def async_reply(self, result):
-        print("    mbus result: " + str(result))
-        self.parse(result)
+        #print("    mbus result: " + str(result))
+        self.parse_publish(result)
 
     ######## compatibility with main_karla  ####
-    # svclist=[['XYW',1,1,'undefined'], ]
-    def read(self): # into self.dict
+    
+    def read(self): # into self.dict, sync!
         ''' stores info self.dict variable '''
         try:
             self.dict = self.read_sync()
@@ -117,25 +130,25 @@ class MbusHeatMeter(object): # FIXME averaging missing!
             return 1
     
     def parse1(self, id):
-        ''' Return one value with matching id '''
+        ''' Return one value with matching id from self.dict '''
         for x in self.dict['MBusData']['DataRecord']:
             if int(x['@id']) == id:
-                return int(x['Value']) # FIXME some data needs other conversion (timestamps, units)
+                return int(round(int(x['Value']) * self.modeldata[self.model][id][1],0)) # FIXME some data needs other conversion (timestamps, units)
 
     def get_energy(self):
-        return self.parse1(1)
+        return self.parse1(1) # kWh
 
     def get_power(self):
-        return self.parse1(2)
+        return self.parse1(7) # W
 
     def get_volume(self):
-        return self.parse1(3)
+        return self.parse1(2) # l
 
     def get_flow(self):
-        return self.parse1(4)
+        return self.parse1(9) # l/h
 
     def get_temperatures(self):
-        ton = self.parse1(5)
-        tret = self.parse1(6)
+        ton = self.parse1(4) # ddegC
+        tret = self.parse1(5) # ddegC
         return ton, tret
         
