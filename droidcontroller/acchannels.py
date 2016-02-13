@@ -306,7 +306,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 else:
                     msg += ' -- no mb[]!'
 
-                #log.info(msg) ###### See on hea kompaktne raw kontroll
+                log.info(msg) ###### See on hea kompaktne raw kontroll
 
             except:
                 msg += ' -- FAILED!'
@@ -1004,13 +1004,15 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 olisa += ' ' # old value to repeat
                 
             try: # what if None? exception?
-                lisa += str(int(round(value))) # adding member values into one string
-                olisa += str(int(round(ovalue))) # adding member values into one string
-                
-                values.append(int(round(value))) # for msgbus the latest only
-                
+                if value != None:
+                    lisa += str(int(round(value))) # adding member values into one string
+                    olisa += str(int(round(ovalue))) # adding member values into one string
+                    values.append(int(round(value))) # for msgbus
+                else:
+                    log.warning('invalid value None from regtype '+regtype+', reg '+val_reg+', member '+str(member))
             except:
                 msg = 'invalid value '+str(value)+' found for service '+val_reg+'.'+str(member)
+                traceback.print_exc()
                 if self.msg != msg:
                     self.msg = msg
                     log.warning(msg) # do not refer value here, may be missing from another mba!
@@ -1137,13 +1139,14 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         ''' Does everything that is regularly needed in this class on time if executed often enough.
             Do not report too after early, counters may get restored from server.
         '''
+        ##og.info('ai_sync (doall) start')
         res=0
         self.chg = 0
         self.ts = round(time.time(),0)
         if self.ts - self.ts_read > self.readperiod:
             self.ts_read = self.ts
             try:
-                res=self.read_all() ## read all registers defined in aicochannels
+                res = self.read_all() ## read all registers defined in aicochannels
                 if self.chg > 0:
                     log.info('##### '+str(self.chg)+' value change(s) detected')
                 self.sync_ao() ### write ao registers that are also present in aicochannels but the content is different
@@ -1162,6 +1165,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 res = res + self.report_all() ### report all services in aicochannels
             except:
                 traceback.print_exc()
+        ##log.info('ai_sync (doall) end')
         return res
 
     #END

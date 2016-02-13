@@ -29,19 +29,20 @@ class SerialConf:
         ip='10.0.0.4', defgw='10.0.0.253', speed=9600, parity='None',
             ssid='gembird', passwd='villakooguit', model='WIFI232B', conf={
                 'FUDLX': 'on',
-                'WMODE': 'sta',
+                'WMODE': None,
+                'WEBU': 'admin,hoira',
             },
-            ispeed=57600, iparity='N'
-            ):
+            ispeed=57600, iparity='N', aes_tkip='aes'
+            ): # veebist yle 5 margi panna ei saanud, at kasuga saab! proovitud 10
         self.ip = ip # to be used for ping
         self.defgw = defgw # to be used for ping
 
         conf.update({'UART': str(speed)+',8,1,'+parity+',NFC'})
         conf.update({'WANN': 'static,'+ip+',255.255.255.0,'+defgw}) # sta mode network params
         conf.update({'WSSSID': ssid})
-        conf.update({'WSKEY': 'wpa2psk,aes,'+passwd}) # min 8 chars
-        conf.update({'NETP': 'TCP,Server,10001,'+ip})
-        # kiirus peale factory default restti on 57600
+        conf.update({'WSKEY': 'wpa2psk,'+aes_tkip+','+passwd}) # min 8 chars
+        conf.update({'NETP': 'TCP,Server,10001,10.10.100.100'}) # EI TAHA OMA IP?
+        # kiirus peale factory default resetti on 57600
         print(str(conf))
 
         ports = list(serial.tools.list_ports.comports())
@@ -225,20 +226,22 @@ class SerialConf:
     def set_conf(self):
         ''' write config as at command '''
         for key in self.conf:
-            res = ''
-            i = 0
-            cmd = 'AT+'+key+'='+self.conf[key]
-            res = self.comm(cmd, expect_string='+ok', delay=2).replace('\r\n',' ').replace('\r','').replace('\n','')[1:] # avoid cr, lf
-            #print('   got '+res)
+            if self.conf[key] != None:
+                res = ''
+                i = 0
+                cmd = 'AT+'+key+'='+self.conf[key]
+                res = self.comm(cmd, expect_string='+ok', delay=2).replace('\r\n',' ').replace('\r','').replace('\n','')[1:] # avoid cr, lf
+                #print('   got '+res)
         time.sleep(1)
-        self.comm('AT+Z') # restart
+        self.comm('AT+WMODE=sta') # sta moodi
+        self.comm('AT+Z') # restart salvestamiseks/joustamiseks
         print('module restarted, the communication at targeted speed and transparent mode can be tried soon')
 
 
     def get_conf(self):
         ''' read config via AT command '''
         for key in self.conf:
-            res = self.comm('AT+'+key, delay = 0.1).replace('\r\n',' ').replace('\r','').replace('\n','')[1:] # avoid cr & lf here, cut first chars
+            self.comm('AT+'+key, delay = 0.1).replace('\r\n',' ').replace('\r','').replace('\n','')[1:] # avoid cr & lf here, cut first chars
             #print('   got '+res)
 
 
@@ -248,6 +251,7 @@ class SerialConf:
         print(res)
         #res = self.comm('AT+TCPLK')
         res = self.comm('AT+WSLK') # connected to...
+        res = self.comm('AT+WSLQ') # link quality
         res = self.comm('AT+PING='+self.ip) # test
         res = self.comm('AT+PING='+self.defgw) # test 2
         #print(res)

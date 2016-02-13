@@ -634,7 +634,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             return 2
 
         conn.commit() # transaction end, perhaps not even needed - 2 reads, no writes...
-        log.info('--do_sync end')
+        #log.info('--do_sync end')
         return res
 
 

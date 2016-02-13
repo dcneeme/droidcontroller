@@ -273,9 +273,10 @@ class UDPchannel():
         ''' Recreates table content from dumped sql and sets the variable self.inum '''
 
         if self.sqlread(self.table) == 0: # dump read ok
-            log.info('reusing buffer dump to fill the possible gaps')
+            log.warning('reusing the existing buffer dump!')
             Cmd = "select max(inum) from "+self.table
             self.cur.execute(Cmd)
+            self.sk_buff.up() # not empty flag
             for row in self.cur:
                 self.inum = row[0] + 1 if row[0] != None else 1
                 log.warning('makebuffer has set inum to '+str(self.inum))
@@ -477,8 +478,10 @@ class UDPchannel():
             return 0
 
         ## no unacked rows found, lets try to send next rows
-        if self.sk_buff.get_state()[0] > 0: # sql not emptied yet
-            msg='empty buffer to be dumped from table '+self.table+', sync! self.inum became 1'
+        buffstate = self.sk_buff.get_state()[0]
+        log.info('no unsent rows in buffer...  buffstate '+str(buffstate))
+        if buffstate > 0: # sql not emptied yet
+            log.warning('dumping empty buffer! self.inum to 1, buffstate to 0')
             self.dump_buffer() # empty sql file
             self.sk_buff.dn()
             self.inum = 1 # starting from low inum again, so inum indicates the sql buffer size / age...
@@ -694,12 +697,12 @@ class UDPchannel():
         if mode == 0: # just print the waiting messages
             Cmd ="SELECT * from "+self.table
             self.cur.execute(Cmd)
-            for row in cur:
+            for row in self.cur:
                 print(repr(row))
         elif mode == 1: # stats
             Cmd ="SELECT count(ts_created),min(ts_created),max(ts_created) from "+self.table
             self.cur.execute(Cmd)
-            for row in cur:
+            for row in self.cur:
                 return row[0],row[1],row[2] # print(repr(row))
         elif mode == 2: # sent but not acked
             Cmd ="SELECT count(ts_created) from "+self.table+" where inum>0" # not deleted due to no ack received

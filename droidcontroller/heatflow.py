@@ -310,6 +310,8 @@ class HeatExchange:
 
         # average specific heat based on onflow and return temperatures
         dpwr = 0 # power derivative initially
+        power = 0
+        self.power = 0 # last one
         ts_outdiff = 0
         tsnow = time.time()
         ts_diff = tsnow - self.ts_last
@@ -326,7 +328,7 @@ class HeatExchange:
         if di_pump != self.di_pump: # pump state changed
             self.di_pump = di_pump
             if self.di_pump == 1: # start
-                self.power = self.flowrate * Tdiff * self.cp
+                power = self.flowrate * Tdiff * self.cp
                 self.energycycle = 0 # new cycle started, use this value for cop calculation
                 self.ts_last = tsnow
                 ts_diff = 0
@@ -340,7 +342,7 @@ class HeatExchange:
                 self.energycycle += energydelta # last pumping cycle
                 self.energylast = self.energycycle
                 self.ptime += ts_diff
-                self.power = 0
+                power = 0
                 if Tdiff > 0: # energypos increase
                     self.energypos += energydelta
                 elif Tdiff < 0:
@@ -367,7 +369,8 @@ class HeatExchange:
             else:
                 power = 0
 
-        dpwr = 1.0 * (power - self.power) / ts_outdiff 
+        if ts_outdiff > 0:
+            dpwr = 1.0 * (power - self.power) / ts_outdiff 
         self.power = power
         self.ts_outrun = tsnow
         log.debug('flowrate = %d, Ton = %d, Tret = %d', self.flowrate, Ton, Tret)
