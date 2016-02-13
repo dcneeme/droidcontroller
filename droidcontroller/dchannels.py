@@ -214,7 +214,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         try:
             Cmd = "BEGIN IMMEDIATE TRANSACTION" # hoiab kinni kuni mb suhtlus kestab? teised seda ei kasuta samal ajal nagunii. iga tabel omaette.
             conn.execute(Cmd)
-            log.info('--di_sync transaction START')
+            ##log.info('--di_sync transaction START')
             Cmd = "select mba,regadd,mbi,regtype from "+self.in_sql+" where mba != '' and regadd != '' group by mbi,mba,regtype,regadd" # sorditud registrid lugemiseks
             ## kas index mbi, mba, regtype, regadd kiirendaks?
             cur.execute(Cmd) # selle paringu alusel raw update, hiljem teha value arvutused iga teenuseliikme jaoks eraldi
@@ -257,7 +257,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             #  bit values updated for all dichannels
 
             conn.commit()  # dichannel-bits transaction end
-            log.info('--di_sync transaction END')
+            ##log.info('--di_sync transaction END')
             return res # can be 3 if some grp changed, some got error! 0 is no change, 1 is change, 2 error
 
         except: # Exception,err:  # python3 ei taha seda viimast
@@ -491,6 +491,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
     def sync_do(self): # synchronizes DO bits (output channels) with data in dochannels table, checking actual values via dichannels table
         # find out which do channels need to be changed based on dichannels and dochannels value differencies
         # and use write_register() write modbus registers (not coils) to get the desired result (all do channels must be also defined as di channels in dichannels table!)
+        ##log.info('--do_sync start')
         respcode=0
         omba=-1 # lokaalne siin
         #omba=0 # previous value
@@ -512,13 +513,15 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         res = 0 # returncode 0 1 2 = nochg chg error
         # coils not handled yet
 
+        ##Cmd="BEGIN IMMEDIATE TRANSACTION" # transaction, di, do
+        ##conn.execute(Cmd) # dichannels
         # only write the new word if at least one bits in dochannel is not equal to the corresponding bit in dichannels
         Cmd="select dochannels.mbi, dochannels.mba, dochannels.regadd, dochannels.bit, dochannels.value, dichannels.value from \
             dochannels left join dichannels on dochannels.mba = dichannels.mba AND dochannels.mbi = dichannels.mbi AND \
             dochannels.regadd = dichannels.regadd AND dochannels.bit = dichannels.bit where dochannels.value+0 != dichannels.value+0 and \
             not(dichannels.cfg & 32) group by dochannels.mbi, dochannels.mba, dochannels.regadd, dochannels.bit"  # find changes only
         # without round() 1 != 1.0 !
-        print(Cmd)
+        #print(Cmd)
         try:
             cur.execute(Cmd)
             bit_dict={} # alusta tyhjaga allpool! bit:do_value
@@ -631,8 +634,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             return 2
 
         conn.commit() # transaction end, perhaps not even needed - 2 reads, no writes...
-        msg = 'do sync done'
-        log.debug(msg)
+        log.info('--do_sync end')
         return res
 
 
