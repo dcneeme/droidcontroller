@@ -346,6 +346,10 @@ class UDPchannel():
             status = int(servicetuple[1])
             val_reg = str(servicetuple[2])
             value = str(servicetuple[3])
+            if value == '':
+                log.error('refused to save into buffer INVALID servicetuple '+str(servicetuple))
+                return 1
+                
             self.ts = int(round(time.time(), 0)) # no decimals
             Cmd = "INSERT into "+self.table+" values('"+sta_reg+"',"+str(status)+",'"+val_reg+"','"+value+"',"+str(int(self.ts+timeadd))+",0,0)" # inum and ts_tried left initially empty
             #print(Cmd) # debug
