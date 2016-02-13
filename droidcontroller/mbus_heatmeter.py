@@ -5,8 +5,11 @@ import sys, traceback, time # , tornado
 from mbus.MBus import MBus # by marko
 import xmltodict
 
-import tornado.ioloop
-
+try:
+    import tornado.ioloop
+except:
+    log.warning('no tornado, only sync mbus comm!')
+    
 from functools import partial
 from concurrent.futures import ThreadPoolExecutor
 EXECUTOR = ThreadPoolExecutor(max_workers=1)
@@ -30,6 +33,7 @@ class MbusHeatMeter(object): # FIXME averaging missing!
         self.msgbus = msgbus # all communication via msgbus, not to ac  directly!
         self.svclist = svclist # svc, member, id, name
         self.dict = {} # used by read()
+        self.errors = 0 # FIXME / currently used for read_sync only!
         
         try:
             self.mbus = MBus(device="/dev/ttyUSB0") ##
@@ -51,6 +55,7 @@ class MbusHeatMeter(object): # FIXME averaging missing!
             print(xml_buff) ##
         except:
             log.error('FAILED to get data from mbus')
+            self.errors += 1
             return 1
 
         try:
@@ -60,6 +65,9 @@ class MbusHeatMeter(object): # FIXME averaging missing!
             sys.exit()
         return d
 
+    def get_errors(self):
+        return self.errors
+    
     def parse(self, dict, debug = False):
         ''' Publish all  '''
         found = 0
@@ -100,28 +108,34 @@ class MbusHeatMeter(object): # FIXME averaging missing!
     # svclist=[['XYW',1,1,'undefined'], ]
     def read(self): # into self.dict
         ''' stores info self.dict variable '''
-        self.dict = read_sync()
+        try:
+            self.dict = self.read_sync()
+            log.info('mbus read dict: '+str(self.dict))
+            return 0
+        except:
+            traceback.print_exc()
+            return 1
     
     def parse1(self, id):
         ''' Return one value with matching id '''
         for x in self.dict['MBusData']['DataRecord']:
             if int(x['@id']) == id:
-                return x['Value']
+                return int(x['Value']) # FIXME some data needs other conversion (timestamps, units)
 
-    def m.get_energy(self):
-        return parse1(1)
+    def get_energy(self):
+        return self.parse1(1)
 
-    def m.get_power(self);
-        return parse1(2)
+    def get_power(self):
+        return self.parse1(2)
 
-    def m.get_volume(self):
-        return parse1(3)
+    def get_volume(self):
+        return self.parse1(3)
 
-    def m.get_flow(self):
-        return parse1(4)
+    def get_flow(self):
+        return self.parse1(4)
 
     def get_temperatures(self):
-        ton = parse1(5)
-        tret = parse1(6)
+        ton = self.parse1(5)
+        tret = self.parse1(6)
         return ton, tret
         
