@@ -3,7 +3,8 @@
 import sys, traceback, time # , tornado
 #from droidcontroller.mbus import * # neeme old
 from mbus.MBus import MBus # by marko
-import xmltodict
+#import xmltodict # vajab eraldi installi, soltub py versioonist! selle asemel jargmine
+from xml.dom.minidom import parseString
 
 try:
     import tornado.ioloop
@@ -48,7 +49,10 @@ class MbusHeatMeter(object): # FIXME averaging missing!
         self.modeldata.update({'kamstrup402': 
             {1:['Energy (kWh)',1,'kWh'], 2:['Volume (1e-2  m^3)',0.01,'m3'], 4:['Flow temperature (1e-2 deg C)',0.1,'ddegC'], 
             5:['Return temperature (1e-2 deg C)',0.1,'ddegC'], 7:['Power (100 W)',100,'W'], 9:['Volume flow (m m^3/h)',1,'l/h']}})
-
+        self.modeldata.update({'kamstrup602': 
+            {1:['Energy (kWh)',1,'kWh'], 2:['Volume (1e-2  m^3)',0.01,'m3'], 4:['Flow temperature (1e-2 deg C)',0.1,'ddegC'], 
+            5:['Return temperature (1e-2 deg C)',0.1,'ddegC'], 7:['Power (100 W)',100,'W'], 9:['Volume flow (m m^3/h)',1,'l/h']}})
+            
     def read_sync(self, debug = False):
         ''' Query mbus device, waits for reply, lists all if debug == True '''
         log.info('sending out a sync mbus query')
@@ -63,8 +67,10 @@ class MbusHeatMeter(object): # FIXME averaging missing!
             self.errors += 1
             return 1
 
+        
         try:
-            d = xmltodict.parse(self.xml)
+            ##d = xmltodict.parse(self.xml)
+            d = parseString(self.xml)
         except Exception as ex:
             print("parse error: %s" % ex)
             sys.exit()
@@ -83,6 +89,8 @@ class MbusHeatMeter(object): # FIXME averaging missing!
     
     def parse_publish(self, dict, debug = False):
         ''' Publish all  '''
+        return 1 # FIXME
+        
         found = 0
         for x in dict['MBusData']['DataRecord']:
             if debug == True:
@@ -122,18 +130,20 @@ class MbusHeatMeter(object): # FIXME averaging missing!
     def read(self): # into self.dict, sync!
         ''' stores info self.dict variable '''
         try:
-            self.dict = self.read_sync()
-            log.info('mbus read dict: '+str(self.dict))
+            dom = self.read_sync()
+            self.nodes = dom.getElementsByTagName('Value')
             return 0
         except:
             traceback.print_exc()
             return 1
     
     def parse1(self, id):
-        ''' Return one value with matching id from self.dict '''
-        for x in self.dict['MBusData']['DataRecord']:
-            if int(x['@id']) == id:
-                return int(round(int(x['Value']) * self.modeldata[self.model][id][1],0)) # FIXME some data needs other conversion (timestamps, units)
+        ''' Return one Value with matching id from self.nodes '''
+        return int(round(int(self.nodes[id].firstChild.nodeValue) * self.modeldata[self.model][id][1],0))
+        
+        #for x in self.dict['MBusData']['DataRecord']:
+        #    if int(x['@id']) == id:
+        #        return int(round(int(x['Value']) * self.modeldata[self.model][id][1],0)) 
 
     def get_energy(self):
         return self.parse1(1) # kWh
@@ -153,4 +163,11 @@ class MbusHeatMeter(object): # FIXME averaging missing!
         return ton, tret
         
     def get_all(self): 
-        return self.dict
+        out = {}
+        conf = self.modeldata[self.model]
+        for id in conf:
+            value = self.parse1(id)
+            out.update({id:[conf[id][0], value]})
+        
+        return out
+        
