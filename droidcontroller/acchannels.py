@@ -1006,8 +1006,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             try: # what if None? exception?
                 if value != None:
                     lisa += str(int(round(value))) # adding member values into one string
-                    olisa += str(int(round(ovalue))) # adding member values into one string
                     values.append(int(round(value))) # for msgbus
+                    if olisa != None:
+                        olisa += str(int(round(ovalue))) # adding member values into one string
                 else:
                     log.warning('invalid value None from regtype '+regtype+', reg '+val_reg+', member '+str(member))
             except:
@@ -1031,7 +1032,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             if repeat: # > 20% change was detected from ovalue to value
                 sendtuple = [sta_reg, status, val_reg, olisa] # repeat the earlier service to buffer, with last status though
                 udp.send(sendtuple, timeadd = -self.readperiod) # send earlier too due to change since last reading
-                log.info('==repeating earlier sendtuple before new with shifted time, ovalue '+str(ovalue)+', value '+str(value))
+                log.info('==repeating earlier sendtuple before new with shifted time, ovalue '+str(ovalue)+', value '+str(value)) ###
+            
             sendtuple = [sta_reg, status, val_reg, lisa] # sending service to buffer
             udp.send(sendtuple) # send end result here, possibly the old result was sent once again before 
             if self.msgbus != None:
