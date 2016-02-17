@@ -117,7 +117,7 @@ class CommModbus(Comm):
         self.speed = speed
         self.parity = parity
         self.timeout = timeout
-        self.Bytesize = bytesize
+        self.bytesize = bytesize
         self.stopbits = stopbits
         self.client = ModbusClient(method='rtu', stopbits=stopbits, bytesize=bytesize, parity=parity, baudrate=speed, timeout=timeout, port=port)
         log.info('serial ModbusClient (re)created with params '+str(self.port)+', '+str(self.speed)+' '+str(bytesize)+parity+str(stopbits))
@@ -134,12 +134,12 @@ class CommModbus(Comm):
         params = str(self.port)+' '+str(self.speed)+' '+str(self.bytesize)+self.parity+str(self.stopbits)
         # better to return the data directly usable by set_serial... FIXME
         log.info('parameters for serial: ' + params) # for visual feedback
-        return self.port, self.speed, self.parity, self.timeout, self.Bytesize, self.stopbits
+        return self.port, self.speed, self.parity, self.timeout, self.bytesize, self.stopbits
         
         
     def get_mba_keepalive(self):
         ''' returns mba to keep accessible by recreating mb instance by dcannels or acchannels ''' 
-        return self.mba_keepalive # by default 1
+        return self.mba_keepalive # by default mba 1
         
     def get_errorcount(self):
         ''' returns number of errors, becomes 0 after each successful modbus transaction '''
