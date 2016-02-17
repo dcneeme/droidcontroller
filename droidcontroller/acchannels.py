@@ -1007,7 +1007,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 if value != None:
                     lisa += str(int(round(value))) # adding member values into one string
                     values.append(int(round(value))) # for msgbus
-                    if olisa != None:
+                    if ovalue != None:
                         olisa += str(int(round(ovalue))) # adding member values into one string
                 else:
                     log.warning('invalid value None from regtype '+regtype+', reg '+val_reg+', member '+str(member))
