@@ -61,7 +61,7 @@ class CommModbus(Comm):
         self.speed = kwargs.get('speed','19200') # default speed 19200
         self.parity = kwargs.get('parity','E') # default EVEN
         
-        self.mba_keepalive = kwargs.get('mba_keepalive',1) # this address must work, recreates mb[] if not
+        self.mba_keepalive = kwargs.get('mba_keepalive',1) # this address (1 by default) must respond, recreating mb[] if not
         #print(kwargs) # debug
             
         if ('host' in kwargs): # tcp or serial
@@ -117,9 +117,8 @@ class CommModbus(Comm):
         self.speed = speed
         self.parity = parity
         self.timeout = timeout
-        self.timeout = bytesize
+        self.Bytesize = bytesize
         self.stopbits = stopbits
-        self.bytesize = bytesize
         self.client = ModbusClient(method='rtu', stopbits=stopbits, bytesize=bytesize, parity=parity, baudrate=speed, timeout=timeout, port=port)
         log.info('serial ModbusClient (re)created with params '+str(self.port)+', '+str(self.speed)+' '+str(bytesize)+parity+str(stopbits))
                 
@@ -134,7 +133,8 @@ class CommModbus(Comm):
         ''' returns serial params like port 8N1 '''
         params = str(self.port)+' '+str(self.speed)+' '+str(self.bytesize)+self.parity+str(self.stopbits)
         # better to return the data directly usable by set_serial... FIXME
-        return params
+        log.info('parameters for serial: ' + params) # for visual feedback
+        return self.port, self.speed, self.parity, self.timeout, self.Bytesize, self.stopbits
         
         
     def get_mba_keepalive(self):
