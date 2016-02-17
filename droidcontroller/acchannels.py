@@ -379,7 +379,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     mb[mbi] = CommModbus(host = host, port = port) # tcp
                 else:
                     mb[mbi] = CommModbus(host = host, speed = speed) # serial
-                    mb[mbi].set_serial(self.port = port, self.speed = speed, self.parity = parity) # muid nagunii ei muuda
+                    mb[mbi].set_serial(port = port, speed = speed, parity = parity) # muid nagunii ei muuda
                     
                 log.warning('recreated mb['+str(mbi)+'] due to read FAILURE for mbi,mba,regadd,count '+str(mbi)+', '+str(mba)+', '+str(regadd)+', '+str(count))
                 time.sleep(0.5) # hopefully helps to avoid sequential error / recreations
