@@ -26,13 +26,14 @@ log = logging.getLogger(__name__)
 
 class Sensor:  # what about restart if conn failing?
     ''' This is for TCP over wifi only, transparent serial '''
-    def __init__(self, host='192.168.0.241', port=10001, name=None):  # for co2 only
+    def __init__(self, host='10.10.100.254', port=10001, name=None):  # for co2 only
         self.name = name
-        self.tcpsocket = socket(AF_INET,SOCK_STREAM) # tcp # 17.10.2012
-        self.tcpsocket.settimeout(10)
-        self.tcpport = port # default
-        self.tcpaddr = host #
-        print('Sensor instance created for '+self.tcpaddr+':'+str(self.tcpport)+', connection not tested!')
+        #self.tcpsocket = socket(AF_INET,SOCK_STREAM) # tcp # 17.10.2012
+        #self.tcpsocket.settimeout(10)
+        #self.tcpport = port # default
+        #self.tcpaddr = host #
+        self.conntuple = (host, port)
+        print('Sensor instance created for '+str(self.conntuple))
         
         
         
@@ -73,9 +74,12 @@ class Sensor:  # what about restart if conn failing?
     def rd_chk(self, query=b'\x11\x01\x01\xED'): # FIXME / add crc chk
         ''' Sends the query, reads the response and checks the content '''
         try:
-            self.tcpsocket.connect((self.tcpaddr, self.tcpport))
+            #self.tcpsocket.connect((self.tcpaddr, self.tcpport))
+            self.tcpsocket = socket(AF_INET,SOCK_STREAM) # sulgemisel kaob!
+            self.tcpsocket.settimeout(10)
+            self.tcpsocket.connect(self.conntuple)
             self.tcpsocket.sendall(query) # saadame
-            log.info("==> "+self.tcpaddr+":"+str(self.tcpport)+" "+str(query)) # naitame mida saatsime
+            log.debug("==> "+str(self.conntuple)+": "+str(query)) # naitame mida saatsime
             ready = select.select([self.tcpsocket], [], [], 1) # timeout 1 s.
             if ready[0]: # midagi on tulnud
                 self.mbm = self.tcpsocket.recv(99) # kuulame # recv kasutame alles siis, kui data tegelikult olemas!
@@ -83,14 +87,15 @@ class Sensor:  # what about restart if conn failing?
 
             else:
                 log.error('NO RESPONSE from co2 sensor')
+                self.mbm = None
                 return 2
             if len(self.mbm) > 0:
-                log.info('got a message from sensor, length ' + str(len(self.mbm)) + ' bytes: '+str(encode(self.mbm, 'hex_codec'))[:20])
+                log.debug('got a message from sensor, length ' + str(len(self.mbm)) + ' bytes: '+str(encode(self.mbm, 'hex_codec'))[:20])
                 return 0
             else:
                 log.warning('EMTPY answer from sensor device')
         except:
-            log.error('FAILED TCP connection to '+self.tcpaddr)
+            log.error('FAILED TCP connection to '+str(self.conntuple))
             #traceback.print_exc()
             
         return 1
@@ -99,11 +104,15 @@ class Sensor:  # what about restart if conn failing?
     def decode_co2(self): # wuhan
         '''co2 only from this model '''
         res = 0
-        for i in range(2):
-            res += int(str(self.mbm[4 - i])) << (i * 8)
-        return res
+        if self.mbm:
+            for i in range(2):
+                res += int(str(self.mbm[4 - i])) << (i * 8)
+            return res
+        else:
+            log.error('no self.mbm to decode!')
+            return None
 
-
+            
     def get_all(self):
         '''Returns all or most measured values fot heat meters '''
         res = {}
