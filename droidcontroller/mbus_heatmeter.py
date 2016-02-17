@@ -30,15 +30,16 @@ m.get_flow()
 
 class MbusHeatMeter(object): # FIXME averaging missing!
     ''' Publish values to services via msgbus '''  # FIXME use IOloop too
-    def __init__(self, msgbus=None, model='kamstrup402', svclist=[['XYW',1,1,'undefined']]): # svc2publish, member, id, name
+    def __init__(self, msgbus=None, port='/dev/ttyUSB0', model='kamstrup402', svclist=[['XYW',1,1,'undefined']]): # svc2publish, member, id, name
         self.msgbus = msgbus # all communication via msgbus, not to ac  directly!
         self.svclist = svclist # svc, member, id, name
         self.dict = {} # used by read()
         self.errors = 0 # FIXME / currently used for read_sync only!
         self.model = model
         self.xml = '' # use for new model debugging
+        self.nodes = ''
         try:
-            self.mbus = MBus(device="/dev/ttyUSB0") ##
+            self.mbus = MBus(device=port) ##
             self.mbus.connect() ##
             log.info('mbus instance created, output to msgbus: '+str(svclist))
         except:
@@ -53,6 +54,9 @@ class MbusHeatMeter(object): # FIXME averaging missing!
             {1:['Energy (kWh)',1,'kWh'], 2:['Volume (1e-2  m^3)',0.01,'m3'], 4:['Flow temperature (1e-2 deg C)',0.1,'ddegC'], 
             5:['Return temperature (1e-2 deg C)',0.1,'ddegC'], 7:['Power (100 W)',100,'W'], 9:['Volume flow (m m^3/h)',1,'l/h']}})
             
+    def set_model(self, invar):
+        self.model = invar
+        
     def read_sync(self, debug = False):
         ''' Query mbus device, waits for reply, lists all if debug == True '''
         log.info('sending out a sync mbus query')
@@ -84,8 +88,12 @@ class MbusHeatMeter(object): # FIXME averaging missing!
         return self.errors
     
     def get_models():
-        '''return supported models '''
+        '''return all supported models '''
         return self.modeldata # dict
+    
+    def get_model():
+        '''return currently selected model '''
+        return self.model # dict
     
     def parse_publish(self, dict, debug = False):
         ''' Publish all  '''
@@ -139,12 +147,12 @@ class MbusHeatMeter(object): # FIXME averaging missing!
     
     def parse1(self, id):
         ''' Return one Value with matching id from self.nodes '''
-        return int(round(int(self.nodes[id].firstChild.nodeValue) * self.modeldata[self.model][id][1],0))
+        if id < len(self.nodes):
+            return int(round(int(self.nodes[id].firstChild.nodeValue) * self.modeldata[self.model][id][1],0))
+        else:
+            log.error('invalid id '+str(id)+' while self.nodes len '+str(len(self.nodes)))
+            return None
         
-        #for x in self.dict['MBusData']['DataRecord']:
-        #    if int(x['@id']) == id:
-        #        return int(round(int(x['Value']) * self.modeldata[self.model][id][1],0)) 
-
     def get_energy(self):
         return self.parse1(1) # kWh
 
@@ -162,7 +170,7 @@ class MbusHeatMeter(object): # FIXME averaging missing!
         tret = self.parse1(5) # ddegC
         return ton, tret
         
-    def get_all(self): 
+    def get_all(self): # kogu info nagemiseks vt self.xml
         out = {}
         conf = self.modeldata[self.model]
         for id in conf:
