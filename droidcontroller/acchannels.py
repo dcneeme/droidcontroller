@@ -1031,11 +1031,11 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             chk = len(olisa.split(' '))
             if chk != mcount: # member(s) missing!
                 log.error('invalid old sendtuple member count '+str(chk)+', should be '+str(mcount)+', skipping notifying svc '+val_reg)
-                rowproblem += 1
+                rowproblemcount += 1
             chk = len(lisa.split(' '))
             if chk != mcount: # member(s) missing!
                 log.error('invalid new sendtuple member count '+str(chk)+', should be '+str(mcount)+', skipping notifying svc '+val_reg)
-                rowproblem += 1
+                rowproblemcount += 1
                 
         # service members done, check if all of them valid to use in svc tuple
         if rowproblemcount == 0: # all members valid
