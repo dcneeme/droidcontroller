@@ -776,6 +776,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             If sta_reg is empty and vale_reg ends with W, S is assumed for sta_reg name end.
 
             self.cpi must be set before executing!
+            FIXME - do not send a svs out if any of the members is missing / None!
         '''
 
         status = 0 # initially for whole service
@@ -788,7 +789,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         lolim = None
         nolim = 0
         values = [] # to be reported via msgbus
-
+        mcount = 0
         
         if sta_reg == '' and (val_reg[-1] == 'W' or val_reg[-1] == 'V'):
             sta_reg = val_reg[0:-1]+'S' # assuming S in the end
@@ -802,9 +803,10 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         ts_now = time.time() # time now in sec
         rowproblemcount = 0 # count of invalid members in svc
 
-        for srow in cur: # go through service members
+        for srow in cur: ## go through service members
             log.debug(repr(srow))
             repeat = False # earlier values will be sent with shifted time if True
+            mcount += 1 # member count
             mba = -1 #
             regadd = -1
             member = 0
@@ -890,7 +892,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         if (cfg&64): # power, no sign, increment to be calculated! divide increment to time from the last reading to get the power
                             #cpi += 1 # counter2power index, increment BEFORE value validation
 
-                            log.info('going to calc power for mba.regadd '+str(mba)+'.'+str(regadd)+' using cp['+str(self.cpi)+']') ## debug
+                            #log.info('going to calc power for mba.regadd '+str(mba)+'.'+str(regadd)+' using cp['+str(self.cpi)+']') ## debug
                             #res = self.cp[self.cpi].calc(ots, raw, ts_now = self.ts) # power calculation based on raw counter increase
                             res = self.cp[self.cpi].calc(raw) # based on current ts only!
                             if res != None and res[0] != None:
@@ -1026,9 +1028,15 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
             rowproblemcount += rowproblem
 
-        #if self.cpi > -1: # counters  in use
-        #    log.debug(' /// counter instances count '+str(len(self.cp)))
-
+            chk = len(olisa.split(' '))
+            if chk != mcount: # member(s) missing!
+                log.error('invalid old sendtuple member count '+str(chk)+', should be '+str(mcount)+', skipping notifying svc '+val_reg)
+                rowproblem += 1
+            chk = len(lisa.split(' '))
+            if chk != mcount: # member(s) missing!
+                log.error('invalid new sendtuple member count '+str(chk)+', should be '+str(mcount)+', skipping notifying svc '+val_reg)
+                rowproblem += 1
+                
         # service members done, check if all of them valid to use in svc tuple
         if rowproblemcount == 0: # all members valid
             if repeat: # > 20% change was detected from ovalue to value
@@ -1147,7 +1155,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         res=0
         self.chg = 0
         self.ts = round(time.time(),0)
-        if self.ts - self.ts_read > self.readperiod:
+        if self.ts - self.ts_read > self.readperiod: # ei oma tahtsust kui kaivitab ioloop timer
             self.ts_read = self.ts
             try:
                 res = self.read_all() ## read all registers defined in aicochannels
