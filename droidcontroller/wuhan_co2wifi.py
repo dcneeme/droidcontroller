@@ -72,11 +72,12 @@ class Sensor:  # what about restart if conn failing?
 
    
     def read(self): # alias to the next
-        self.rd_chk() # saves the input string to self.mbm variable
+        return self.rd_chk() # saves the input string to self.mbm variable
         
         
     def rd_chk(self, query=b'\x11\x01\x01\xED'): # FIXME / add crc chk
         ''' Sends the query, reads the response and checks the content '''
+        self.mbm = None # string from sensor
         try:
             #self.tcpsocket.connect((self.tcpaddr, self.tcpport))
             self.tcpsocket = socket(AF_INET,SOCK_STREAM) # sulgemisel kaob!
@@ -109,7 +110,7 @@ class Sensor:  # what about restart if conn failing?
     def decode_co2(self): # wuhan
         '''co2 only from this model '''
         res = 0
-        if self.mbm:
+        if self.mbm != None:
             for i in range(2):
                 res += int(str(self.mbm[4 - i])) << (i * 8)
             return res
