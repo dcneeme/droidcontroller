@@ -63,7 +63,7 @@ log = logging.getLogger(__name__)
 
 class ControllerApp(object): # default modbus address of io in controller = 1
     ''' '''
-    def __init__(self, app, ostype='archlinux', mba=1, mbi=0, ai_readperiod=3, ai_sendperiod=20): # mbi, mba for master iocard
+    def __init__(self, app, ostype='archlinux', mba=1, mbi=0, ai_readperiod=20, ai_sendperiod=60, udp_period=20, reg_period=180): # mbi, mba for master iocard
         self.msgbus = MsgBus()
         self.msgbus.subscribe('debug', 'di_grp_result', 'debugger', self.buslog) ###
         #self.msgbus.subscribe('app_debug1', 'TKW', 'debugger', self.buslog) ### ajutine
@@ -71,7 +71,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         self.app = app # client-specific main script
         self.mba = mba # controller io modbus address if dc6888
         self.mbi = mbi # io channel for controller
-        self.ac = ACchannels(self.msgbus, in_sql = 'aicochannels.sql', readperiod = 0, sendperiod = ai_sendperiod) # ai and counters
+        self.ac = ACchannels(self.msgbus, in_sql = 'aicochannels.sql', readperiod = 0, sendperiod = ai_sendperiod) # lugemise sageduse maarab timer
         self.d = Dchannels(self.msgbus, readperiod = 0, sendperiod = 180) # di and do. immediate notification on change, read as often as possible
         self.p = Commands(ostype) # setup and commands from server
         self.r = RegularComm(interval=12) # interval parameter needs to be less than the scheduler timer value below!
@@ -91,12 +91,13 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         udp.add_reader_callback(self.udp_reader)
 
         # ioloop timers for regular execution
-        self.udpcomm_scheduler = PeriodicCallback(self.udp_comm, 20000) # this is periodical, but ack will lauch immediate send!
-        self.regular_scheduler = PeriodicCallback(self.regular_svc, 60000) # send regular svc
+        self.udpcomm_scheduler = PeriodicCallback(self.udp_comm, udp_period * 1000) # this is periodical, but ack will lauch immediate send!
+        self.regular_scheduler = PeriodicCallback(self.regular_svc, reg_period * 1000) # send regular svc
         self.di_scheduler = PeriodicCallback(self.di_reader, 10) # read DI asap. was 50 ms
-        self.ai_scheduler = PeriodicCallback(self.ai_reader, ai_readperiod) # ai 10 s
+        self.ai_scheduler = PeriodicCallback(self.ai_reader, ai_readperiod * 1000) # intervall iomain kaudu ette
         #self.cal_scheduler = tornado.ioloop.PeriodicCallback(self.cal_reader, 1800000) # selle kasutus iomain sest! nagu ka mbus jms
-
+        log.info('going to start timers: udp '+str(udp_period)+'s, regular '+str(reg_period)+'s, di 0.01s, ai ' +str(ai_readperiod)) ##
+        time.sleep(2)
         self.udpcomm_scheduler.start() #self.udpcomm_scheduler.run_now() # starts immediately main loop on import?
         self.regular_scheduler.start()
         self.di_scheduler.start()
@@ -156,7 +157,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
                     gotack = True
                 got = udp.udpread()
                 if gotack:
-                    log.info('send more from buffer as something was deleted')
+                    #log.info('send more from buffer as something was deleted')
                     self.udpcomm_scheduler.run_now() # immediate, then next time after normal delay
                     
             if udp.sk.get_state()[3] == 1: # firstup
@@ -201,7 +202,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
     def got_parse(self, got):
         ''' check the ack or cmd from server '''
         if got != {} and got != None: # got something from monitoring server
-            log.info('parsing got '+str(got)) # voimalik et mitu jarjest?
+            ##log.info('parsing got '+str(got)) # kas on voimalik et mitu jarjest?
             self.ac.parse_udp(got) # chk if setup or counters need to be changed
             self.d.parse_udp(got) # chk if setup ot toggle for di
             todo = self.p.parse_udp(got) # any commands or setup variables from server?
@@ -215,12 +216,19 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         reslist = self.d.doall() # returns di, do, svc signals 0 1 2 = nochg chg err
         di_dict = self.d.get_chg_dict()
         if reslist == [0, 0, 0]:
-            sys.stdout.write('d') # no flush
-            sys.stdout.flush() # debugging flush on no chg as well
+            log.warning('di_reader done, NO change, di scanning speed '+str(self.spm.get_speed())) # et naha oleks  logis
+            #sys.stdout.write('d') # no flush
+            #sys.stdout.flush() # debugging flush on no chg as well
         else:
-            sys.stdout.write('D') # some change
-            sys.stdout.flush() # flush now, when something was changed
+            log.warning('di_reader done, some change, reslist '+str(reslist)) ## et naha oleks  logis
+            self.app(sys._getframe().f_code.co_name, attentioncode = 1)
+            self.udp_comm()
+            
+            #sys.stdout.write('D') # some change
+            #sys.stdout.flush() # flush now, when something was changed
 
+            return ###
+            
             if (reslist[0] & 1):  # change in di
                 di_dict = self.d.get_chg_dict()
                 log.info('di change detected: '+str(di_dict)+', reslist '+str(reslist)) # mis siin on , chg voi svc?
@@ -237,6 +245,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
 
 
     def ai_reader(self): # AICO reader
+        log.warning('ai_reader run') ## 
         self.ac.doall()
         self.app(sys._getframe().f_code.co_name, attentioncode = 2) # d, a attention bits / use msgbus instead
         if self.led: # ajutine

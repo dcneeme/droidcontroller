@@ -71,16 +71,20 @@ class Sensor:  # what about restart if conn failing?
         return self.port
 
    
+    def read(self): # alias to the next
+        self.rd_chk() # saves the input string to self.mbm variable
+        
+        
     def rd_chk(self, query=b'\x11\x01\x01\xED'): # FIXME / add crc chk
         ''' Sends the query, reads the response and checks the content '''
         try:
             #self.tcpsocket.connect((self.tcpaddr, self.tcpport))
             self.tcpsocket = socket(AF_INET,SOCK_STREAM) # sulgemisel kaob!
-            self.tcpsocket.settimeout(10)
+            self.tcpsocket.settimeout(2)
             self.tcpsocket.connect(self.conntuple)
             self.tcpsocket.sendall(query) # saadame
             log.debug("==> "+str(self.conntuple)+": "+str(query)) # naitame mida saatsime
-            ready = select.select([self.tcpsocket], [], [], 1) # timeout 1 s.
+            ready = select.select([self.tcpsocket], [], [], 2) # timeout 2 s.
             if ready[0]: # midagi on tulnud
                 self.mbm = self.tcpsocket.recv(99) # kuulame # recv kasutame alles siis, kui data tegelikult olemas!
                 self.tcpsocket.close()
@@ -88,6 +92,7 @@ class Sensor:  # what about restart if conn failing?
             else:
                 log.error('NO RESPONSE from co2 sensor')
                 self.mbm = None
+                self.tcpsocket.close()
                 return 2
             if len(self.mbm) > 0:
                 log.debug('got a message from sensor, length ' + str(len(self.mbm)) + ' bytes: '+str(encode(self.mbm, 'hex_codec'))[:20])
@@ -151,9 +156,5 @@ class Sensor:  # what about restart if conn failing?
             log.warning('no answer from sensor device')
             return 1
 
-    def read(self):
-        ''' all together '''
-        self.rd_chk()
-        return self.decode_co2()
         
 ### END #######################################################

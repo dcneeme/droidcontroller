@@ -68,7 +68,7 @@ class CommModbus(Comm):
             self.host = kwargs.get('host','127.0.0.1')
             if '/dev/tty' in self.host: # direct serial connection defined via host
                 self.port = kwargs.get('host')
-                self.do_serialclient(port = self.port, speed = self.speed, parity = self.parity)
+                self.do_syncserialclient(port = self.port, speed = self.speed, parity = self.parity)
                 #from pymodbus.client.sync import ModbusSerialClient as ModbusClient
                 #self.client = ModbusClient(method='rtu', stopbits=1, bytesize=8, parity='E', baudrate=19200, timeout=0.5, port=kwargs.get('host'))
                 #log.info('CommModbus() init2: created CommModbus instance for ModbusRTU over RS485 using params '+str(kwargs))
@@ -100,7 +100,7 @@ class CommModbus(Comm):
         else: # serial - siin port COM...?
             try:
                 self.port = kwargs.get('port')
-                self.do_serialclient(port = self.port, speed = self.speed, parity = self.parity) # change params later if needed via set_serial()
+                self.do_syncserialclient(port = self.port, speed = self.speed, parity = self.parity) # change params later if needed via set_serial()
                 #from pymodbus.client.sync import ModbusSerialClient as ModbusClient
                 #self.client = ModbusClient(method='rtu', stopbits=1, bytesize=8, parity='E', baudrate=19200, timeout=0.5, port=port)
                 #print('CommModbus() init5: created CommModbus instance for ModbusRTU over RS485 using params '+str(kwargs))
@@ -110,7 +110,7 @@ class CommModbus(Comm):
                 traceback.print_exc()
                 
 
-    def do_serialclient(self, port, speed=19200, parity='E', timeout=0.5, bytesize=8, stopbits=1):
+    def do_syncserialclient(self, port, speed=19200, parity='E', timeout=0.5, bytesize=8, stopbits=1):
         ''' create self.client of correct type for serial connections only '''
         from pymodbus.client.sync import ModbusSerialClient as ModbusClient
         self.port = port
@@ -119,14 +119,25 @@ class CommModbus(Comm):
         self.timeout = timeout
         self.bytesize = bytesize
         self.stopbits = stopbits
-        self.client = ModbusClient(method='rtu', stopbits=stopbits, bytesize=bytesize, parity=parity, baudrate=speed, timeout=timeout, port=port)
-        log.info('serial ModbusClient (re)created with params '+str(self.port)+', '+str(self.speed)+' '+str(bytesize)+parity+str(stopbits))
+        if 'str' in str(type(port)) and 'str' in str(type(parity)) and 'int' in str(type(speed)) and 'int' in str(type(bytesize)):
+            try:
+                self.client = ModbusClient(method='rtu', stopbits=stopbits, bytesize=bytesize, parity=parity, baudrate=speed, timeout=timeout, port=port)
+                log.info('serial ModbusClient (re)created with params '+str(self.port)+', '+str(self.speed)+' '+str(bytesize)+parity+str(stopbits))
+                return 0
+            except:
+                traceback.print_exc()
+                log.info('serial ModbusClient (re)created with params '+str(self.port)+', '+str(self.speed)+' '+str(bytesize)+parity+str(stopbits))
+                return 1
+        else:
+            log.error('INVALID parameters for serial client: '+str(self.port)+', '+str(self.speed)+' '+str(bytesize)+parity+str(stopbits))
+            return 1
                 
 
-    def set_serial(self, port='/dev/ttyAPP0', speed=19200, parity = 'E', timeout = 0.5,  bytesize=8, stopbits=1):
+    def set_serial(self, port='/dev/ttyAPP0', speed=19200, parity = 'E', timeout = 0.5,  bytesize=8, stopbits=1, async=False):
         ''' to change the speed and other params '''
         # FIXME / kontrolli et host jms alusel ikka serial...
-        self.do_serialclient(port, speed, parity, timeout, bytesize, stopbits)
+        if not async:
+            self.do_syncserialclient(port, speed, parity, timeout, bytesize, stopbits)
         
         
     def get_serial(self):

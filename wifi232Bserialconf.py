@@ -29,17 +29,20 @@ class SerialConf:
         ip='10.0.0.4', defgw='10.0.0.253', speed=9600, parity='None',
             ssid='gembird', passwd='villakooguit', model='WIFI232B', conf={
                 'FUDLX': 'on',
-                'WMODE': None,
-                'WEBU': 'admin,hoira',
+                
             },
-            ispeed=57600, iparity='N', aes_tkip='aes'
+            ispeed=57600, iparity='N', aes_tkip='aes', mode='sta', webu='admin,hoira'
             ): # veebist yle 5 margi panna ei saanud, at kasuga saab! proovitud 10
         self.ip = ip # to be used for ping
         self.defgw = defgw # to be used for ping
-
+        self.mode = mode
+        self.webu = webu
+        
+        conf.update({'WEBU': self.webu})
         conf.update({'UART': str(speed)+',8,1,'+parity+',NFC'})
         conf.update({'WANN': 'static,'+ip+',255.255.255.0,'+defgw}) # sta mode network params
         conf.update({'WSSSID': ssid})
+        conf.update({'WMODE': self.mode})
         conf.update({'WSKEY': 'wpa2psk,'+aes_tkip+','+passwd}) # min 8 chars
         conf.update({'NETP': 'TCP,Server,10001,10.10.100.100'}) # EI TAHA OMA IP?
         # kiirus peale factory default resetti on 57600
@@ -231,9 +234,6 @@ class SerialConf:
                 i = 0
                 cmd = 'AT+'+key+'='+self.conf[key]
                 res = self.comm(cmd, expect_string='+ok', delay=2).replace('\r\n',' ').replace('\r','').replace('\n','')[1:] # avoid cr, lf
-                #print('   got '+res)
-        time.sleep(1)
-        self.comm('AT+WMODE=sta') # sta moodi
         self.comm('AT+Z') # restart salvestamiseks/joustamiseks
         print('module restarted, the communication at targeted speed and transparent mode can be tried soon')
 
@@ -267,8 +267,11 @@ class SerialConf:
         time.sleep(10)
         self.set_mode() # switching into at command mode
         self.get_conf() # read new config
-        self.get_networks() # show networks
-
+        if self.mode == 'sta':
+            self.get_networks() # show networks
+        else:
+            print('module in ap mode, try to connect to USR... network and scan networks at 10.10.100.254, '+self.webu)
+            print('then select AP mode and restart')
 ##########################################################
 if __name__ == '__main__':
     w = SerialConf()

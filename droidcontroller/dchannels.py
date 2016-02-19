@@ -724,7 +724,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
     def set_doword(self,mba,regadd,value,mbi=0): # sets holding register without services involvment
         ''' Setting holding register (like pwm channel for pulse or pwm) '''
-        log.info('writing output register mbi '+str(mbi)+', mba '+str(mba)+', regadd '+str(regadd)+' with word 0x'+str(hex(value)))
+        log.info('writing output register mbi '+str(mbi)+', mba '+str(mba)+', regadd '+str(regadd)+' with word '+str(hex(value)))
         return mb[mbi].write(mba, regadd, value = value)
 
     def get_doword(self,mba,regadd,count=1,mbi=0): # returns list!

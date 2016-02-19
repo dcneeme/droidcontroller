@@ -53,7 +53,12 @@ class MbusHeatMeter(object): # FIXME averaging missing!
         self.modeldata.update({'kamstrup602': 
             {1:['Energy (kWh)',1,'kWh'], 2:['Volume (1e-2  m^3)',0.01,'m3'], 4:['Flow temperature (1e-2 deg C)',0.1,'ddegC'], 
             5:['Return temperature (1e-2 deg C)',0.1,'ddegC'], 7:['Power (100 W)',100,'W'], 9:['Volume flow (m m^3/h)',1,'l/h']}})
-            
+        self.modeldata.update({'axisSKU03': 
+            {5:['Energy (kWh)',1,'kWh'], 6:['Volume (l)',0.001,'m3'], 9:['Flow temperature (deg C)',10,'ddegC'], 
+            10:['Return temperature (deg C)',10,'ddegC'], 7:['Power (W)',1000,'W'], 8:['Volume flow (l/h)',1000,'l/h']}})
+        self.modeldata.update({'cyble': {4:['Volume (l)',1,'l']}}) # water meter
+         
+         
     def set_model(self, invar):
         self.model = invar
         
@@ -65,20 +70,19 @@ class MbusHeatMeter(object): # FIXME averaging missing!
             reply = self.mbus.recv_frame()
             reply_data = self.mbus.frame_data_parse(reply)
             self.xml = self.mbus.frame_data_xml(reply_data)
-            #print(self.xml) ##
+            
         except:
             log.error('FAILED to get data from mbus')
             self.errors += 1
             return 1
-
-        
+       
         try:
             ##d = xmltodict.parse(self.xml)
-            d = parseString(self.xml)
+            self.dom = parseString(self.xml)
         except Exception as ex:
             print("parse error: %s" % ex)
             sys.exit()
-        return d
+        return 0
 
     def get_xml(self): # use read_sync(); get_xml() for debugging
         return self.xml
@@ -138,36 +142,52 @@ class MbusHeatMeter(object): # FIXME averaging missing!
     def read(self): # into self.dict, sync!
         ''' stores info self.dict variable '''
         try:
-            dom = self.read_sync()
-            self.nodes = dom.getElementsByTagName('Value')
-            return 0
+            res = self.read_sync()
+            if res == 0:
+                self.nodes = self.dom.getElementsByTagName('Value')
+                return 0
+            else:
+                log.error('mbus read failed')
+                return 1
         except:
             traceback.print_exc()
-            return 1
+            return 2
     
     def parse1(self, id):
         ''' Return one Value with matching id from self.nodes '''
         if id < len(self.nodes):
-            return int(round(int(self.nodes[id].firstChild.nodeValue) * self.modeldata[self.model][id][1],0))
+            return int(round(float(self.nodes[id].firstChild.nodeValue) * self.modeldata[self.model][id][1],0))
         else:
             log.error('invalid id '+str(id)+' while self.nodes len '+str(len(self.nodes)))
             return None
         
+    def find_id(self, name): # name is 'Energy' or smthg...
+        for i in range(len(self.modeldata)):
+            if name in self.modeldata[self.model][i][0]:
+                break
+            return i
+        
     def get_energy(self):
-        return self.parse1(1) # kWh
+        id=1 #5 # id = self.find_id('Energy')
+        return self.parse1(id) # kWh
 
     def get_power(self):
-        return self.parse1(7) # W
+        id = 7 # self.find_id('Power')
+        return self.parse1(id) # W
 
     def get_volume(self):
-        return self.parse1(2) # l
+        id = 2 # 6 #  self.find_id('Volume')
+        return self.parse1(id) # l
 
     def get_flow(self):
-        return self.parse1(9) # l/h
+        id = 9 # 8 # self.find_id('Volume flow')
+        return self.parse1(id) # l/h
 
     def get_temperatures(self):
-        ton = self.parse1(4) # ddegC
-        tret = self.parse1(5) # ddegC
+        id = 4 # 9 # self.find_id('ow temperature')
+        ton = self.parse1(id) # ddegC
+        id = 5 # 10 # self.find_id('Return temp')
+        tret = self.parse1(id) # ddegC
         return ton, tret
         
     def get_all(self): # kogu info nagemiseks vt self.xml

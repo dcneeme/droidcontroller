@@ -35,23 +35,11 @@ class IT5888pwm(object):
             if len(self.bits) != len(periodics): # must be list then
                 self.periodics.append(True) # all periodical by default
         
-        self.set_phases(phases)
-
-        
-
         self.name = name
         self.period = period # generation starts with value writing
-        try:
-            time.sleep(0.1) # period register write may fail without this delay for some reason...
-            res = self.d.set_doword(self.mba, self.per_reg, value=self.period, mbi=self.mbi) # needs to be resent after io board reset
-            if res == 0:
-                log.info(self.name+' successfully created')
-            else:
-                log.warning(self.name+' possible I/O-problem on mbi '+str(self.mbi)+', mba '+str(self.mba)+': could not write period '+str(self.period)+' into the register '+str(self.per_reg))
-        except:
-            log.warning(self.name+' possible I/O-problem on mbi '+str(self.mbi)+', mba '+str(self.mba)+': could not write period '+str(self.period)+' into the register '+str(self.per_reg))
-            traceback.print_exc()
-
+        self.set_phases(phases)
+        res = self.fix_period()
+       
 
     def set_phases(self, phases):
         ''' Set the phases list. Used with value sending '''
@@ -78,10 +66,12 @@ class IT5888pwm(object):
 
     def fix_period(self):
         '''  Restores the correct period value in IO register (150) '''
-        if self.d.get_doword(self.mba, self.per_reg, 1, mbi=self.mbi)[0] != (self.period << 2): # period stored in 0,25 ms units in fw 616 dec!
-            self.set_doword(self.mba, self.per_reg, value = self.period << 2, mbi=self.mbi) # restore the period register value in IO
-            log.info(self.name+' pwm period fixed to '+str(self.period)+' ms')
-
+        try:
+            if self.d.get_doword(self.mba, self.per_reg, 1, mbi=self.mbi)[0] != (self.period << 2): # period stored in 0,25 ms units in fw 616 dec!
+                self.set_doword(self.mba, self.per_reg, value = self.period << 2, mbi=self.mbi) # restore the period register value in IO
+                log.info(self.name+' pwm period fixed to '+str(self.period)+' ms')
+        except:
+            log.error('failed to communicate with period register '+str(self.per_reg)+' at mbi '+str(self.mbi)+' mba '+str(self.mba))
 
     def set_value(self, chan, value):# one or all? the same can be shared in some cases...
         ''' Set one or all multiphase channels the new PWM value. Will be sent to register only if it differs from the previous '''

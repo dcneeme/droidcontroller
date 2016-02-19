@@ -475,11 +475,12 @@ class SQLgeneral(UDPchannel): # parent class for ACchannels, Dchannels
         try:
             conn.execute(Cmd)
             conn.commit()
-            log.debug(table + ' updated with '+valraw[raw]+' = '+str(value)+' for '+svc+'.'+str(member)) ##
+            log.info(table + ' updated with '+valraw[raw]+' = '+str(value)+' for '+svc+'.'+str(member)) ##
             return 0
         except:
             msg='set_membervalue failure: '+str(sys.exc_info()[1])
             log.warning(msg)
+            traceback.print_exc()
             return 1  # update failure
 
             
