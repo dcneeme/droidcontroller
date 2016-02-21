@@ -122,14 +122,14 @@ class CommModbus(Comm):
         if 'str' in str(type(port)) and 'str' in str(type(parity)) and 'int' in str(type(speed)) and 'int' in str(type(bytesize)):
             try:
                 self.client = ModbusClient(method='rtu', stopbits=stopbits, bytesize=bytesize, parity=parity, baudrate=speed, timeout=timeout, port=port)
-                log.info('serial ModbusClient (re)created with params '+str(self.port)+', '+str(self.speed)+' '+str(bytesize)+parity+str(stopbits))
+                log.info(self.name+' serial ModbusClient (re)created with params '+str(self.port)+', '+str(self.speed)+' '+str(bytesize)+parity+str(stopbits))
                 return 0
             except:
+                log.error(self.name+' serial ModbusClient (re)creation FAILED with params '+str(self.port)+', '+str(self.speed)+' '+str(bytesize)+parity+str(stopbits))
                 traceback.print_exc()
-                log.info('serial ModbusClient (re)created with params '+str(self.port)+', '+str(self.speed)+' '+str(bytesize)+parity+str(stopbits))
                 return 1
         else:
-            log.error('INVALID parameters for serial client: '+str(self.port)+', '+str(self.speed)+' '+str(bytesize)+parity+str(stopbits))
+            log.error(self.name+' INVALID parameters for serial client: '+str(self.port)+', '+str(self.speed)+' '+str(bytesize)+parity+str(stopbits))
             return 1
                 
 
@@ -144,7 +144,7 @@ class CommModbus(Comm):
         ''' returns serial params like port 8N1 '''
         params = str(self.port)+' '+str(self.speed)+' '+str(self.bytesize)+self.parity+str(self.stopbits)
         # better to return the data directly usable by set_serial... FIXME
-        log.info('parameters for serial: ' + params) # for visual feedback
+        log.info('parameters for serial: ' + str(params)) # for visual feedback
         return self.port, self.speed, self.parity, self.timeout, self.bytesize, self.stopbits
         
         
@@ -367,7 +367,7 @@ class CommModbus(Comm):
         values = kwargs.get('values', None)
         
         if value == None and values == None:
-            log.error('write FAILED: no required parameters value or values! mba '+str(mba)+', reg '+str(reg))
+            log.error(self.name+' write FAILED: no required parameters value or values! mba '+str(mba)+', reg '+str(reg))
             return 2
         else:
             log.debug('going to write register mba '+str(mba)+', reg '+str(reg)+', value '+str(value)+', values '+str(values)+', type '+str(type)) 
@@ -388,7 +388,7 @@ class CommModbus(Comm):
                             log.warning('UNKNOWN write single register error (neither response or exception), address '+str(mba)+', register '+str(reg))
                         return 2
                 except:
-                    log.warning('write single register error: '+str(sys.exc_info()[1]))
+                    log.warning(self.name+' ERROR writing single register: '+str(sys.exc_info()[1]))
                     traceback.print_exc()
                     self.errorcount += 1
                     self.add_error(mba, 1)
@@ -447,7 +447,7 @@ class CommModbus(Comm):
                 return 1
 
         else:
-            log.error('unknown type for register to write, '+str(type))
+            log.error(self.name+' UNKNOWN type for register '+reg+' to write, '+str(type))
             self.errorcount += 1
             return 2
 
