@@ -97,7 +97,7 @@ class PID:
             else:
                 self.Ki = invar
         except:
-            self.Ki = invar
+            self.Ki = invar # no init needed
 
 
     def setKd(self, invar):

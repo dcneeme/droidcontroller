@@ -60,7 +60,7 @@ class CommModbus(Comm):
         self.host = None # can be com port name or ip address
         self.speed = kwargs.get('speed','19200') # default speed 19200
         self.parity = kwargs.get('parity','E') # default EVEN
-        
+        self.name = kwargs.get('name','undefined')
         self.mba_keepalive = kwargs.get('mba_keepalive',1) # this address (1 by default) must respond, recreating mb[] if not
         #print(kwargs) # debug
             
@@ -260,12 +260,12 @@ class CommModbus(Comm):
                     self.add_error(mba, 0)
                     return res.registers
                 else:
-                    log.warning('got no response to read (h) from mba '+str(mba)+', reg '+str(reg)+', count '+str(count))
+                    log.warning(self.name+' got no response to read (h) from mba '+str(mba)+', reg '+str(reg)+', count '+str(count))
                     self.errorcount += 1
                     self.add_error(mba, 1)
                     return None
             except:
-                log.warning('modbus read (h) failed from mba '+str(mba)+', reg '+str(reg)+', count '+str(count))
+                log.warning(self.name+' modbus read (h) failed from mba '+str(mba)+', reg '+str(reg)+', count '+str(count))
                 traceback.print_exc()
                 self.errorcount += 1
                 self.add_error(mba, 1)
@@ -279,13 +279,13 @@ class CommModbus(Comm):
                     self.add_error(mba, 0)
                     return res.registers
                 else:
-                    log.warning('got no response to read (i) from mba '+str(mba)+', reg '+str(reg)+', count '+str(count))
+                    log.warning(self.name+' got no response to read (i) from mba '+str(mba)+', reg '+str(reg)+', count '+str(count))
                     self.errorcount += 1
                     self.add_error(mba, 1)
                     return None
 
             except:
-                log.warning('modbus read (i) failed from mba '+str(mba)+', reg '+str(reg)+', count '+str(count))
+                log.warning(self.name+'modbus read (i) failed from mba '+str(mba)+', reg '+str(reg)+', count '+str(count))
                 traceback.print_exc()
                 self.errorcount += 1
                 self.add_error(mba, 1)

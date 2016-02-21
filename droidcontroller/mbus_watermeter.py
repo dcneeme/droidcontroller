@@ -19,7 +19,8 @@ class MbusWaterMeter(object): # FIXME averaging missing!
     def __init__(self, msgbus=None, svclist=[['XYW',1,1,'undefined']]): # svc, member, id, name
         self.msgbus = msgbus # all communication via msgbus, not to ac  directly!
         self.svclist = svclist # svc, member, id, name
-
+        self.xml = ''
+        self.dict = {}
         try:
             self.mbus = MBus(device="/dev/ttyUSB0") ##
             self.mbus.connect() ##
@@ -36,35 +37,41 @@ class MbusWaterMeter(object): # FIXME averaging missing!
             self.mbus.send_request_frame(254)
             reply = self.mbus.recv_frame()
             reply_data = self.mbus.frame_data_parse(reply)
-            xml_buff = self.mbus.frame_data_xml(reply_data)
-            print(xml_buff) ##
+            self.xml = self.mbus.frame_data_xml(reply_data)
+            print(self.xml) ##
         except:
             log.error('FAILED to get data from mbus')
             return 1
 
         try:
-            d = xmltodict.parse(xml_buff)
+            self.dict = xmltodict.parse(self.xml)
         except Exception as ex:
             print("parse error: %s" % ex)
             sys.exit()
-        return d
-
-    def parse(self, dict, debug = False):
+        
+    def parse(self, debug = False):
         found = 0
-        for x in dict['MBusData']['DataRecord']:
+        for x in self.dict['MBusData']['DataRecord']:
             if debug == True:
                 print(x)
             for svc in self.svclist:
-                if int(x['@id']) == svc[2]:
+                if int(x['@id']) == 4: # svc[2]:
                     vs = x['Value'] # , x['Unit']) ## key 'Unit' not found?
-                    log.info('found value with id '+str(svc[2])+': '+vs ) # str
-                    if self.msgbus:
-                        self.msgbus.publish(svc[0], {'values': [ int(vs) ], 'status': 0}) # msgbus.publish(val_reg, {'values': values, 'status': status})
-                    found += 1
+                    try:
+                        val= int(vs)
+                        #log.info('got value with id '+str(svc[2])+': '+val ) # str
+                        log.info('got value with id 4: '+ str(val) ) # str
+                        if self.msgbus:
+                            self.msgbus.publish(svc[0], {'values': [ val ], 'status': 0}) # msgbus.publish(val_reg, {'values': values, 'status': status})
+                        found += 1
+                    except:
+                        log.error('invalid Value data from id 4: '+vs)
+                        traceback.print_exc()
+                        
         if found > 0:
-            return 0
+            return val
         else:
-            return 1
+            return None
 
 
     # methods needed for async comm

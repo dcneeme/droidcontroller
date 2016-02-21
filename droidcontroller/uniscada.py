@@ -346,7 +346,7 @@ class UDPchannel():
             status = int(servicetuple[1])
             val_reg = str(servicetuple[2])
             value = str(servicetuple[3])
-            if value == '':
+            if value == '' and val_reg != '': # status only tuple is allowed
                 log.error('refused to save into buffer INVALID servicetuple '+str(servicetuple))
                 return 1
                 
