@@ -33,7 +33,8 @@ class Diff2Pwm(object):
         self.outMax = outMax
         self.ts_react = 0
         self.boost_time = 10 # s
-
+        self.fullvalue = 0
+        
         try:
             res = self.mb[self.mbi].write(self.mba, 150, value=period)
         except:
