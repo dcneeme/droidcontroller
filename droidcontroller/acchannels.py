@@ -80,7 +80,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
     def parse_udp(self,data_dict): # search for setup or set counter values
-        ''' Channels setup change based on message from monitoring server. Only accepts keys ending with W in data_dict '''
+        ''' Channels setup change based on message from monitoring server. Only accepts keys ending with V or W in data_dict '''
         cur = conn.cursor()
         setup_changed = 0 # flag general setup change, data to be dumped into sql file
         msg = ''
@@ -93,8 +93,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         log.debug('parsing for possible match key:value data ',data_dict) # debug
         for key in data_dict: # process per key:value
             found = 0
-            if key[-1] == 'W': # must end with W to be multivalue service containing setup values
-                valmembers=data_dict[key].split(' ') # convert value to member list
+            if key[-1] == 'W' or key[-1] == 'V': # must end with W or V to be a setup service
+                valmembers = data_dict[key].split(' ') # convert value to member list
                 log.debug('number of members for '+str(key)+' is '+str(len(valmembers)))
                 for valmember in range(len(valmembers)): # 0...N-1
                     Cmd = "select mba,regadd,val_reg,member,value,regtype,wcount,mbi,x2,y2,cfg from "+self.in_sql+" where val_reg='"+key+"' and member='"+str(valmember+1)+"'"
