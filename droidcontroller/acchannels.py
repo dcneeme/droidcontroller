@@ -45,9 +45,10 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         ''' Set the ai notification period s, executes sync if time from last read was earlier than period ago '''
         return self.sendperiod
 
-    def sqlread(self, table):
-        ''' Read the sql file into memory '''
-        s.sqlread(table) #
+    #def sqlread(self, table):  # recursion!!!
+    #    ''' Read the sql file into memory '''
+    #    #s.sqlread(table) #
+    #    self.sqlread(table) # for parent no instance needed!
 
     def Initialize(self): # before using this create s=SQLgeneral()
         ''' initialize delta t variables, create tables and modbus connection '''
@@ -173,7 +174,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         if setup_changed == 1:
             log.info('going to dump table '+self.in_sql)
             try:
-                s.dump_table(self.in_sql)
+                #s.dump_table(self.in_sql)
+                self.dump_table(self.in_sql) # no parent instance needed
 
             except:
                 log.warning('FAILED to dump table '+self.in_sql)
@@ -665,11 +667,13 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
     def set_aivalue(self, svc, member, value): # sets variables like setpoints or limits to be reported within services, based on service name and member number
         ''' Setting member value using sqlgeneral set_membervalue. adding sql table below for that '''
-        return s.set_membervalue(svc,member,value,self.in_sql,raw=False) # set value
+        #return s.set_membervalue(svc,member,value,self.in_sql,raw=False) # set value
+        return self.set_membervalue(svc, member, value, self.in_sql, raw=False) # set value
 
     def set_airaw(self, svc, member, value): # sets variables like setpoints or limits to be reported within services, based on service name and member number
         ''' Setting member raw value using sqlgeneral set_membervalue. adding sql table below for that '''
-        return s.set_membervalue(svc,member,value,self.in_sql,raw=True) # set raw, value will be calc by make_
+        #return s.set_membervalue(svc,member,value,self.in_sql,raw=True) # set raw, value will be calc by make_
+        return self.set_membervalue(svc, member, value, self.in_sql, raw=True) # set raw, value will be calc by make_
 
     def set_aovalue(self, value, mba, reg, mbi = 0):
         ''' Write value to follow into aochannels table.
@@ -904,7 +908,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                 else: # just power, not state
                                     raw = int(round(res[0],0)) # power in W, res[0] has 3 decimals!
                             else: # none if no increase detected
-                                log.info('calc result raw forced to None for cp['+str(self.cpi)+']: '+str(res)+', based on raw '+str(raw)) # a normal thing
+                                log.debug('calc result raw forced to None for cp['+str(self.cpi)+']: '+str(res)+', based on initial raw '+str(raw)) # a normal thing
+                                raw = None
+                                value = None
                                 
                         elif (cfg&2048): # 1wire filter. should have cfg bit 4096 as well!
                             if raw == 1360 or raw == 4096:
