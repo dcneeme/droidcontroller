@@ -783,7 +783,6 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         mstatus = 0
         cur = conn.cursor()
         lisa = ''
-        olisa = ''
         value = None
         hilim = None
         lolim = None
@@ -805,7 +804,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
         for srow in cur: ## go through service members
             log.debug(repr(srow))
-            repeat = False # earlier values will be sent with shifted time if True
+            #repeat = False # earlier values will be sent with shifted time if True
             mcount += 1 # member count
             mba = -1 #
             regadd = -1
@@ -904,7 +903,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                         log.info('state change in cp['+str(self.cpi)+']')
                                 else: # just power, not state
                                     raw = int(round(res[0],0)) # power in W, res[0] has 3 decimals!
-                            
+                            else: # none if no increase detected
+                                log.info('calc result raw forced to None for cp['+str(self.cpi)+']: '+str(res)+', based on raw '+str(raw)) # a normal thing
+                                
                         elif (cfg&2048): # 1wire filter. should have cfg bit 4096 as well!
                             if raw == 1360 or raw == 4096:
                                 log.warning('invalid raw value '+str(raw)+' for temp sensor in svc '+val_reg+'.'+str(member)+', replacing with None')
@@ -914,17 +915,17 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         ## SCALING #############
                         if raw != None:
                             if (cfg & 4096): # take sign into account
-                                if raw >= (2**(wcount*16-1)): # negative!
-                                    raw = raw-(2**(wcount*16))
+                                if raw >= (2 ** (wcount * 16 - 1)): # negative!
+                                    raw = raw - (2**(wcount * 16))
                                     log.debug('converted to negative: '+str(raw)) # debug
 
 
                             if x1 != x2 and y1 != y2: # seems like normal input data, also not state from power
-                                value = (raw-x1) * (y2-y1) / (x2-x1)
-                                value = int(round(y1+value)) # integer values to be reported only
+                                value = (raw - x1) * (y2 - y1) / (x2 - x1)
+                                value = int(round(y1 + value)) # integer values to be reported only
                             else:
                                 #log.debug('val_reg '+val_reg+' member '+str(member)+', raw '+str(raw)+' ai2scale conversion NOT DONE! using value = raw ='+str(raw))
-                                #log.warning('val_reg '+val_reg+' member '+str(member)+', raw '+str(raw)+' ai2scale conversion NOT DONE!')
+                                log.error('val_reg '+val_reg+' member '+str(member)+', raw '+str(raw)+' ai2scale conversion NOT DONE!')
                                 ##value = None # do not change previous data until stalled
                                 rowproblem = 1 # this service will not be used in notification
                                 ## binary services defined in aicochannels must have x1 x2 y1 y2! 0 1 0 1
@@ -937,7 +938,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
                             if (cfg & 256) and (abs(value - ovalue) > abs(value / 5.0)): # change more than 20% detected, use num w comma!
                                 log.debug('### value change (was '+str(ovalue)+', became '+str(value)+') for '+val_reg+'.'+str(member)+', need to send')
-                                repeat = True
+                                #repeat = True
                                 self.chg += 1
                                 
 
@@ -979,10 +980,10 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                 conn.execute(Cmd) # who commits? the calling method, read_all()!!!
                                 log.debug(Cmd) # status and value update based on raw
                             else:
-                                log.warning('val_reg '+val_reg+'.'+str(member)+' value '+str(value)+' out of allowed band from '+str(lolim)+' to ' +str(hilim))
-                                # but still updating status... to avois excessive status change related reporting with faulty limits
+                                log.warning('val_reg '+val_reg+'.'+str(member)+' value '+str(value)+' out of allowed band from '+str(lolim)+' to ' +str(hilim)+', raw '+str(raw))
+                                ## but still updating status... to avoid excessive status change related reporting with faulty limits ????
                                 Cmd="update "+self.in_sql+" set status='"+str(mstatus)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
-                                conn.execute(Cmd) # who commits? the calling method, read_all()!!!
+                                ##conn.execute(Cmd) # who commits? the calling method, read_all()!!!
 
                         else:
                             msg = 'skipped updating '+self.in_sql+' due to '+val_reg+' member '+str(member)+' value None! chk regadd '+str(regadd)
@@ -1005,14 +1006,12 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
             if lisa != '': # not the first member
                 lisa += ' ' # separator between member values
-                olisa += ' ' # old value to repeat
                 
             try: # what if None? exception?
                 if value != None:
                     lisa += str(int(round(value))) # adding member values into one string
                     values.append(int(round(value))) # for msgbus
-                    if ovalue != None:
-                        olisa += str(int(round(ovalue))) # adding member values into one string
+                    
                 else:
                     log.warning('invalid value None from regtype '+regtype+', reg '+val_reg+', member '+str(member))
             except:
@@ -1028,10 +1027,6 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
             rowproblemcount += rowproblem
 
-            chk = len(olisa.split(' '))
-            if chk != mcount: # member(s) missing!
-                log.error('invalid old sendtuple member count '+str(chk)+', should be '+str(mcount)+', skipping notifying svc '+val_reg)
-                rowproblemcount += 1
             chk = len(lisa.split(' '))
             if chk != mcount: # member(s) missing!
                 log.error('invalid new sendtuple member count '+str(chk)+', should be '+str(mcount)+', skipping notifying svc '+val_reg)
@@ -1039,11 +1034,6 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 
         # service members done, check if all of them valid to use in svc tuple
         if rowproblemcount == 0: # all members valid
-            if repeat: # > 20% change was detected from ovalue to value
-                sendtuple = [sta_reg, status, val_reg, olisa] # repeat the earlier service to buffer, with last status though
-                udp.send(sendtuple, timeadd = -self.readperiod) # send earlier too due to change since last reading
-                log.info('==repeating earlier sendtuple before new with shifted time, ovalue '+str(ovalue)+', value '+str(value)) ###
-            
             sendtuple = [sta_reg, status, val_reg, lisa] # sending service to buffer
             udp.send(sendtuple) # send end result here, possibly the old result was sent once again before 
             if self.msgbus != None:
@@ -1052,7 +1042,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     #log.debug('published to msgbus: '+str(val_reg)+' values '+str(values)+', status '+str(status)) ##
                 except:
                     traceback.print_exc()
-            #return sendtuple # for regular send or status check
+            
         else:
             log.warning(val_reg+' had '+str(rowproblemcount)+' problematic members')
             
