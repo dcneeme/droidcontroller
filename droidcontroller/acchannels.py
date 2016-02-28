@@ -1,7 +1,7 @@
 # This Python file uses the following encoding: utf-8
 
 from droidcontroller.sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
-s=SQLgeneral() # init sisse?
+s=SQLgeneral() # esialgu vaid selleparast, et main seest kasutatakse veel... asendada d. ja ac. -ga!
 from droidcontroller.counter2power import *  # Counter2Power() as cp handles power calculation based on pulse count increments
 
 import time
@@ -987,8 +987,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                 log.debug(Cmd) # status and value update based on raw
                             else:
                                 log.warning('val_reg '+val_reg+'.'+str(member)+' value '+str(value)+' out of allowed band from '+str(lolim)+' to ' +str(hilim)+', raw '+str(raw))
-                                ## but still updating status... to avoid excessive status change related reporting with faulty limits ????
-                                Cmd="update "+self.in_sql+" set status='"+str(mstatus)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
+                                raw = None  ## but still updating status... to avoid excessive status change related reporting with faulty limits ????
+                                value = None
+                                #Cmd="update "+self.in_sql+" set status='"+str(mstatus)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
                                 ##conn.execute(Cmd) # who commits? the calling method, read_all()!!!
 
                         else:
