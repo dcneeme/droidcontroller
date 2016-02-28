@@ -58,7 +58,7 @@ class Counter2Power(): # returns power in W (and more)
     def calc(self, count):  #  ts, count, ts_now = None):
         ''' Return power in W and state based on counter value increment, taking previous values into account '''
         ts = time.time() # current timestamp, calculate in real time only
-        chg=0 # change flag, 1 means on, -1 means off. 0 means no change.
+        chg = 0 # change flag, 1 means on, -1 means off. 0 means no change.
         
         if self.ts_last == 0: # first execution
             self.ts_last = ts # time of last change before the current one
@@ -103,7 +103,7 @@ class Counter2Power(): # returns power in W (and more)
                 self.count_last = count
                 self.ts_last = ts
                 log.debug(self.svc_name+' sure ON')
-                return self.power, self.state, chg, round(ts_inc,2), count_inc, 'sure ON'
+                return self.power, self.state, chg, round(ts_inc,2), count_inc, 'sure ON' ##
             else:
                 self.count_last = count
                 self.ts_last = ts
