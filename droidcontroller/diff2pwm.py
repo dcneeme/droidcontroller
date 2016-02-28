@@ -14,7 +14,8 @@ import sys, logging
 log = logging.getLogger(__name__)
 
 class Diff2Pwm(object):
-    ''' React on invalues difference using PID, write to pwm register. period register 150 (IT5888).  '''
+    ''' React on invalues difference using PID, write to pwm register. period register 150 (IT5888).
+    Oriented on kitchen ventilation. Boosts on switch on for a while. '''
 
     def __init__(self, mb, name='undefined', out_ch=[0,1,115], outMin=0, outMax=499, period=500, P=1, I=1, D=0, upspeed=None, dnspeed=None): # period ms
         ''' try to use the resact() input values pair for pwm on one output periodic channel.  '''
@@ -22,7 +23,7 @@ class Diff2Pwm(object):
         self.pwm = None
         self.mb = mb # CommModbus instance
         self.name = name
-        self.state = StateKeeper()
+        self.state = StateKeeper(name='vent_state')
         self.upspeed = upspeed
         self.dnspeed = dnspeed
         self.mbi = out_ch[0] # modbus channel, the same for input and output!
@@ -31,23 +32,24 @@ class Diff2Pwm(object):
         self.outMin = outMin
         self.outMax = outMax
         self.ts_react = 0
-        
+        self.boost_time = 10 # s
+
         try:
             res = self.mb[self.mbi].write(self.mba, 150, value=period)
         except:
             log.error('FAILED to write period into register 150 at mbi.mba '+str(self.mbi)+'.'+str(self.mba))
-            
+
         # setpoint = 0, P = 1.0, I = 0.01, D = 0.0, min = None, max = None, outmode = 'nolist', name='undefined', dead_time = 0, inv=False):
         self.pid = PID(name=name, P=P, I=I, D=D, min=self.outMin, max=self.outMax, outmode='list') # for fast pwm control. D mainly for change speed!
-            
-            
-    def react(self, invalues, outMin=None, delay=5): 
-        ''' no need to react too often ... keep 5 s delay '''
+
+
+    def react(self, invalues, outMin=None, delay=5):
+        ''' no need to react too often ... keep 5 s delay. returns self.pwm, [pidcomp], state '''
         ts = time.time()
         if ts < self.ts_react + 5:
             return None # not this time...
-            
-            
+
+        self.ts_react = ts
         if outMin != None:
             if outMin != self.outMin:
                 self.outMin = outMin
@@ -61,8 +63,8 @@ class Diff2Pwm(object):
             pass
         else:
             log.error('INVALID self.outMax in '+self.name+' react(): '+str(self.outMax))
-            
-        if len(invalues) == 2: # ok
+
+        if len(invalues) == 2: # setpoint, actual. add ventilation if setpoint below actual
             if self.outMin > 0 or (invalues[0] > invalues[1]):
                 self.state.up() # igal juhul lubatud
             self.pid.setSetpoint(invalues[0])
@@ -72,14 +74,14 @@ class Diff2Pwm(object):
             pidcomp = pidout[1:4]
             chgspeed = pidcomp[2] # p, i, d
             if self.upspeed != None and self.upspeed > 0:
-                if chgspeed > self.upspeed and outMin > 0: # error decreasing fast
+                if (chgspeed > self.upspeed and outMin > 0): # error decreasing fast
                     self.state.up()
                     pwm = self.outMax # used for kitchen ventilation
-                    log.warning('fast change up, state up, max pwm '+str(pwm)+', chgspeed '+str(chgspeed)+', upspeed '+str(self.upspeed))
+                    log.warning('fast change up, state up, pwm '+str(pwm)+', chgspeed '+str(chgspeed)+', upspeed '+str(self.upspeed))
             if self.dnspeed != None and self.dnspeed < 0:
                 if chgspeed < self.dnspeed and self.outMin == 0:
                     self.state.dn()
-                    log.warning('fast change down, state dn, chgspeed '+str(chgspeed)+', dnspeed '+str(self.dnspeed))
+                    log.warning('fast change down, state dn, pwm '+str(pwm)+', chgspeed '+str(chgspeed)+', dnspeed '+str(self.dnspeed))
             if pwm > self.outMax:
                 log.warning('fixing pid output for pwm '+str(pwm)+' to max '+str(self.outMax))
                 pwm = self.outMax
@@ -90,31 +92,41 @@ class Diff2Pwm(object):
                 self.pwm = pwm
             if pwm == 0:
                 self.state.dn()
-                
-            
+
+
             statetuple = self.state.get_state()
-            if statetuple[0] != 1: # not ON
-                pwm = 0 
+
+            if statetuple[0] == 1 and statetuple[1] < self.boost_time: # on for less than
+                pwm = self.outMax
+                log.warning('pwm temporarely boosted to '+str(self.outMax)+' due to state just turned ON')
+
+            if statetuple[0] == 0: # state off
+                pwm = 0
+
+
             res = self.output(pwm)
             if pwm != self.pwm:
                 self.pwm = pwm
                 log.info(self.name+' new pwm value '+str(pwm)+' sent, pidcomp '+str(pidcomp))
             return self.pwm, [pidcomp], statetuple[0] # pidcom is list
-            
-            
+
+
     def output(self, pwm):
         fullvalue = int(pwm + 0x8000 + 0x4000) # phase lock needed for periodic...
-        res = self.mb[self.mbi].write(self.mba, self.reg, value=fullvalue) # write to pwm register of it5888
-        if res == 0:
-            log.info('sent pwm value '+str(pwm)+', fullvalue '+str(fullvalue)+' to '+str(self.mbi)+'.'+str(self.mba)+'.'+str(self.reg))
-        else:
-            log.error('FAILURE to send pwm fullvalue '+str(fullvalue)+' to '+str(self.mbi)+'.'+str(self.mba)+'.'+str(self.reg))
-        return res
+        if fullvalue != self.fullvalue:
+            res = self.mb[self.mbi].write(self.mba, self.reg, value=fullvalue) # write to pwm register of it5888
+            if res == 0:
+                log.info('sent pwm value '+str(pwm)+', fullvalue '+str(fullvalue)+' to '+str(self.mbi)+'.'+str(self.mba)+'.'+str(self.reg))
+            else:
+                log.error('FAILURE to send pwm fullvalue '+str(fullvalue)+' to '+str(self.mbi)+'.'+str(self.mba)+'.'+str(self.reg))
+            return res
+        else: # no change needed to be sent (assuming there was no power break, regular testing?)
+            return 0
 
     def test(self, invalues = [0, 0]):
         self.pid.setSetpoint(invalues[0]+self.diff)
         self.pid.set_actual(invalues[1])
         value = int(self.pid.output())
         log.info('testing in '+str(invalues)+', pwm '+str(value))
-   
+
 
