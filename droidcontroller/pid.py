@@ -217,6 +217,7 @@ class PID:
         else:
             self.Ci = 0
         self.Cd = 0
+        self.out = None
         log.debug('pid: initialized')
 
 
@@ -345,11 +346,17 @@ class PID:
 
         log.debug(self.name+' sp '+str(round(self.setPoint))+', actual '+str(actual)+', out'+str(round(out))+', p '+str(round(self.Cp))+', i '+str(round(self.Ki * self.Ci))+', d '+str(round(self.Kd * self.Cd))+', onlimit'+str(self.onLimit))
 
-        self.out = out
-        if self.outmode == 'list':
-            return round(out), round(self.Cp), round(self.Ki * self.Ci), round(self.Kd * self.Cd), round(self.error), self.onLimit, self.extnoint
+        if self.out != None:
+            pout = round(out)
         else:
-            return out # summary value only
+            pout = None
+        
+        self.out = out
+        
+        if self.outmode == 'list':
+            return pout, round(self.Cp), round(self.Ki * self.Ci), round(self.Kd * self.Cd), round(self.error), self.onLimit, self.extnoint
+        else:
+            return pout # summary value only
 
 
 class ThreeStep:
