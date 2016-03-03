@@ -38,7 +38,9 @@ class FloorTemperature(object): # one instance per floor loop. no d or ac needed
         self.set_svc = set_svc if 'list' in str(type(set_svc)) else None # ['svc', member]
         #self.actual = None
         #self.setpoint = None
-        self.pid = PID(P = 0.1, I = 0.01, D = 0, min = lolim, max = hilim, outmode = 'nolist', name = name, dead_time = 0, inv=self.inv) # no inversion, hi pwm = more heating
+        self.pid = PID(P = 0.05, I = 0.002, D = 0, min = lolim, max = hilim, outmode = 'nolist', name = name, dead_time = 0, inv=self.inv) 
+        # no inversion, hi pwm = more heating
+        # 0.1 ja 0.01 oli vonkuv, periood 1,5 oopaeva... 
         self.out = 0 # do
 
 
