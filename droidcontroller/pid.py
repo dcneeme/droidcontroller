@@ -218,7 +218,7 @@ class PID:
             self.Ci = 0
         self.Cd = 0
         self.out = None
-        log.debug('pid: initialized')
+        log.info(self.name+' pid: initialized')
 
 
     def getLimit(self, onlimit=None):
@@ -350,7 +350,8 @@ class PID:
             pout = round(out)
         else:
             pout = None
-        
+            log.warning('pid out None, possibly due to init')
+            
         self.out = out
         
         if self.outmode == 'list':
