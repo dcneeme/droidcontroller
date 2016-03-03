@@ -66,51 +66,68 @@ class Diff2Pwm(object):
             log.error('INVALID self.outMax in '+self.name+' react(): '+str(self.outMax))
 
         if len(invalues) == 2: # setpoint, actual. add ventilation if setpoint below actual
-            if self.outMin > 0 or (invalues[0] > invalues[1]):
+            #if self.outMin > 0 or (invalues[0] > invalues[1]):
+            if self.outMin > 0 and (invalues[0] > invalues[1]): # avoid restart
                 self.state.up() # igal juhul lubatud
             self.pid.setSetpoint(invalues[0])
             self.pid.set_actual(invalues[1])
             pidout = self.pid.output()
-            pwm = int(pidout[0])
-            pidcomp = pidout[1:4]
-            chgspeed = pidcomp[2] # p, i, d
-            if self.upspeed != None and self.upspeed > 0:
-                if (chgspeed > self.upspeed and outMin > 0): # error decreasing fast
-                    self.state.up()
-                    pwm = self.outMax # used for kitchen ventilation
-                    log.warning('fast change up, state up, pwm '+str(pwm)+', chgspeed '+str(chgspeed)+', upspeed '+str(self.upspeed))
-            if self.dnspeed != None and self.dnspeed < 0:
-                if chgspeed < self.dnspeed and self.outMin == 0:
-                    self.state.dn()
-                    log.warning('fast change down, state dn, pwm '+str(pwm)+', chgspeed '+str(chgspeed)+', dnspeed '+str(self.dnspeed))
-            if pwm > self.outMax:
-                log.warning('fixing pid output for pwm '+str(pwm)+' to max '+str(self.outMax))
-                pwm = self.outMax
-            if pwm < self.outMin:
-                log.warning('fixing pid output for pwm '+str(pwm)+' to min '+str(self.outMin))
-                pwm = self.outMin
-            if pwm != self.pwm:
-                self.pwm = pwm
-            if pwm == 0:
-                self.state.dn()
-
-
             statetuple = self.state.get_state()
+            
+            if pidout[0] != None:
+                pwm = int(pidout[0]) ## pwm value from pid
+                pidcomp = pidout[1:4]
+                chgspeed = pidcomp[2] # p, i, d
+                if self.upspeed != None and statetuple[0] == 0: # not yet started but could perhaps
+                    #if (chgspeed > self.upspeed and self.outMin > 0): # error decreasing fast
+                    #if (chgspeed > self.upspeed and pwm > self.outMin): # lylitame varem sisse kiire temp tousu korral
+                    if chgspeed > self.upspeed: # lylitame sisse kiire temp tousu korral
+                        self.state.up()
+                        pwm = self.outMax # used for kitchen ventilation
+                        log.warning(self.name+' state up due to speed, pwm '+str(pwm)+', chgspeed '+str(chgspeed)+', upspeed '+str(self.upspeed))
+                
+                if self.dnspeed != None and statetuple[0] == 1:
+                    #if chgspeed < self.dnspeed and self.outMin == 0:
+                    if chgspeed < self.dnspeed and self.outMin < 250:
+                        self.state.dn()
+                        log.warning(self.name+' state down due to speed, pwm '+str(pwm)+', chgspeed '+str(chgspeed)+', dnspeed '+str(self.dnspeed))
+                
+                if pwm > self.outMax:
+                    log.warning('fixing pid output for pwm '+str(pwm)+' to max '+str(self.outMax))
+                    pwm = self.outMax
+                if pwm < self.outMin:
+                    log.warning('fixing pid output for pwm '+str(pwm)+' to min '+str(self.outMin))
+                    pwm = self.outMin
+                
+                if pwm == 0:
+                    self.state.dn()
+                    log.warning(self.name+' state down due to pwm value '+str(pwm))
 
-            if statetuple[0] == 1 and statetuple[1] < self.boost_time: # on for less than
-                pwm = self.outMax
-                log.warning('pwm temporarely boosted to '+str(self.outMax)+' due to state just turned ON')
 
-            if statetuple[0] == 0: # state off
-                pwm = 0
+                statetuple = self.state.get_state() # once again
 
+                if statetuple[0] == 1 and statetuple[1] < self.boost_time: # on for less than
+                    pwm = self.outMax
+                    log.warning('pwm temporarely boosted to '+str(self.outMax)+' due to state just turned ON')
 
-            res = self.output(pwm)
+                if statetuple[0] == 0: # state off
+                    pwm = 0
+
+                res = self.output(pwm) # send to output
+            else:
+                pwm = None # due to pid output None 
+                
             if pwm != self.pwm:
+                log.info(self.name+' new pwm value '+str(pwm)+' replacing the old '+str(self.pwm))
                 self.pwm = pwm
-                log.info(self.name+' new pwm value '+str(pwm)+' sent, pidcomp '+str(pidcomp))
-            return self.pwm, [pidcomp], statetuple[0] # pidcom is list
-
+                
+            
+            if self.pwm != None:
+                return self.pwm, [pidcomp], statetuple[0] # pidcom is list
+            else:
+                log.warning('pwm None due to some reason. invalues '+str(invalues)+', pidout '+str(pidout))
+                return None
+                
 
     def output(self, pwm):
         fullvalue = int(pwm + 0x8000 + 0x4000) # phase lock needed for periodic...
