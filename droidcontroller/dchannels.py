@@ -54,9 +54,9 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         self.sendperiod = invar
 
 
-    def sqlread(self,table):
-        s.sqlread(table) # restore dichannels from file
-
+    #def sqlread(self,table):
+    #    s.sqlread(table) # restore dichannels from file
+    # available from parent
 
     def Initialize(self): # before using this create s=SQLgeneral()
         ''' initialize delta t variables, create tables and modbus connection '''
@@ -612,7 +612,8 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                             word = mb[mbi].read(mba, regadd, count = 1, type = 'h')[0]  # output state before change
                             for bit in mbi_dict[mbi][mba][regadd]: # chk all output registers defined in dochannels table
                                 bitvalue = mbi_dict[mbi][mba][regadd][bit]
-                                word = s.bit_replace(word,bit,bitvalue) # change the necessary bit in the word directly!
+                                #word = s.bit_replace(word,bit,bitvalue) # change the necessary bit in the word directly!
+                                word = self.bit_replace(word,bit,bitvalue) # from the parent
 
                             respcode = mb[mbi].write(mba, regadd, value=word)
                             if respcode == 0:
@@ -699,7 +700,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 #if setup_changed == 1: # no need to dump di, too much dumping. ask di states after reboot, if regtype == 's!'
                 #    print('going to dump table',self.in_sql)
                 #    try:
-                #        s.dump_table(self.in_sql)
+                #        self.dump_table(self.in_sql)
                 #    except:
                 #        print('FAILED to dump table',self.in_sql)
                  #       traceback.print_exc() # debug
@@ -715,12 +716,14 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
     def set_divalue(self,svc,member,value): # sets binary variables within services for remote control, based on service name and member number
         ''' Setting member value using sqlgeneral set_membervalue. adding sql table below for that '''
-        return s.set_membervalue(svc,member,value,self.in_sql)
+        #return s.set_membervalue(svc,member,value,self.in_sql)
+        return self.set_membervalue(svc,member,value,self.in_sql) # from parent
 
     def set_dovalue(self,svc,member,value): # sets binary variables within services for remote control, based on service name and member number
         ''' Setting member value using sqlgeneral set_membervalue. adding sql table below for that '''
         log.info('writing output bit for '+svc+'.'+str(member)+' to become '+str(value))
-        return s.setby_dimember_do(svc, member, value) # s.set_membervalue(svc,member,value,self.out_sql)
+        #return s.setby_dimember_do(svc, member, value) # s.set_membervalue(svc,member,value,self.out_sql)
+        return self.setby_dimember_do(svc, member, value) # s.set_membervalue(svc,member,value,self.out_sql)
 
     def set_doword(self,mba,regadd,value,mbi=0): # sets holding register without services involvment
         ''' Setting holding register (like pwm channel for pulse or pwm) '''
