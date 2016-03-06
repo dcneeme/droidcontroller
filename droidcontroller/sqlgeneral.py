@@ -42,13 +42,13 @@ except:
     # several connections may be needed, tuple of modbus connections! also direct rtu, rtu via tcp-serial or tcp-modbustcp
     for file in ['devices.sql','setup.sql']: # channel tables opened by dchannels or acchannels
         sql = open(file).read() # (num integer,rtuaddr integer,tcpaddr)
-        log.debug('reading file ' + file)
+        log.info('reading file ' + file)
         try:
             conn.executescript(sql) # read table into database
             conn.commit()
             log.info('created table from file ' + file)
         except:
-            log.warning('creating table from file ' + file + ' FAILED!')
+            log.error('creating table from file ' + file + ' FAILED!')
             traceback.print_exc()
 
     mb = [] # modbus comm instance
@@ -486,7 +486,7 @@ class SQLgeneral(UDPchannel): # parent class for ACchannels, Dchannels
             
 
 
-    def setbit_do(self, bit, value, mba, regadd, mbi=0):  # FIXME - ei toimi!! kasuta setby_dimember_do(svc, member, value)
+    def setbit_do(self, bit, value, mba, regadd, mbi=0):  ## no commit here, does not work alone! use via setby_dimember_do()!
         # parameter order should be changed!!! to mbi, mba, regadd, bit. chk tartu, starman!
         '''Sets the output channel by the physical addresses (mbi,mba,regadd,bit) '''
         ts = int(time.time())
@@ -537,8 +537,7 @@ class SQLgeneral(UDPchannel): # parent class for ACchannels, Dchannels
 
     def setby_dimember_do(self, svc, member, value): # to set an output channel in dochannels by the DI service name and member (defined in dichannels)
         '''Sets  output channel by the service name and member using service name defined for this output in dichannels table '''
-        #(mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,comment,type integer)
-        #log.info('setby_dimember_do() start w params '+str((svc, member, value))) ###
+        ##make it complain if dochannels misconfigured! or better test it in the beginning once...
         if value == None or value > 1 or value < 0:
             log.warning('INVALID value for setby_dimember_do(): '+str(value))
             return 2

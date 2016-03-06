@@ -257,7 +257,7 @@ class UDPchannel():
             self.conn.commit()
             self.conn.executescript(sql) # read the existing table into database
             self.conn.commit()
-            msg = 'successfully recreated table '+table
+            msg = 'successfully recreated table '+table+' based on '+filename
             log.info(msg)
             return 0
 

@@ -665,6 +665,31 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             return 1
 
 
+    def set_airaws(self, svc, values = []): # member count must match the svc member count! setting raw calculates everything in svc
+        ''' Returns al list of all member values. Returns [] if nothing found. Stalled values are replaced with None. '''
+        if isinstance(svc, str):
+            pass
+        else:
+            log.warning('servicename '+str(svc)+' NOT str!') # ?
+            return 2
+
+        Cmd = "BEGIN IMMEDIATE TRANSACTION" # conn3
+        conn.execute(Cmd)
+        try:
+            for i in range(len(values)):
+                #Cmd = "update "+self.in_sql+" set value='"+str(values[i])+"', ts='"+str(self.ts)+"' where val_reg='"+svc+"' and member = '"+str(i+1)+"'"
+                Cmd = "update "+self.in_sql+" set raw='"+str(int(values[i]))+"', ts='"+str(int(self.ts))+"' where val_reg='"+svc+"' and member = '"+str(i+1)+"'"
+                log.debug(Cmd) ##
+                conn.execute(Cmd)
+            conn.commit()
+            log.info('aivalues update done for '+svc+' with '+str(values))
+            return 0
+        except:
+            log.warning('FAILED to update svc '+svc+' with values '+str(values))
+            traceback.print_exc()
+            return 1
+
+            
     def set_aivalue(self, svc, member, value): # sets variables like setpoints or limits to be reported within services, based on service name and member number
         ''' Setting member value using sqlgeneral set_membervalue. adding sql table below for that '''
         #return s.set_membervalue(svc,member,value,self.in_sql,raw=False) # set value
