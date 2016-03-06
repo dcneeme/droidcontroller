@@ -1,4 +1,6 @@
 import os, traceback, sqlite3, time, subprocess
+## the full day events must be done in hours in order to end properly and not to mess up the following as well!!!
+## the event created this way will be shown as full day in calendar, but with time 00:00 and now tick in full day field.
 
 import requests # for sync usage mode
 
@@ -39,7 +41,7 @@ except:
 
     self.gcal_scheduler = tornado.ioloop.PeriodicCallback(self.gcal.run, 30000, io_loop = self.loop) # every 30 minutes (3 for tst) # using future
     self.gcal_scheduler.start()
-    
+
 '''
 
 class Gcal(object):
@@ -57,24 +59,14 @@ class Gcal(object):
         self.cur = self.conn.cursor()
         self.table = table
 
-        if self.sqlread(self.table) == 0: # dump read ok
-            log.info('reusing existing calendar file')
-        else: # create new table
-            Cmd = 'drop table if exists '+self.table
-            self.conn.execute(Cmd) # drop the table if it exists
-            Cmd = "CREATE TABLE calendar(title,timestamp,value);"
-            self.conn.execute(Cmd)
-            Cmd = "CREATE INDEX ts_calendar on 'calendar'(timestamp);"
-            self.conn.execute(Cmd)
-            self.conn.commit()
-            log.info('created new calendar table')
+        self.sqlread()
         log.info('gcal instance created')
 
 
-    def sqlread(self, table): # drops table and reads from file <table>.sql that must exist
-        ''' restore buffer from dump. basically the same as in sqlgeneral.py '''
+    def sqlread(self): # drops table and reads from file <table>.sql that must exist
+        ''' restore table from sql dump. basically the same as in sqlgeneral.py  but also makes calendar if missing '''
         sql = ''
-        filename=table+'.sql' # the file to read from
+        filename = self.table+'.sql' # the file to read from
         try:
             if os.path.getsize(filename) > 50:
                 msg = 'found '+filename
@@ -83,20 +75,20 @@ class Gcal(object):
                 msg = filename+' corrupt or empty!'
                 log.info(msg)
                 time.sleep(1)
-                return 1
+                return self.makecalendar() # dumps also
+
         except:
             msg = filename+' missing!'
             log.warning(msg)
-            time.sleep(1)
-            return 1
+            return self.makecalendar() # dumps the new table also
 
-        Cmd = 'drop table if exists '+table
+        Cmd = 'drop table if exists '+self.table
         try:
             self.conn.execute(Cmd) # drop the table if it exists
             self.conn.commit()
             self.conn.executescript(sql) # read the existing table into database
             self.conn.commit()
-            msg = 'successfully recreated table '+table
+            msg = 'successfully recreated table '+self.table+' based on '+filename
             log.info(msg)
             return 0
 
@@ -106,6 +98,58 @@ class Gcal(object):
             traceback.print_exc()
             time.sleep(1)
             return 1
+
+
+    def makecalendar(self):
+        '''recreates without a need for sql file '''
+        # some problem with reading. what if corrupt?
+        log.warning('deleting and creating a new calendar table '+self.table)
+        Cmd = 'drop table if exists '+self.table
+        try:
+            self.conn.execute(Cmd) # drop the table if it exists
+            Cmd = "CREATE TABLE "+self.table+"(title,timestamp,value);"
+            self.conn.execute(Cmd)
+            Cmd = "CREATE INDEX title_ts_calendar on '"+self.table+"'(title,timestamp);"
+            self.conn.execute(Cmd)
+            self.conn.commit()
+            log.info('created new calendar table '+self.table)
+            self.dump() # to create the missing sql file
+            return 0
+
+        except:
+            log.error('calendar table '+self.table+' creation FAILED!')
+            traceback.print_exc()
+            time.sleep(1)
+            return 1
+
+    def dump(self): # dump sql table to file
+        ''' Writes the table into a SQL-file to keep the existing scheduling data '''
+        try:
+            with open(self.table+'.sql', 'w') as f:
+                for line in self.conn.iterdump(): # see dumbib koik kokku!
+                    if self.table in line: # needed for one table only! without that dumps all!
+                        f.write('%s\n' % line)
+            subprocess.call('sync')
+            time.sleep(0.1)
+            log.info(self.table+' dump into '+self.table+'.sql done')
+            return 0
+        except:
+            msg = 'FAILURE dumping '+self.table+'!'
+            log.warning(msg)
+            traceback.print_exc()
+            time.sleep(1)
+            return 1
+
+
+    def print(self):
+        ''' reads and returns the whole content of the calendar table '''
+        output = []
+        Cmd ="SELECT * from "+self.table
+        self.cur.execute(Cmd)
+        self.conn.commit()
+        for row in self.cur:
+            output.append(row)
+        return output
 
 
     def send_async(self, cal_id=None): # query to SUPPORTHOST, returning all events. cal_id may be different from host_id (several cals)...
@@ -166,7 +210,7 @@ class Gcal(object):
         #self.parse(result)
         self.process_response(result)
 
-    def process_response(self, response): # FIXME testi kas  toimib nii ylakomade kui jutumarkidega! oige json jutumarkidega!
+    def process_response(self, response):
         ''' Calendar content into sql table, use inside sync() or independently for async mode '''
         try:
             if '[]' in str(response):
@@ -175,7 +219,10 @@ class Gcal(object):
             else:
                 log.info('got calendar content: '+ str(response))
                 events = eval(response) # string to list
-
+                titles = []
+                for i in range(len(events)):
+                    titles.append(events[i]['title'])
+                titles = list(set(titles))
         except:
             msg = 'getting calendar events failed for host_id '+self.host_id
             log.warning(msg)
@@ -186,8 +233,14 @@ class Gcal(object):
         Cmd = "BEGIN IMMEDIATE TRANSACTION"
         try:
             self.conn.execute(Cmd)
-            Cmd = "delete from "+self.table
+            Cmd = "delete from "+self.table+" where timestamp+0 < "+str(int(time.time()))+"-180000"  # over 48h of age to be deleted
             self.conn.execute(Cmd)
+            for i in range(len(titles)):
+                Cmd = "delete from "+self.table+" where title='"+titles[i]+"'"
+                # deleting selectively using title enables adding rows from various sources! incl energy prices
+                log.info(Cmd)
+                self.conn.execute(Cmd)
+
             for event in events:
                 #print('event',event) # debug
                 columns = str(list(event.keys())).replace('[','(').replace(']',')')
@@ -205,25 +258,6 @@ class Gcal(object):
             log.warning(msg)
             traceback.print_exc() # debug
             return 1 # kui insert ei onnestu, siis ka delete ei toimu
-
-
-    def dump(self): # sql table to file
-        ''' Writes the table into a SQL-file to keep the existing scheduling data '''
-        try:
-            with open(self.table+'.sql', 'w') as f:
-                for line in self.conn.iterdump(): # see dumbib koik kokku!
-                    if self.table in line: # needed for one table only! without that dumps all!
-                        f.write('%s\n' % line)
-            subprocess.call('sync')
-            time.sleep(0.1)
-            log.info(self.table+' dump into '+self.table+'.sql done')
-            return 0
-        except:
-            msg = 'FAILURE dumping '+self.table+'!'
-            log.warning(msg)
-            traceback.print_exc()
-            time.sleep(1)
-            return 1
 
 
     def check(self, title): # set a new setpoint if found in table calendar (sharing database connection with setup)
@@ -251,3 +285,10 @@ class Gcal(object):
             traceback.print_exc()
             return None
 
+    def get_min(self, title, ts_until): # max 05:00, stardi odavaimal tunnil
+        '''select ts,min(value) from changes where mac='el_energy_EE' and ts+0 < 1457226000; '''
+        pass
+
+    def get_above(self, threshold=0): # keela liiga kallis hinnaga
+        '''select ts,value from changes where mac='el_energy_EE' and value < threshold; '''
+        pass
