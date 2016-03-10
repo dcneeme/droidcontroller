@@ -793,7 +793,24 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         conn.commit()
         return values
 
-
+ 
+    def do_svc_or(self, svc): #
+        '''  set output by svc members other than [0] (this first member is reserved for the do channel!) '''
+        members = self.get_divalues(svc)
+        dovalue = 0 
+        try:
+            for i in range(len(members)):
+                if i > 0: # not for the first member
+                    dovalue = (dovalue | members[i])
+            if members[0] != dovalue:
+                self.set_dovalue(svc, 1, dovalue) # svc, member, value
+            return 0
+        except:
+            traceback.print_exc()
+            return 1
+ 
+ 
+ 
     def doall(self): # do this regularly
         ''' Does everything on time if executed regularly '''
         res = [2, 2, 2] # returncodes list
