@@ -294,11 +294,11 @@ class Gcal(object):
             Cmd="select timestamp,min(value) from "+self.table+" where title='"+title+"'"
         else:
             Cmd="select timestamp,min(value) from "+self.table+" where title='"+title+"' and timestamp+0 < "+str(ts_max)
-        log.info(Cmd)
+        #log.info(Cmd)
         self.cur.execute(Cmd)
         self.conn.commit()
         for row in self.cur:
-            log.info(str(repr(row)))
+            #log.info(str(repr(row)))
             ts = int(row[0])
             value = int(row[1])
             found = 1
@@ -326,7 +326,7 @@ class Gcal(object):
 
     def set_untilmin(self, title_set, title_ref='el_energy_EE', maxhour=5, maxminute=0):
         ''' sets event from now until now+len '''
-        ts_max = self.next_hourmin2sec(maxhour, maxminute)
+        ts_max = self.next_time2sec(maxhour, maxminute)
         ts_until = self.get_min(title='el_energy_EE', ts_max=ts_max)
         if ts_until != None: # minimum or ref value not found
             log.error('minimum or ref value for calendar pulse setting NOT found')
@@ -335,10 +335,10 @@ class Gcal(object):
         Cmd = "BEGIN IMMEDIATE TRANSACTION"
         try:
             self.conn.execute(Cmd)
-            Cmd = "insert into calendar(title,timestamp, value) values("+title+","+str(tsnow)+",1)"
+            Cmd = "insert into calendar(title,timestamp, value) values('"+title_set+"','"+str(tsnow)+"',1)"
             log.debug(Cmd) # debug
             self.conn.execute(Cmd) # pulse start
-            Cmd = "insert into calendar(title,timestamp, value) values("+title+","+str(ts_until)+",0)"
+            Cmd = "insert into calendar(title,timestamp, value) values('"+title_set+"','"+str(ts_until)+"',0)"
             log.debug(Cmd) # debug
             self.conn.execute(Cmd) # pulse end
             self.conn.commit()
