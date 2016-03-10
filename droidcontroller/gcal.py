@@ -1,4 +1,4 @@
-import os, traceback, sqlite3, time, subprocess
+import os, traceback, sqlite3, time, datetime, subprocess
 ## the full day events must be done in hours in order to end properly and not to mess up the following as well!!!
 ## the event created this way will be shown as full day in calendar, but with time 00:00 and now tick in full day field.
 
@@ -47,17 +47,14 @@ except:
 class Gcal(object):
     ''' Class containing methods to read events from monitoring server handing access to google calendar '''
 
-    def __init__(self, host_id, days=3, table='calendar', user='barix', password='controller'):
+    def __init__(self, host_id, days=3, table='calendar', auth='YmFyaXg6Y29udHJvbGxlcg=='): # barix:controller
         ''' Calendar data from gcal, processed to simpler wo overlaps by itvilla.ee    '''
         self.host_id = host_id
-        #self.asyncenable = asyncenable
-        self.user = user
-        self.password = password
-        #self.url =
         self.days = days
         self.conn = sqlite3.connect(':memory:')
         self.cur = self.conn.cursor()
         self.table = table
+        self.auth = auth  # Basic base64
 
         self.sqlread()
         log.info('gcal instance created')
@@ -141,24 +138,27 @@ class Gcal(object):
             return 1
 
 
-    def print(self):
+    def calprint(self):
         ''' reads and returns the whole content of the calendar table '''
         output = []
         Cmd ="SELECT * from "+self.table
         self.cur.execute(Cmd)
         self.conn.commit()
         for row in self.cur:
-            output.append(row)
-        return output
+            print(row, time.asctime(time.localtime(int(row[1]))))
+            #output.append(row)
+        #return output
 
 
-    def send_async(self, cal_id=None): # query to SUPPORTHOST, returning all events. cal_id may be different from host_id (several cals)...
+    def send_async(self, cal_id=''): # query to SUPPORTHOST, returning all events. cal_id may be different from host_id (several cals)...
         ''' the request will be in a separate thread! '''
         # example:   http://www.itvilla.ee/cgi-bin/gcal.cgi?mac=000101000001&days=10
-        if not cal_id:
+        if not 'str' in str(type(cal_id)) or len(cal_id) == 0:
             cal_id = self.host_id
+            log.warning('replaced cal_id with host_id '+self.host_id)
+
         req = 'http://www.itvilla.ee/cgi-bin/gcal.cgi?mac='+cal_id+'&days='+str(self.days)+'&format=json'
-        headers = {'Authorization': 'Basic YmFyaXg6Y29udHJvbGxlcg=='} # Base64$="YmFyaXg6Y29udHJvbGxlcg==" ' barix:controller
+        headers = {'Authorization': 'Basic '+self.auth} #
         msg = 'starting gcal async query '+req
         log.info(msg) # debug
         # in this method wait until response or timeout
@@ -173,13 +173,15 @@ class Gcal(object):
             #return 1 # kui ei saa gcal yhendust, siis lopetab ja vana ei havita!
 
 
-    def sync(self, cal_id=None): # query to SUPPORTHOST, returning all events. cal_id may be different from host_id (several cals)...
+    def sync(self, cal_id='', auth=''): # query to SUPPORTHOST, returning all events. cal_id may be different from host_id (several cals)...
         ''' the request will be in a separate thread! '''
         # example:   http://www.itvilla.ee/cgi-bin/gcal.cgi?mac=000101000001&days=10
-        if not cal_id:
+        if not 'str' in str(type(cal_id)) or len(cal_id) == 0:
             cal_id = self.host_id
+            log.warning('replaced cal_id with host_id '+self.host_id)
+
         req = 'http://www.itvilla.ee/cgi-bin/gcal.cgi?mac='+cal_id+'&days='+str(self.days)+'&format=json'
-        headers = {'Authorization': 'Basic YmFyaXg6Y29udHJvbGxlcg=='} # Base64$="YmFyaXg6Y29udHJvbGxlcg==" ' barix:controller
+        headers = {'Authorization': 'Basic '+self.auth}
         msg = 'starting gcal sync query '+req
         log.info(msg) # debug
         # in this method wait until response or timeout
@@ -285,10 +287,84 @@ class Gcal(object):
             traceback.print_exc()
             return None
 
-    def get_min(self, title, ts_until): # max 05:00, stardi odavaimal tunnil
-        '''select ts,min(value) from changes where mac='el_energy_EE' and ts+0 < 1457226000; '''
+    def get_min(self, title='el_energy_EE', ts_until=0): # ts_until 0 means until the values for title end
+        ''' select ts,min(value) from changes where mac='el_energy_EE' and ts+0 < 1457226000; '''
+        found = 0
+        if ts_until == 0:
+            Cmd="select timestamp,min(value) from "+self.table+" where title='"+title+"'"
+        else:
+            Cmd="select timestamp,min(value) from "+self.table+" where title='"+title+"' and timestamp+0 < "+str(ts_until)
+        log.info(Cmd)
+        self.cur.execute(Cmd)
+        self.conn.commit()
+        for row in self.cur:
+            log.info(str(repr(row)))
+            ts = int(row[0])
+            value = int(row[1])
+            found = 1
+
+        if found == 1:
+            return ts, value # timestamp for minvalue, minvalue
+        else:
+            log.warning('INVALID parameters or NO EVENTS found for '+title)
+            return None
+
+    def get_above(self, threshold, ts_until=0): # keela liiga kallis hinnaga
+        ''' select ts,value from changes where mac='el_energy_EE' and value < threshold; '''
         pass
 
-    def get_above(self, threshold=0): # keela liiga kallis hinnaga
-        '''select ts,value from changes where mac='el_energy_EE' and value < threshold; '''
+    def get_below(self, threshold, ts_until=0): # keela liiga kallis hinnaga
+        ''' select ts,value from changes where mac='el_energy_EE' and value < threshold; '''
         pass
+
+    def next_hourmin2sec(hour, minute=0):
+        ''' convert the next occurence of localtime hour,min into sec '''
+        # time.asctime(time.localtime(int(row[1]))))
+        tsnow = int(time.time())
+        d = time.localtime(tsnow) # y, m, d, h, min, sec, wd, yd, isdst
+        if d[3] >= hour and d[4] > minute: # tomorrow
+            ts24 = tsnow + 24 * 3600 # VAJA LIITA 24H JA VAADATA MIS KUUPAEV (DAY) TULEB!
+            d = time.localtime(ts24) # y, m, d, h, min, sec ... for tomorrow
+        t = datetime.datetime(d[0], d[1], d[2], hour, minute) # replace hour, min
+        sec = time.mktime(t.timetuple()) # get the seconds
+        print('next hour, min ', hour, minute, 'at', t)
+        return sec
+
+    def set_cal_untilmin(self, title_set, title_ref='el_energy_EE', minhour=0, maxhour=5):
+        ''' sets event from now until now+len '''
+        Cmd = "BEGIN IMMEDIATE TRANSACTION"
+        self.conn.execute(Cmd)
+        tsnow = int(time.time())
+        d = time.localtime(tsnow) # y, m, d, h, min, sec, wd, yd, isdst
+        humtime = time.asctime(time.localtime(int(row[1])))) # ends with 05:00
+        t = datetime.datetime(2011, 10, 21, 0, 0)
+        time.mktime(t.timetuple())
+        #max_ts =
+        ts_until = self.get_min(title='el_energy_EE', ts_until=0)[0] # let it end one second before
+        try:
+            columns = str(list(event.keys())).replace('[','(').replace(']',')')
+            values = str(list(event.values())).replace('[','(').replace(']',')')
+            Cmd = "insert into calendar"+columns+" values"+values
+            log.debug(Cmd) # debug
+            self.conn.execute(Cmd)
+            self.conn.commit()
+            self.dump() # to file
+            msg = 'calendar table '+self.table+' updated and dumped'
+            log.info(msg)
+            return 0
+        except:
+            msg = 'adding pulse to calendar table '+self.table+' FAILED!'
+            log.warning(msg)
+            traceback.print_exc() # debug
+            return 1 # kui insert ei onnestu, siis ka delete ei toimu
+
+
+    def set_cal_above(self, title_set, title_ref='el_energy_EE', threshold=1000):
+        ''' sets event from now until now+len '''
+
+        return 0
+
+    def set_cal_below(self, title_set, title_ref='el_energy_EE', threshold=1000):
+        ''' sets cal events for value below threshold, until the value is known '''
+
+        return 0
