@@ -287,13 +287,13 @@ class Gcal(object):
             traceback.print_exc()
             return None
 
-    def get_min(self, title='el_energy_EE', ts_until=0): # ts_until 0 means until the values for title end
+    def get_min(self, title='el_energy_EE', ts_max=0): # ts_until 0 means until the values for title end
         ''' select ts,min(value) from changes where mac='el_energy_EE' and ts+0 < 1457226000; '''
         found = 0
-        if ts_until == 0:
+        if ts_max == 0:
             Cmd="select timestamp,min(value) from "+self.table+" where title='"+title+"'"
         else:
-            Cmd="select timestamp,min(value) from "+self.table+" where title='"+title+"' and timestamp+0 < "+str(ts_until)
+            Cmd="select timestamp,min(value) from "+self.table+" where title='"+title+"' and timestamp+0 < "+str(ts_max)
         log.info(Cmd)
         self.cur.execute(Cmd)
         self.conn.commit()
@@ -317,7 +317,7 @@ class Gcal(object):
         ''' select ts,value from changes where mac='el_energy_EE' and value < threshold; '''
         pass
 
-    def next_hourmin2sec(hour, minute=0):
+    def next_hourmin2sec(self, hour, minute=0):
         ''' convert the next occurence of localtime hour,min into sec '''
         # time.asctime(time.localtime(int(row[1]))))
         tsnow = int(time.time())
@@ -330,26 +330,27 @@ class Gcal(object):
         print('next hour, min ', hour, minute, 'at', t)
         return sec
 
-    def set_cal_untilmin(self, title_set, title_ref='el_energy_EE', minhour=0, maxhour=5):
+    def set_cal_untilmin(self, title_set, title_ref='el_energy_EE', maxhour=5, maxminute=0):
         ''' sets event from now until now+len '''
+        ts_max = self.next_hourmin2sec(maxhour, maxminute)
+        ts_until = self.get_min(title='el_energy_EE', ts_max)
+        tsnow = int(time.time())
+        
         Cmd = "BEGIN IMMEDIATE TRANSACTION"
         self.conn.execute(Cmd)
-        tsnow = int(time.time())
-        d = time.localtime(tsnow) # y, m, d, h, min, sec, wd, yd, isdst
-        humtime = time.asctime(time.localtime(int(row[1])))) # ends with 05:00
-        t = datetime.datetime(2011, 10, 21, 0, 0)
-        time.mktime(t.timetuple())
-        #max_ts =
-        ts_until = self.get_min(title='el_energy_EE', ts_until=0)[0] # let it end one second before
         try:
+            # (title,timestamp,value)
             columns = str(list(event.keys())).replace('[','(').replace(']',')')
             values = str(list(event.values())).replace('[','(').replace(']',')')
-            Cmd = "insert into calendar"+columns+" values"+values
+            Cmd = "insert into calendar(title,timestamp, value) values("+title+","+str(tsnow)+",1)"
+            log.debug(Cmd) # debug
+            self.conn.execute(Cmd)
+            Cmd = "insert into calendar(title,timestamp, value) values("+title+","+str(ts_until)+",0)"
             log.debug(Cmd) # debug
             self.conn.execute(Cmd)
             self.conn.commit()
             self.dump() # to file
-            msg = 'calendar table '+self.table+' updated and dumped'
+            msg = 'calendar table '+self.table+' updated and dumped with pulse until '+str(ts_until)
             log.info(msg)
             return 0
         except:
