@@ -282,7 +282,7 @@ class Gcal(object):
             #if self.msgbus:
             #    self.msgbus.publish(val_reg, {'values': values, 'status': sumstatus})
             return str(value) # last one for given title becomes effective. can be empty string too, then use default value for setpoint related to title
-
+            # miks str? value huvitab ju alati... kuigi - mine tea!
         except:
             traceback.print_exc()
             return None
@@ -309,15 +309,8 @@ class Gcal(object):
             log.warning('INVALID parameters or NO EVENTS found for '+title)
             return None
 
-    def get_above(self, threshold, ts_until=0): # keela liiga kallis hinnaga
-        ''' select ts,value from changes where mac='el_energy_EE' and value < threshold; '''
-        pass
 
-    def get_below(self, threshold, ts_until=0): # keela liiga kallis hinnaga
-        ''' select ts,value from changes where mac='el_energy_EE' and value < threshold; '''
-        pass
-
-    def next_hourmin2sec(self, hour, minute=0):
+    def next_time2sec(self, hour, minute=0):
         ''' convert the next occurence of localtime hour,min into sec '''
         # time.asctime(time.localtime(int(row[1]))))
         tsnow = int(time.time())
@@ -327,30 +320,30 @@ class Gcal(object):
             d = time.localtime(ts24) # y, m, d, h, min, sec ... for tomorrow
         t = datetime.datetime(d[0], d[1], d[2], hour, minute) # replace hour, min
         sec = time.mktime(t.timetuple()) # get the seconds
-        print('next hour, min ', hour, minute, 'at', t)
+        print('next ts for hour, min ', hour, minute, 'at', t)
         return sec
+        
 
-    def set_cal_untilmin(self, title_set, title_ref='el_energy_EE', maxhour=5, maxminute=0):
+    def set_untilmin(self, title_set, title_ref='el_energy_EE', maxhour=5, maxminute=0):
         ''' sets event from now until now+len '''
         ts_max = self.next_hourmin2sec(maxhour, maxminute)
-        ts_until = self.get_min(title='el_energy_EE', ts_max)
+        ts_until = self.get_min(title='el_energy_EE', ts_max=ts_max)
+        if ts_until != None: # minimum or ref value not found
+            log.error('minimum or ref value for calendar pulse setting NOT found')
+            
         tsnow = int(time.time())
-        
         Cmd = "BEGIN IMMEDIATE TRANSACTION"
-        self.conn.execute(Cmd)
         try:
-            # (title,timestamp,value)
-            columns = str(list(event.keys())).replace('[','(').replace(']',')')
-            values = str(list(event.values())).replace('[','(').replace(']',')')
+            self.conn.execute(Cmd)
             Cmd = "insert into calendar(title,timestamp, value) values("+title+","+str(tsnow)+",1)"
             log.debug(Cmd) # debug
-            self.conn.execute(Cmd)
+            self.conn.execute(Cmd) # pulse start
             Cmd = "insert into calendar(title,timestamp, value) values("+title+","+str(ts_until)+",0)"
             log.debug(Cmd) # debug
-            self.conn.execute(Cmd)
+            self.conn.execute(Cmd) # pulse end
             self.conn.commit()
             self.dump() # to file
-            msg = 'calendar table '+self.table+' updated and dumped with pulse until '+str(ts_until)
+            msg = 'calendar table '+self.table+' updated and dumped with pulse from now until '+str(ts_until)
             log.info(msg)
             return 0
         except:
@@ -360,12 +353,4 @@ class Gcal(object):
             return 1 # kui insert ei onnestu, siis ka delete ei toimu
 
 
-    def set_cal_above(self, title_set, title_ref='el_energy_EE', threshold=1000):
-        ''' sets event from now until now+len '''
-
-        return 0
-
-    def set_cal_below(self, title_set, title_ref='el_energy_EE', threshold=1000):
-        ''' sets cal events for value below threshold, until the value is known '''
-
-        return 0
+ 
