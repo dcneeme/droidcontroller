@@ -288,12 +288,13 @@ class Gcal(object):
             return None
 
     def get_min(self, title='el_energy_EE', ts_max=0): # ts_until 0 means until the values for title end
-        ''' select ts,min(value) from changes where mac='el_energy_EE' and ts+0 < 1457226000; '''
+        ''' select ts,min(value) from changes where mac='el_energy_EE' and ts+0 < tsmax and ts+0>tsnow '''
         found = 0
+        tsnow = time.time()
         if ts_max == 0:
-            Cmd="select timestamp,min(value) from "+self.table+" where title='"+title+"'"
+            Cmd="select timestamp,min(value) from "+self.table+" where title='"+title+"' and timestamp+0 > "+str(tsnow)
         else:
-            Cmd="select timestamp,min(value) from "+self.table+" where title='"+title+"' and timestamp+0 < "+str(ts_max)
+            Cmd="select timestamp,min(value) from "+self.table+" where title='"+title+"' and timestamp+0 < "+str(ts_max)+" and timestamp+0 > "+str(tsnow)
         #log.info(Cmd)
         self.cur.execute(Cmd)
         self.conn.commit()
@@ -349,7 +350,7 @@ class Gcal(object):
             msg = 'calendar table '+self.table+' updated and dumped with pulse from now until '+str(ts_until)
             log.info(msg)
             d = time.localtime(ts_until) # d contains y, m, d, h, min, sec, ..
-            t = datetime.datetime(d)
+            t = time.asctime(d)
             return t # str
         except:
             msg = 'adding pulse to calendar table '+self.table+' FAILED!'
