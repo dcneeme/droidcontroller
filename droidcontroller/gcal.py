@@ -263,7 +263,7 @@ class Gcal(object):
 
 
     def check(self, title): # set a new setpoint if found in table calendar (sharing database connection with setup)
-        ''' Returns the current value for the event with title from the local event buffer '''
+        ''' Returns the current value for the event with title from the local event table '''
         tsnow = int(time.time())
         value = '' # local string value
         if title == '':
@@ -327,30 +327,51 @@ class Gcal(object):
     def set_untilmin(self, title_set, title_ref='el_energy_EE', maxhour=5, maxminute=0):
         ''' sets event from now until now+len '''
         ts_max = self.next_time2sec(maxhour, maxminute)
-        ts_until = self.get_min(title='el_energy_EE', ts_max=ts_max)
-        if ts_until != None: # minimum or ref value not found
+        ts_until = self.get_min(title='el_energy_EE', ts_max=ts_max)[0] # ts of minvalue only needed here
+        if ts_until == None: # minimum or ref value not found
             log.error('minimum or ref value for calendar pulse setting NOT found')
+            return None
             
         tsnow = int(time.time())
         Cmd = "BEGIN IMMEDIATE TRANSACTION"
         try:
             self.conn.execute(Cmd)
-            Cmd = "insert into calendar(title,timestamp, value) values('"+title_set+"','"+str(tsnow)+"',1)"
-            log.debug(Cmd) # debug
+            Cmd="delete from "+self.table+" where title='"+title_set+"'" # all remove old records for this title_set
+            self.conn.execute(Cmd)
+            Cmd = "insert into "+self.table+"(title,timestamp, value) values('"+title_set+"','"+str(tsnow)+"','1')"
+            #log.debug(Cmd) # debug
             self.conn.execute(Cmd) # pulse start
-            Cmd = "insert into calendar(title,timestamp, value) values('"+title_set+"','"+str(ts_until)+"',0)"
-            log.debug(Cmd) # debug
+            Cmd = "insert into calendar(title,timestamp, value) values('"+title_set+"','"+str(ts_until)+"','0')"
+            #log.debug(Cmd) # debug
             self.conn.execute(Cmd) # pulse end
             self.conn.commit()
             self.dump() # to file
             msg = 'calendar table '+self.table+' updated and dumped with pulse from now until '+str(ts_until)
             log.info(msg)
-            return 0
+            d = time.localtime(ts_until) # d contains y, m, d, h, min, sec, ..
+            t = datetime.datetime(d)
+            return t # str
         except:
             msg = 'adding pulse to calendar table '+self.table+' FAILED!'
             log.warning(msg)
             traceback.print_exc() # debug
+            return None # kui insert ei onnestu, siis ka delete ei toimu
+
+
+    def delete(self, title):
+        ''' remove all records with title '''
+        Cmd = "BEGIN IMMEDIATE TRANSACTION"
+        try:
+            self.conn.execute(Cmd)
+            Cmd="delete from "+self.table+" where title='"+title+"'" # all remove old records for this title_set
+            self.conn.execute(Cmd)
+            self.conn.commit()
+            self.dump() # to file
+            msg = 'records with title '+title+' deleted from the calendar table '+self.table
+            log.info(msg)
+            return 0
+        except:
+            msg = 'deleting records from '+self.table+' FAILED!'
+            log.warning(msg)
+            traceback.print_exc() # debug
             return 1 # kui insert ei onnestu, siis ka delete ei toimu
-
-
- 
