@@ -287,6 +287,25 @@ class Gcal(object):
             traceback.print_exc()
             return None
 
+
+    def check_above(self, title, level):
+        ''' Returns True if cal value is above the comparision level '''
+        value = int(self.check(title))
+        if value > level:
+            return True
+        else:
+            return False
+
+
+    def check_below(self, title, level):
+        ''' Returns True if cal value is above the comparision level '''
+        value = int(self.check(title))
+        if value < level:
+            return True
+        else:
+            return False
+
+
     def get_min(self, title='el_energy_EE', ts_max=0): # ts_until 0 means until the values for title end
         ''' select ts,min(value) from changes where mac='el_energy_EE' and ts+0 < tsmax and ts+0>tsnow '''
         found = 0
@@ -323,7 +342,7 @@ class Gcal(object):
         sec = time.mktime(t.timetuple()) # get the seconds
         print('next ts for hour, min ', hour, minute, 'at', t)
         return sec
-        
+
 
     def set_untilmin(self, title_set, title_ref='el_energy_EE', maxhour=5, maxminute=0):
         ''' sets event from now until now+len '''
@@ -332,7 +351,7 @@ class Gcal(object):
         if ts_until == None: # minimum or ref value not found
             log.error('minimum or ref value for calendar pulse setting NOT found')
             return None
-            
+
         tsnow = int(time.time())
         Cmd = "BEGIN IMMEDIATE TRANSACTION"
         try:
