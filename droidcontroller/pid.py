@@ -33,6 +33,7 @@ class PID:
     '''
 
     def __init__(self, setpoint = 0, P = 1.0, I = 0.01, D = 0.0, min = None, max = None, outmode = 'nolist', name='undefined', dead_time = 0, inv=False):
+        ''' if outmode = 'list', then extra data is returned after summary output '''
         self.outmode = outmode # remove later, temporary help to keep list output for some installations
         self.error = 0
         self.inv = inv # inversion if True (negate error)
