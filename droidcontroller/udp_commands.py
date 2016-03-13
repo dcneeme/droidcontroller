@@ -264,12 +264,12 @@ class Commands(SQLgeneral): # p
                             s.report_setup() # let the server know about new setup
                 else: # wrong number of parameters
                     todocode = 1
-            
+
             elif TODO == 'dump_buffer':
                 todocode = udp.dump_buffer()
                 log.info('dump_buffer tried, todocode '+str(todocode))
-                
-                    
+
+
             elif TODO.split(',')[0] == 'RMLOG': # delete log files in working directory (d4c)
                 files = glob.glob('*.log')
                 try:
@@ -413,12 +413,10 @@ class RegularComm(SQLgeneral): # r
         sockfd = sock.fileno()
         SIOCGIFADDR = 0x8915
         ip = None
-
         if iface == 'auto':
             ifacelist = ['tun0','wlan0','eth0'] # for auto
         else:
             ifacelist = [iface] # for NOT auto
-
         for iface in ifacelist:
             ifreq = struct.pack('16sH14s', iface.encode('utf-8'), socket.AF_INET, b'\x00'*14)
             try:
@@ -427,11 +425,10 @@ class RegularComm(SQLgeneral): # r
                 break
             except:
                 pass
-
         if ip != None:
             return socket.inet_ntoa(ip)
         else:
-            return '127.0.0.1' # no other interface up
+            return '127.0.0.1' # no other interface up?
 
 
     def subexec(self, exec_cmd, submode = 1): # submode 0 - returns exit code only, 1 - waits for output, 2 - forks to background. use []
