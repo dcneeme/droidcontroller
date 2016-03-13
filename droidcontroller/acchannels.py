@@ -1175,6 +1175,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         '''
         ##og.info('ai_sync (doall) start')
         res=0
+        out = 0
         self.chg = 0
         self.ts = round(time.time(),0)
         if self.ts - self.ts_read > self.readperiod: # ei oma tahtsust kui kaivitab ioloop timer
