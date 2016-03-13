@@ -78,3 +78,9 @@ class UN(object): # Utilities Neeme, use like UN.val2int(14.4)
         else:
             out = 0
         return out
+        
+    @staticmethod
+    def get_cost(volume, price, priceref=0):
+        ''' Negative cost is saving '''
+        cost = (price - priceref) * volume
+        return round(cost)
