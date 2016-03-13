@@ -67,8 +67,8 @@ class IT5888pwm(object):
     def fix_period(self):
         '''  Restores the correct period value in IO register (150) '''
         try:
-            if self.d.get_doword(self.mba, self.per_reg, 1, mbi=self.mbi)[0] != (self.period << 2): # period stored in 0,25 ms units in fw 616 dec!?
-                self.d.set_doword(self.mba, self.per_reg, value = self.period << 2, mbi=self.mbi) # restore the period register value in IO
+            if self.d.get_doword(self.mba, self.per_reg, 1, mbi=self.mbi)[0] != (self.period): # << 2): # on some version the period was in .25 ms steps!
+                self.d.set_doword(self.mba, self.per_reg, value = self.period, mbi=self.mbi) # restore the period register value in IO
                 log.info(self.name+' pwm period fixed to '+str(self.period)+' ms')
         except:
             log.error('failed to communicate with period register '+str(self.per_reg)+' at mbi '+str(self.mbi)+' mba '+str(self.mba))
