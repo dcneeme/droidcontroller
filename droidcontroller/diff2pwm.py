@@ -17,13 +17,13 @@ class Diff2Pwm(object):
     ''' React on invalues difference using PID, write to pwm register. period register 150 (IT5888).
     Oriented on kitchen ventilation. Boosts on switch on for a while. '''
 
-    def __init__(self, mb, name='undefined', out_ch=[0,1,115], outMin=0, outMax=499, period=500, P=1, I=1, D=0, upspeed=None, dnspeed=None): # period ms
+    def __init__(self, mb, name='undefined', out_ch=[0,1,115], outMin=0, outMax=499, period=500, P=1, I=1, D=0, upspeed=None, dnspeed=None, off_tout=120): # period ms, tout s
         ''' try to use the resact() input values pair for pwm on one output periodic channel.  '''
         res = 1 # initially not ok
         self.pwm = None
         self.mb = mb # CommModbus instance
         self.name = name
-        self.state = StateKeeper(name='vent_state')
+        self.state = StateKeeper(name='vent_state', off_tout=off_tout)
         self.upspeed = upspeed
         self.dnspeed = dnspeed
         self.mbi = out_ch[0] # modbus channel, the same for input and output!
@@ -69,6 +69,7 @@ class Diff2Pwm(object):
             #if self.outMin > 0 or (invalues[0] > invalues[1]):
             if self.outMin > 0 and (invalues[0] > invalues[1]): # avoid restart
                 self.state.up() # igal juhul lubatud
+                log.info(self.name+' state up due to outMin '+str(self.outMin)+', invalues '+str(invalues))
             self.pid.setSetpoint(invalues[0])
             self.pid.set_actual(invalues[1])
             pidout = self.pid.output()
@@ -83,6 +84,7 @@ class Diff2Pwm(object):
                     #if (chgspeed > self.upspeed and pwm > self.outMin): # lylitame varem sisse kiire temp tousu korral
                     if chgspeed > self.upspeed: # lylitame sisse kiire temp tousu korral
                         self.state.up()
+                        log.info(self.name+' state up due to chgspeed '+str(chgspeed))
                         pwm = self.outMax # used for kitchen ventilation
                         log.warning(self.name+' state up due to speed, pwm '+str(pwm)+', chgspeed '+str(chgspeed)+', upspeed '+str(self.upspeed))
                 
