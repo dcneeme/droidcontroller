@@ -15,11 +15,11 @@ class StateKeeper(object): #
         TODO: add upfilter, time to get another up, must be smaller than off_tout
         '''
 
-    def __init__(self, name='undefined', off_tout = 120, on_tout = 0): # falls to down (connstate = 0) after no setting up for off_tout
+    def __init__(self, name='undefined', off_tout = 120, on_tout = 0): # timeouts in s 
         ''' First up() while in state 0 does not change state unless in_tout == 0.
             If the second up() arrives before in_tout, state will go up.
             off_tout value None will keep it up forever without recurring up() events.
-            off_tout value 0 makes state a pulse for exactly one get_status().
+            off_tout value 0 makes state a pulse for exactly one get_status(). what?
             on_tout 0 will start upstate with first up() event.
             on_tout >0 will with for another up() for defined tout seconds.
             on_tout None is illegal. tout values in seconds.
