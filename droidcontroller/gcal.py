@@ -3,6 +3,7 @@ import os, traceback, sqlite3, time, datetime, subprocess
 ## the event created this way will be shown as full day in calendar, but with time 00:00 and now tick in full day field.
 
 import requests # for sync usage mode
+import dateutil.parser
 
 import logging
 log = logging.getLogger(__name__)
@@ -47,7 +48,7 @@ except:
 class Gcal(object):
     ''' Class containing methods to read events from monitoring server handing access to google calendar '''
 
-    def __init__(self, host_id, days=3, table='calendar', auth='YmFyaXg6Y29udHJvbGxlcg=='): # barix:controller
+    def __init__(self, host_id, days=3, table='calendar', auth='base64here'): 
         ''' Calendar data from gcal, processed to simpler wo overlaps by itvilla.ee    '''
         self.host_id = host_id
         self.days = days
