@@ -262,8 +262,8 @@ class Gcal(object):
             return 1 # kui insert ei onnestu, siis ka delete ei toimu
 
 
-    def check(self, title): # set a new setpoint if found in table calendar (sharing database connection with setup)
-        ''' Returns the current value for the event with title from the local event table '''
+    def check(self, title, timeshift=0): # set a new setpoint if found in table calendar (sharing database connection with setup)
+        ''' Returns the current or future (if timeshift >0) value for the event in the local calendar event buffer table '''
         tsnow = int(time.time())
         value = '' # local string value
         if title == '':
@@ -272,12 +272,12 @@ class Gcal(object):
         Cmd = "BEGIN IMMEDIATE TRANSACTION"
         try:
             self.conn.execute(Cmd)
-            Cmd = "select value,timestamp from calendar where title='"+title+"' and timestamp+0<"+str(tsnow)+" order by timestamp asc" # find the last passed event value
+            Cmd = "select value,timestamp from "+self.table+" where title='"+title+"' and timestamp+0<"+str(tsnow+timeshift)+" order by timestamp asc" # find the last passed event value
             self.cur.execute(Cmd)
             for row in self.cur:
                 value = row[0] # overwrite with the last value before now
                 ts = row[1]
-                log.debug('cal tsnow '+str(tsnow)+', ts '+str(ts)+', value '+str(value)) # debug.  viimane value jaab iga title jaoks kehtima
+                #log.debug('cal tsnow '+str(tsnow)+', ts '+str(ts)+', value '+str(value)) # debug.  viimane value jaab iga title jaoks kehtima
             self.conn.commit()
             #if self.msgbus:
             #    self.msgbus.publish(val_reg, {'values': values, 'status': sumstatus})
@@ -377,6 +377,43 @@ class Gcal(object):
             traceback.print_exc() # debug
             return None # kui insert ei onnestu, siis ka delete ei toimu
 
+
+    def set_top(self, title_set, title_ref='el_energy_EE', tophours=6): # 6h is 25% of 24h # ei tohi kustutada viimast eventi?
+        ''' set values 1 if the hours are in the top price selection. use before midnight. '''
+        midnight = self.next_time2sec(0, minute=0) # next midnight, prices known 24h ahead from that
+        threshold = None
+        Cmd = "BEGIN IMMEDIATE TRANSACTION"
+        try:
+            self.conn.execute(Cmd)
+            Cmd = "select value,timestamp from "+self.table+" where title='"+title_ref+"' and timestamp+0>"+str(midnight)+" order by value desc limit "+str(tophours)
+            self.cur.execute(Cmd) # GET THE TOP VALUES in descending order, the last one will be the threshold
+            for row in self.cur:
+                threshold = int(row[0]) # the lowest value that will be included into the top selection
+
+            if threshold != None:
+                Cmd = "select value,timestamp from "+self.table+" where title='"+title_ref+"' and timestamp+100>"+str(midnight)+" order by timestamp asc"
+                self.cur.execute(Cmd) # get all next day value sorted by time
+                intop = 0
+                for row in self.cur:
+                    value = int(row[0])
+                    ts = int(row[1])
+                    if value >= threshold and intop == 0:
+                        Cmd = "insert into calendar(title_set,timestamp, value) values('"+title_set+"','"+str(ts)+"','1')"
+                        intop = 1
+                    elif value < threshold and intop == 1:
+                        Cmd = "insert into calendar(title_set,timestamp, value) values('"+title_set+"','"+str(ts)+"','0')"
+                        intop = 0
+                    self.comm.execute(Cmd)
+                self.conn.commit()
+                return 0
+            else:
+                log.warning('Failed to find threshold value for top hours')
+                return 1
+        except:
+            log.error('FAILED to set top for '+title_set)
+            traceback.print_exc()
+            return 2
+        
 
     def delete(self, title):
         ''' remove all records with title '''
