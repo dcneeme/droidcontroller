@@ -412,7 +412,7 @@ class Gcal(object):
                         Cmd = "insert into calendar(title, timestamp, value) values('"+title_set+"','"+str(ts)+"','0')"
                         log.info('top pulse stop at '+str(ts)+', '+Cmd)
                         intop = 0
-                    elif value >= threshold and intop == 1 and ts > ts_pulsestart + tophours * 3600: # stopping pulse if longer than tophours
+                    elif value >= threshold and intop == 1 and ts + 100 > ts_pulsestart + tophours * 3600: # stopping pulse if longer than tophours
                         #pulse can restart after 1 hour pause! this is good.
                         Cmd = "insert into calendar(title, timestamp, value) values('"+title_set+"','"+str(ts)+"','0')"
                         log.info('top pulse stop at '+str(ts)+' to keep pulse length at tophours '+str(tophours))
