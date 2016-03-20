@@ -379,8 +379,8 @@ class Gcal(object):
             return None # kui insert ei onnestu, siis ka delete ei toimu
 
 
-    def set_top(self, title_set, title_ref='el_energy_EE', tophours=6): # 6h is 25% of 24h # ei tohi kustutada viimast eventi?
-        ''' set values 1 if the hours are in the top price selection. use before midnight. '''
+    def set_top(self, title_set, title_ref='el_energy_EE', tophours=6, inv = False): # 6h is 25% of 24h # ei tohi kustutada viimast eventi?
+        ''' set values 1 if the hours are in the top price selection. use before midnight. IF inv == True, top low instead of top hi is set! '''
         midnight = self.next_time2sec(0, minute=0) # next midnight, prices known 24h ahead from that
         threshold = None
         if tophours > 23:
@@ -405,23 +405,41 @@ class Gcal(object):
                     #log.info(str(repr(row))) ##
                     value = float(row[0])
                     ts = int(row[1])
-                    if value >= threshold and intop == 0: # starting pulse
-                        Cmd = "insert into calendar(title, timestamp, value) values('"+title_set+"','"+str(ts)+"','1')"
-                        log.info('top pulse start at '+str(ts)+', '+Cmd)
-                        intop = 1
-                        ts_pulsestart = ts
-                    elif value < threshold and intop == 1: # stopping pulse
-                        Cmd = "insert into calendar(title, timestamp, value) values('"+title_set+"','"+str(ts)+"','0')"
-                        log.info('top pulse stop at '+str(ts)+', '+Cmd)
-                        intop = 0
-                    elif value >= threshold and intop == 1 and ts + 100 > ts_pulsestart + tophours * 3600: # stopping pulse if longer than tophours
-                        #pulse can restart after 1 hour pause! this is good.
-                        Cmd = "insert into calendar(title, timestamp, value) values('"+title_set+"','"+str(ts)+"','0')"
-                        log.info('top pulse stop at '+str(ts)+' to keep pulse length at tophours '+str(tophours))
-                        intop = 0
-                    else:
-                        Cmd=''
-                    
+                    if inv == False:
+                        if value >= threshold and intop == 0: # starting pulse
+                            Cmd = "insert into calendar(title, timestamp, value) values('"+title_set+"','"+str(ts)+"','1')"
+                            log.info('top hi pulse start at '+str(ts)+', '+Cmd)
+                            intop = 1
+                            ts_pulsestart = ts
+                        elif value < threshold and intop == 1: # stopping pulse
+                            Cmd = "insert into calendar(title, timestamp, value) values('"+title_set+"','"+str(ts)+"','0')"
+                            log.info('top hi pulse stop at '+str(ts)+', '+Cmd)
+                            intop = 0
+                        elif value >= threshold and intop == 1 and ts + 100 > ts_pulsestart + tophours * 3600: # stopping pulse if longer than tophours
+                            #pulse can restart after 1 hour pause! this is good.
+                            Cmd = "insert into calendar(title, timestamp, value) values('"+title_set+"','"+str(ts)+"','0')"
+                            log.info('top hi pulse stop at '+str(ts)+' to keep pulse length at tophours '+str(tophours))
+                            intop = 0
+                        else:
+                            Cmd=''
+                    else: # inv == True    
+                        if value <= threshold and intop == 0: # starting pulse
+                            Cmd = "insert into calendar(title, timestamp, value) values('"+title_set+"','"+str(ts)+"','1')"
+                            log.info('top LO pulse start at '+str(ts)+', '+Cmd)
+                            intop = 1
+                            ts_pulsestart = ts
+                        elif value > threshold and intop == 1: # stopping pulse
+                            Cmd = "insert into calendar(title, timestamp, value) values('"+title_set+"','"+str(ts)+"','0')"
+                            log.info('top LO pulse stop at '+str(ts)+', '+Cmd)
+                            intop = 0
+                        elif value <= threshold and intop == 1 and ts + 100 > ts_pulsestart + tophours * 3600: # stopping pulse if longer than tophours
+                            #pulse can restart after 1 hour pause! this is good.
+                            Cmd = "insert into calendar(title, timestamp, value) values('"+title_set+"','"+str(ts)+"','0')"
+                            log.info('top LO pulse stop at '+str(ts)+' to keep pulse length at tophours '+str(tophours))
+                            intop = 0
+                        else:
+                            Cmd=''
+                        
                     if Cmd != '':
                         self.conn.execute(Cmd)
                 self.conn.commit()
