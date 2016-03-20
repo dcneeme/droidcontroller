@@ -291,7 +291,7 @@ class Gcal(object):
 
     def check_above(self, title, level):
         ''' Returns True if cal value is above the comparision level '''
-        value = int(self.check(title))
+        value = float(self.check(title))
         if value > level:
             return True
         else:
@@ -300,7 +300,7 @@ class Gcal(object):
 
     def check_below(self, title, level):
         ''' Returns True if cal value is above the comparision level '''
-        value = int(self.check(title))
+        value = float(self.check(title))
         if value < level:
             return True
         else:
@@ -321,7 +321,7 @@ class Gcal(object):
         for row in self.cur:
             #log.info(str(repr(row)))
             ts = int(row[0])
-            value = int(row[1])
+            value = float(row[1])
             found = 1
 
         if found == 1:
