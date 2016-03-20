@@ -387,24 +387,41 @@ class Gcal(object):
         try:
             self.conn.execute(Cmd)
             Cmd = "select value,timestamp from "+self.table+" where title='"+title_ref+"' and timestamp+0>"+str(midnight)+" order by value desc limit "+str(tophours)
+            #log.info(Cmd) ##
             self.cur.execute(Cmd) # GET THE TOP VALUES in descending order, the last one will be the threshold
-            for row in self.cur:
-                threshold = int(row[0]) # the lowest value that will be included into the top selection
+            for row in self.cur: # tophours rows for the next day 00..24
+                #log.info(str(repr(row))) ##
+                threshold = float(row[0]) # the lowest value that will be included into the top selection
 
-            if threshold != None:
+            if threshold != None: # threshold found
+                Cmd = "delete from "+self.table+" where title='"+title_set+"' and timestamp+100>"+str(midnight)
+                self.conn.execute(Cmd) # delete earlier top hours setting
                 Cmd = "select value,timestamp from "+self.table+" where title='"+title_ref+"' and timestamp+100>"+str(midnight)+" order by timestamp asc"
                 self.cur.execute(Cmd) # get all next day value sorted by time
                 intop = 0
                 for row in self.cur:
-                    value = int(row[0])
+                    #log.info(str(repr(row))) ##
+                    value = float(row[0])
                     ts = int(row[1])
-                    if value >= threshold and intop == 0:
-                        Cmd = "insert into calendar(title_set,timestamp, value) values('"+title_set+"','"+str(ts)+"','1')"
+                    if value >= threshold and intop == 0: # starting pulse
+                        Cmd = "insert into calendar(title, timestamp, value) values('"+title_set+"','"+str(ts)+"','1')"
+                        log.info('top pulse start at '+str(ts)+', '+Cmd)
                         intop = 1
-                    elif value < threshold and intop == 1:
-                        Cmd = "insert into calendar(title_set,timestamp, value) values('"+title_set+"','"+str(ts)+"','0')"
+                        ts_pulsestart = ts
+                    elif value < threshold and intop == 1: # stopping pulse
+                        Cmd = "insert into calendar(title, timestamp, value) values('"+title_set+"','"+str(ts)+"','0')"
+                        log.info('top pulse stop at '+str(ts)+', '+Cmd)
                         intop = 0
-                    self.comm.execute(Cmd)
+                    elif value >= threshold and intop == 1 and ts > ts_pulsestart + tophours * 3600: # stopping pulse if longer than tophours
+                        #pulse can restart after 1 hour pause! this is good.
+                        Cmd = "insert into calendar(title, timestamp, value) values('"+title_set+"','"+str(ts)+"','0')"
+                        log.info('top pulse stop at '+str(ts)+' to keep pulse length at tophours '+str(tophours))
+                        intop = 0
+                    else:
+                        Cmd=''
+                    
+                    if Cmd != '':
+                        self.conn.execute(Cmd)
                 self.conn.commit()
                 return 0
             else:
