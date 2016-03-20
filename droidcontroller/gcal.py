@@ -383,6 +383,8 @@ class Gcal(object):
         ''' set values 1 if the hours are in the top price selection. use before midnight. '''
         midnight = self.next_time2sec(0, minute=0) # next midnight, prices known 24h ahead from that
         threshold = None
+        if tophours > 23:
+            tophours = 23
         Cmd = "BEGIN IMMEDIATE TRANSACTION"
         try:
             self.conn.execute(Cmd)
@@ -391,7 +393,7 @@ class Gcal(object):
             self.cur.execute(Cmd) # GET THE TOP VALUES in descending order, the last one will be the threshold
             for row in self.cur: # tophours rows for the next day 00..24
                 #log.info(str(repr(row))) ##
-                threshold = float(row[0]) # the lowest value that will be included into the top selection
+                threshold = float(row[0]) # the last value is the lowest in tophours selection
 
             if threshold != None: # threshold found
                 Cmd = "delete from "+self.table+" where title='"+title_set+"' and timestamp+100>"+str(midnight)
