@@ -32,8 +32,8 @@ class PID:
         This class implements a simplistic PID control algorithm
     '''
 
-    def __init__(self, setpoint = 0, P = 1.0, I = 0.01, D = 0.0, min = None, max = None, outmode = 'nolist', name='undefined', dead_time = 0, inv=False):
-        ''' if outmode = 'list', then extra data is returned after summary output '''
+    def __init__(self, setpoint = 0, P = 1.0, I = 0.01, D = 0.0, min = 5, max = 995, outmode = 'nolist', name='undefined', dead_time = 0, inv=False):
+        ''' if outmode = 'list', then extra data is returned after summary output. mina and max are required for normal operation! '''
         self.outmode = outmode # remove later, temporary help to keep list output for some installations
         self.error = 0
         self.inv = inv # inversion if True (negate error)

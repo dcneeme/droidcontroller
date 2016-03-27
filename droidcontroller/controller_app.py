@@ -18,6 +18,7 @@ from droidcontroller.speedometer import * # cycle speed for statistics
 from droidcontroller.msgbus import MsgBus # cycle speed for statistics
 
 
+#########
 mac = ''
 filee = ''
 try:
@@ -35,13 +36,13 @@ except:
     if mac != '000000000000':
         mac = udp.get_conf('mac', filee)
     else:
-        filee = 'hardwired last resort ID'
+        filee = 'hardcoded last resort ID'+str(mac)
 
 log.info('got mac '+mac+' from '+filee)
 udp.setID(mac) # kontrolleri id
 udp.set_ioloop(True) # to avoid delay calculation as before ioloop usage
 tcp.setID(mac) # kas tcp seda kasutabki?
-
+#########
 
 try:
     monip = os.environ['MONIP'] # env variable ID

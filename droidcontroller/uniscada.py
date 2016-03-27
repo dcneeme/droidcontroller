@@ -174,11 +174,13 @@ class UDPchannel():
         ''' Set the monitoring server UDP port '''
         self.port = int(invar)
         self.saddr = (self.ip, self.port) # refresh needed
+        log.info('server port set to '+str(self.port))
 
 
     def setID(self, invar):
         ''' Set the host id '''
         self.host_id = invar
+        log.info('host id set to '+self.host_id)
 
 
     def setRetryDelay(self, invar):

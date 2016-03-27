@@ -273,12 +273,13 @@ class Gcal(object):
         Cmd = "BEGIN IMMEDIATE TRANSACTION"
         try:
             self.conn.execute(Cmd)
-            Cmd = "select value,timestamp from "+self.table+" where title='"+title+"' and timestamp+0<"+str(tsnow+timeshift)+" order by timestamp asc" # find the last passed event value
+            #Cmd = "select value,timestamp from "+self.table+" where title='"+title+"' and timestamp+0<"+str(tsnow+timeshift)+" order by timestamp asc" # find the last passed 
+            Cmd = "select value,timestamp from "+self.table+" where title='"+title+"' and timestamp+0<"+str(tsnow+timeshift)+" order by timestamp desc limit 1" # find the last passed
             self.cur.execute(Cmd)
-            for row in self.cur:
+            for row in self.cur: # one row
                 value = row[0] # overwrite with the last value before now
                 ts = row[1]
-                #log.debug('cal tsnow '+str(tsnow)+', ts '+str(ts)+', value '+str(value)) # debug.  viimane value jaab iga title jaoks kehtima
+                #log.debug('cal tsnow '+str(tsnow)+', ts '+str(ts)+', value '+str(value))
             self.conn.commit()
             #if self.msgbus:
             #    self.msgbus.publish(val_reg, {'values': values, 'status': sumstatus})

@@ -13,8 +13,8 @@ class IT5888pwm(object):
 
     def __init__(self, d, mbi=0, mba=1, name='IT5888', period=1000, bits=[8], phases=[0], periodics=[], per_reg=150):
         ''' One instance per I/O-module, as period is shared! Define the PWM channels via the bits list.
-            Do not include channels not used in pwm
-            The channels in pwm list should not be present in dochannels.sql (trying to sync static values)!
+            Do not include channels not used in pwm into bits list!
+            The channels in pwm list should not be used for static output via register address 0!
         '''
         self.d = d
         self.bits = bits # channel list

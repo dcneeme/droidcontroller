@@ -27,7 +27,7 @@ class SerialConf:
     def __init__(self, port='auto', autokey='FTDI', tout=1,
 
         ip='10.0.0.4', defgw='10.0.0.253', speed=9600, parity='None',
-            ssid='gembird', passwd='villakooguit', model='WIFI232B', conf={
+            ssid='Lasteaed', passwd='Pargi.09', model='WIFI232B', conf={
                 'FUDLX': 'on',
                 
             },
@@ -240,6 +240,7 @@ class SerialConf:
 
     def get_conf(self):
         ''' read config via AT command '''
+        self.conn() # igaks juhuks
         for key in self.conf:
             self.comm('AT+'+key, delay = 0.1).replace('\r\n',' ').replace('\r','').replace('\n','')[1:] # avoid cr & lf here, cut first chars
             #print('   got '+res)
