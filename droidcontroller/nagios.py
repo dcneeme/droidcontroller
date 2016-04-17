@@ -1,7 +1,7 @@
 # This Python file uses the following encoding: utf-8
 
 ''' Send out Nagios passive check messages as UDP, translation based on 
-register name and service table as in uniscada server.
+    register name and service table as in uniscada server.
 '''
 import time, sys, traceback, sqlite3
 from socket import *
@@ -11,7 +11,8 @@ log = logging.getLogger(__name__)
 #class NagiosMessage(SQLgeneral):
 class NagiosMessage(object):
     ''' Generate Nagios passive check commands for parallel notification and send as UDP '''
-    def __init__(self, host_id, table, nagios_ip='10.0.0.253', nagios_port=50000):
+    def __init__(self, host_id, table, nagios_ip='10.0.0.253', nagios_port=50000, debug_svc = False):
+        self.debug_svc = debug_svc # alakriipsuga algavaid ei edasta, kui see on False
         self.table = table
         self.host_id = host_id
         self.conn = sqlite3.connect(':memory:')
@@ -65,11 +66,22 @@ class NagiosMessage(object):
             return 1
 
 
+    def floatfromhex(self, input_float):
+        '''  hex float string to decimal float conversion ''' 
+        sign = int(input_float[0:2],16) & 128
+        exponent = (int(input_float[0:3],16) & 2047)  - 1023
+        if sign == 128:
+            return float.fromhex('-0x1.'+input_float[3:16]+'p'+str(exponent))
+        return float.fromhex('0x1.'+input_float[3:16]+'p'+str(exponent))
+
+        
     def output(self, sendtuple):    # sendtuple = [sta_reg,status,val_reg,lisa]
         ''' Returns Nagios passive check message based on sendtuple '''
         sta_reg = sendtuple[0]
         status = sendtuple[1]
         val_reg = sendtuple[2]
+        if val_reg == '':
+            val_reg = sta_reg
         value = sendtuple[3]
         timestamp = int(time.time())
         svc_name = 'UndefSvc'
@@ -81,7 +93,6 @@ class NagiosMessage(object):
 
         Cmd="select svc_name,out_unit,conv_coef,desc0,desc1,desc2,multiperf from "+self.table+" where sta_reg = '"+sta_reg+"' or val_reg = '"+val_reg+"'"
         #log.info(Cmd)
-        #print(Cmd)
         self.cur.execute(Cmd)
         self.conn.commit()
         notfound = 1
@@ -95,17 +106,16 @@ class NagiosMessage(object):
             multiperf = row[6].split(' ') # list
 
         if notfound > 0:
-            print('translation for sendtuple '+str(sendtuple)+' not found in table '+self.table)
+            log.warning('translation for sendtuple '+str(sendtuple)+' not found in table '+self.table)
             return '' # will not send this service 
 
-        if svc_name[0] == '_': # skip, not needed for another nagios
+        if not self.debug_svc and svc_name[0] == '_': # skip, not needed in starman
             log.debug('skipped sending debug service '+svc_name)
             return ''
         
         nagstring = "["+str(timestamp)+"] PROCESS_SERVICE_CHECK_RESULT;"+self.host_id+";"+svc_name+";"+str(status)+";"+desc+"|"
         # siia otsa perfdata
         perfdata = ''
-        #print('multiperf '+str(multiperf))
         
         if len(multiperf) > 1 and conv_coef != '': # multimember value
             for i in range(len(multiperf)):
@@ -114,13 +124,18 @@ class NagiosMessage(object):
                 perfdata += multiperf[i] + '='+str(round(1.0 * int(value.split(' ')[i]) / int(conv_coef),2)) + out_unit
 
         elif len(multiperf) == 1 and conv_coef != '': # single member numeric value
-            perfdata += svc_name + '='+str(round(1.0 * int(value) / int(conv_coef),2)) + out_unit
+            if (svc_name == 'FlowTotal' or svc_name == 'PumbatudKogus'  or sta_reg[-1:] == 'F'): # hex float
+                value = floatfromhex(value)
+                log.info('hex float to decimal conversion done, new value='+str(value))
+            else:
+                value = round(1.0 * int(value) / int(conv_coef),2)
+            perfdata += svc_name + '='+str(value) + out_unit
             
         else: # single member string value
-            if value != None and value != '':
+            if value != None and value != '': # both status and value exist
                 perfdata += svc_name + '='+str(value)+out_unit
             else:
-                perfdata += svc_name + '='+str(status)
+                perfdata += svc_name + '='+str(status) # status only service!
         nagstring += perfdata+"\n"
 
         return nagstring
