@@ -2,7 +2,18 @@
 
 ''' Send out Nagios passive check messages as UDP, translation based on 
     register name and service table as in uniscada server.
+    
+>>> import sys, logging
+>>> from droidcontroller.nagios import *
+>>> n = NagiosMessage('000101100000','service_ho_koogu20_ee', debug_svc=True)
+sqlread: successfully created table service_ho_koogu20_ee
+>>> n.output(['D2S',0,'D2W','0 0 0 0 0 0 0 0'])
+'[1460920743] PROCESS_SERVICE_CHECK_RESULT;000101100000;_DoDebug;0;DO kanalid (1..8):|_DoDebug=0 0 0 0 0 0 0 0\n'
+>>> n.output(['ETS',1,'',''])
+'[1460920752] PROCESS_SERVICE_CHECK_RESULT;000101100000;ElektriToide;1;Vahelduvtoide kahtlane|ElektriToide=1\n'
+
 '''
+
 import time, sys, traceback, sqlite3
 from socket import *
 import logging
@@ -38,10 +49,8 @@ class NagiosMessage(object):
                 log.info(msg)
         except:
             msg='FAILURE in opening '+filename+': '+str(sys.exc_info()[1])
-            print(msg)
-            #udp.syslog(msg)
+            log.warning(msg)
             traceback.print_exc()
-            time.sleep(1)
             return 1
 
         Cmd='drop table if exists '+self.table
@@ -52,15 +61,11 @@ class NagiosMessage(object):
             self.conn.commit()
             msg='sqlread: successfully created table '+self.table
             log.info(msg)
-            print(msg)
-            #udp.syslog(msg)
             return 0
 
         except:
             msg='sqlread() problem for table '+self.table+': '+str(sys.exc_info()[1])
             log.warning(msg)
-            print(msg)
-            #udp.syslog(msg)
             traceback.print_exc()
             time.sleep(1)
             return 1
@@ -75,37 +80,35 @@ class NagiosMessage(object):
         return float.fromhex('0x1.'+input_float[3:16]+'p'+str(exponent))
 
         
-    def output(self, sendtuple):    # sendtuple = [sta_reg,status,val_reg,lisa]
-        ''' Returns Nagios passive check message based on sendtuple '''
-        sta_reg = sendtuple[0]
-        status = sendtuple[1]
-        val_reg = sendtuple[2]
+    def output(self, sendtuple):    # sendtuple = ['sta_reg',status,'val_reg','value']
+        ''' Returns Nagios passive check message based on sendtuple. 
+            Value can be missing, text, number or number array separated with spaces
+        '''
+        (sta_reg, status, val_reg, value) = sendtuple
         if val_reg == '':
             val_reg = sta_reg
-        value = sendtuple[3]
+        
         timestamp = int(time.time())
-        svc_name = 'UndefSvc'
+        svc_name = None
         conv_coef = ''
         desc = 'UndefDesc'
         multiperf = []
         out_unit = 'UndefUnit'
-        #cur = self.conn.cursor()
-
-        Cmd="select svc_name,out_unit,conv_coef,desc0,desc1,desc2,multiperf from "+self.table+" where sta_reg = '"+sta_reg+"' or val_reg = '"+val_reg+"'"
+        
+        Cmd="select svc_name,out_unit,conv_coef,desc0,desc1,desc2,multiperf,multivalue from "+self.table+" where sta_reg = '"+sta_reg+"' or val_reg = '"+val_reg+"'"
         #log.info(Cmd)
         self.cur.execute(Cmd)
         self.conn.commit()
         notfound = 1
         for row in self.cur:
-            notfound = 0
-            #print(repr(row))
             svc_name = row[0]
             out_unit = row[1]
             conv_coef = row[2]
             desc = row[3+status]
-            multiperf = row[6].split(' ') # list
+            multiperf = row[6].split(' ') # liikmete nimetuste list, perf datasse vordusmargi ette
+            multivalue = row[7].split(' ') # liikmete jrk numbrite list, selle alusel vaartused desc loppu kooloni taha
 
-        if notfound > 0:
+        if not svc_name:
             log.warning('translation for sendtuple '+str(sendtuple)+' not found in table '+self.table)
             return '' # will not send this service 
 
@@ -113,31 +116,49 @@ class NagiosMessage(object):
             log.debug('skipped sending debug service '+svc_name)
             return ''
         
-        nagstring = "["+str(timestamp)+"] PROCESS_SERVICE_CHECK_RESULT;"+self.host_id+";"+svc_name+";"+str(status)+";"+desc+"|"
-        # siia otsa perfdata
-        perfdata = ''
+        log.info('svc_name '+svc_name+', multiperf '+str(multiperf)+', multivalue '+str(multivalue)+', value '+str(value)) 
+        perfdata = '' 
+        descvalue = '' # values to desc end after colon, if any, according to multivalue
+        if out_unit == '':
+                out_unit = '_' # to align diagrmans with and without unit
         
-        if len(multiperf) > 1 and conv_coef != '': # multimember value
+        if len(multiperf) > 1: # multimember value
+            log.info('num members')
             for i in range(len(multiperf)):
+                if conv_coef != '':
+                    valmember = round(1.0 * int(value.split(' ')[i]) / int(conv_coef),2)
+                else: # int, not to divide
+                    valmember = int(value.split(' ')[i])
                 if len(perfdata) > 0:
                     perfdata += ' '
-                perfdata += multiperf[i] + '='+str(round(1.0 * int(value.split(' ')[i]) / int(conv_coef),2)) + out_unit
-
-        elif len(multiperf) == 1 and conv_coef != '': # single member numeric value
+                perfdata += multiperf[i] + '='+str(valmember) + out_unit
+                if desc[-1:] == ':' and str(i + 1) in multivalue:
+                    descvalue += str(valmember) + ' '
+            if desc[-1:] == ':':
+                descvalue += out_unit # unit after the members
+                
+        elif len(multiperf) == 1 and value != '': # single member numeric value
             if (svc_name == 'FlowTotal' or svc_name == 'PumbatudKogus'  or sta_reg[-1:] == 'F'): # hex float
                 value = floatfromhex(value)
                 log.info('hex float to decimal conversion done, new value='+str(value))
             else:
-                value = round(1.0 * int(value) / int(conv_coef),2)
+                if conv_coef != '':
+                    log.info('single num to be converted')
+                    value = round(1.0 * int(value) / int(conv_coef),2)
+                else: #leave value as it is
+                    log.info('single num NOT to be converted due to no conf_coef, value='+str(value))
+                    
             perfdata += svc_name + '='+str(value) + out_unit
             
-        else: # single member string value
-            if value != None and value != '': # both status and value exist
-                perfdata += svc_name + '='+str(value)+out_unit
-            else:
-                perfdata += svc_name + '='+str(status) # status only service!
-        nagstring += perfdata+"\n"
-
+        #elif multiperf == '' and multivalue == '' and conv_coef == '' and out_unit == '_': # status only service!
+        elif val_reg == sta_reg: # status only service!
+            log.info('status as perfdata')
+            perfdata += svc_name + '='+str(status)+out_unit
+        else:
+            log.error('INVALID service configuration, svc_name '+svc_name+', multiperf '+str(multiperf)+', multivalue '+str(multivalue)+', value "'+str(value)+'"')
+        
+        nagstring = "["+str(timestamp)+"] PROCESS_SERVICE_CHECK_RESULT;"+self.host_id+";"+svc_name+";"+str(status)+";"+desc+descvalue+"|"+perfdata+"\n"
+        
         return nagstring
 
 
@@ -151,8 +172,7 @@ class NagiosMessage(object):
                 #log.debug('sent nagios message to '+repr(self.nagaddr))
                 return dnsize
             except:
-                print('could NOT send nagios message to '+repr(self.nagaddr))
-                log.warning('could NOT send nagios message to '+repr(self.nagaddr))
+                log.error('could NOT send nagios message to '+repr(self.nagaddr))
                 traceback.print_exc()
             return 0
 
