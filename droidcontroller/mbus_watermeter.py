@@ -14,6 +14,14 @@ EXECUTOR = ThreadPoolExecutor(max_workers=1)
 import logging
 log = logging.getLogger(__name__)
 
+''' Usage example
+from mbus_watermeter import MbusWaterMeter # libmbus c-library is needed too!
+m=MbusWaterMeter() # meter instance
+m.read_sync() # sync read, async is also possible using future. 
+m.parse(debug=True) # to list all possible values from the meter
+m.parse(id=1) # to get the needed value only
+'''
+
 class MbusWaterMeter(object): # FIXME averaging missing!
     ''' Publish values to services via msgbus '''  # FIXME use IOloop too
     def __init__(self, msgbus=None, svclist=[['XYW',1,1,'undefined']]): # svc, member, id, name
@@ -49,13 +57,14 @@ class MbusWaterMeter(object): # FIXME averaging missing!
             print("parse error: %s" % ex)
             sys.exit()
         
-    def parse(self, debug = False):
-        found = 0
+    def parse(self, id=4, debug = False):
+        ''' debug will list all values with any id. 4 is id for itron, use id=1 for HRI-B '''
+        found = False
         for x in self.dict['MBusData']['DataRecord']:
             if debug == True:
                 print(x)
             for svc in self.svclist:
-                if int(x['@id']) == 4: # svc[2]:
+                if int(x['@id']) == id: # svc[2]:
                     vs = x['Value'] # , x['Unit']) ## key 'Unit' not found?
                     try:
                         val= int(vs)
@@ -63,12 +72,12 @@ class MbusWaterMeter(object): # FIXME averaging missing!
                         log.info('got value with id 4: '+ str(val) ) # str
                         if self.msgbus:
                             self.msgbus.publish(svc[0], {'values': [ val ], 'status': 0}) # msgbus.publish(val_reg, {'values': values, 'status': status})
-                        found += 1
+                        found = True
                     except:
                         log.error('invalid Value data from id 4: '+vs)
                         traceback.print_exc()
                         
-        if found > 0:
+        if found:
             return val
         else:
             return None
