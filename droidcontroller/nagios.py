@@ -3,6 +3,7 @@
 ''' Send out Nagios passive check messages as UDP, translation based on 
     register name and service table as in uniscada server.
     
+  possible testing in 10.0.0.14  
 >>> import sys, logging
 >>> from droidcontroller.nagios import *
 >>> n = NagiosMessage('000101100000','service_ho_koogu20_ee', debug_svc=True)
@@ -105,8 +106,8 @@ class NagiosMessage(object):
             out_unit = row[1]
             conv_coef = row[2]
             desc = row[3+status]
-            multiperf = row[6].split(' ') # liikmete nimetuste list, perf datasse vordusmargi ette
-            multivalue = row[7].split(' ') # liikmete jrk numbrite list, selle alusel vaartused desc loppu kooloni taha
+            multiperf = row[6].split(' ') if row[6] != None else [svc_name] # liikmete nimetuste list, perf datasse vordusmargi ette
+            multivalue = row[7].split(' ') if row[7] != None else [] # liikmete jrk numbrite list, selle alusel vaartused desc loppu kooloni taha
 
         if not svc_name:
             log.warning('translation for sendtuple '+str(sendtuple)+' not found in table '+self.table)
@@ -123,7 +124,7 @@ class NagiosMessage(object):
                 out_unit = '_' # to align diagrmans with and without unit
         
         if len(multiperf) > 1: # multimember value
-            log.info('num members')
+            log.info('num members '+str(multiperf)+', value '+str(value))
             for i in range(len(multiperf)):
                 if conv_coef != '':
                     valmember = round(1.0 * int(value.split(' ')[i]) / int(conv_coef),2)
@@ -138,6 +139,7 @@ class NagiosMessage(object):
                 descvalue += out_unit # unit after the members
                 
         elif len(multiperf) == 1 and value != '': # single member numeric value
+            # if dataset name is not given, use service name for perf data
             if (svc_name == 'FlowTotal' or svc_name == 'PumbatudKogus'  or sta_reg[-1:] == 'F'): # hex float
                 value = floatfromhex(value)
                 log.info('hex float to decimal conversion done, new value='+str(value))
@@ -148,7 +150,10 @@ class NagiosMessage(object):
                 else: #leave value as it is
                     log.info('single num NOT to be converted due to no conf_coef, value='+str(value))
                     
-            perfdata += svc_name + '='+str(value) + out_unit
+            #perfdata += svc_name + '='+str(value) + out_unit
+            perfdata += multiperf[0] + '='+str(value) + out_unit
+            if desc[-1:] == ':':
+                descvalue += str(value) + out_unit
             
         #elif multiperf == '' and multivalue == '' and conv_coef == '' and out_unit == '_': # status only service!
         elif val_reg == sta_reg: # status only service!
