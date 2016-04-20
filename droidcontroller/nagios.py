@@ -134,9 +134,9 @@ class NagiosMessage(object):
                     perfdata += ' '
                 perfdata += multiperf[i] + '='+str(valmember) + out_unit
                 if desc[-1:] == ':' and str(i + 1) in multivalue:
-                    descvalue += str(valmember) + ' '
+                    descvalue += ' '+ str(valmember)
             if desc[-1:] == ':':
-                descvalue += out_unit # unit after the members
+                descvalue += ' ' + out_unit # unit after the members
                 
         elif len(multiperf) == 1 and value != '': # single member numeric value
             # if dataset name is not given, use service name for perf data
@@ -144,16 +144,24 @@ class NagiosMessage(object):
                 value = floatfromhex(value)
                 log.info('hex float to decimal conversion done, new value='+str(value))
             else:
-                if conv_coef != '':
+                if conv_coef != '' and conv_coef != None:
                     log.info('single num to be converted')
                     value = round(1.0 * int(value) / int(conv_coef),2)
-                else: #leave value as it is
-                    log.info('single num NOT to be converted due to no conf_coef, value='+str(value))
+                else: #leave value as it is, nay be string as well
+                    log.info('possible string due to no conf_coef, value='+str(value))
                     
             #perfdata += svc_name + '='+str(value) + out_unit
-            perfdata += multiperf[0] + '='+str(value) + out_unit
+            if not 'str' in str(type(value)):
+                if multiperf[0] == '':  # igaks juhuks
+                    multiperf[0] = svc_name
+                perfdata += multiperf[0] + '='+str(value) + out_unit
+            else:
+                perfdata += svc_name + '_status='+str(status) + out_unit
+            
             if desc[-1:] == ':':
-                descvalue += str(value) + out_unit
+                descvalue += ' '+ str(value)
+                if not 'str' in str(type(value)):
+                    descvalue += out_unit
             
         #elif multiperf == '' and multivalue == '' and conv_coef == '' and out_unit == '_': # status only service!
         elif val_reg == sta_reg: # status only service!
