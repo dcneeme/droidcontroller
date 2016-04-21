@@ -25,7 +25,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         self.cp = [] # possible counter2value calculation instances
         self.chg = 0 # possible need for immediate notification
         self.msg = ''  # to reduce repetitive messages
-        log.info('ACchannels instance created, msgbus '+str(self.msgbus))
+        self.io_trust = False # before True do not udp.send() in order to avoid false alarms on restart!
+        self.ts_init = time.time() # to know when the instance was started
+        log.info('ACchannels instance created, msgbus '+str(self.msgbus)+', initially io_trust=False')
         self.Initialize()
 
 
@@ -455,7 +457,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         bcount=bcount+int(abs(wcount)) # increment by word size
                         #print('group end shifted to',blast) # debug
                     else: # a new group started, make a query for previous
-                        self.read_grp(bmba,bfirst,bcount,bwcount,bmbi,bregtype) # reads and updates table with previous data #####################  READ MB  ######
+                        res += self.read_grp(bmba,bfirst,bcount,bwcount,bmbi,bregtype) # reads and updates table with previous data #####################  READ MB  ######
                         bfirst = regadd # new grp starts immediately
                         blast = regadd
                         #bwcount = wcount # does not change inside group
@@ -469,27 +471,34 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             if bfirst != 0: # last group yet unread
                 #print(' group end detected at regadd',blast) # debug
                 #print('going to read last  group, registers from',bmba,bfirst,'to',blast,'regcount',bcount,'regtype',bregtype) # debug
-                self.read_grp(bmba,bfirst,bcount,bwcount,bmbi,bregtype) # reads and updates table with previous data #####################  READ MB  ######
+                res += self.read_grp(bmba,bfirst,bcount,bwcount,bmbi,bregtype) # reads and updates table with previous data #####################  READ MB  ######
 
             # raw sync (from modbus to sql) done.
 
+            if res > 0: # problems found with one or more grp_read()
+                log.warning('grp_read() res '+str(res)+', waiting with making io_trust True!')
+                self.io_trust = False
+                return 1
+            else:
+                self.io_trust = True
 
-
-            # now process raw -> value and find statuses using make_svc() for each service.
+            # now process raw -> value and find statuses using make_svc() for each service / IF io_trust is True.
             #power calculations happen in make_svc too!
 
             Cmd="select val_reg from "+self.in_sql+" group by val_reg" # find services
             log.debug('read_all Cmd='+Cmd) ### oli kommenteeritud 31.1?
             cur.execute(Cmd) ### oli kommenteeritud 31.1?
 
-            for row in cur: # SERVICES LOOP
-                val_reg=row[0] # service value register name
-                #sta_reg=val_reg[:-1]+"S" # status register name ASSUMPTION. BUT MAKE_SVC ACCEPTS NOW STA_REG=''
+            if io_trust or time.time() > self.ts_init + 300: # in the end something will be sent...
+                for row in cur: # SERVICES LOOP
+                    val_reg=row[0] # service value register name
+                    #sta_reg=val_reg[:-1]+"S" # status register name ASSUMPTION. BUT MAKE_SVC ACCEPTS NOW STA_REG=''
 
-                log.debug('processing '+self.in_sql+' rows into service with val_reg '+val_reg+' sta_reg '+sta_reg)
-                #self.make_svc(val_reg,sta_reg) ## sets status and notifies id status chg in any member
-                self.make_svc(val_reg) ## sets status and notifies id status chg in any member. self.cpi?
-
+                    #log.debug('processing '+self.in_sql+' rows into service with val_reg '+val_reg+' sta_reg '+sta_reg)
+                    #self.make_svc(val_reg,sta_reg) ## sets status and notifies id status chg in any member
+                    self.make_svc(val_reg) ## sets status and notifies id status chg in any member. self.cpi?
+            else:
+                log.warning('skipped make_svc loop due to no io_trust and instance uptime below 300 s')
             conn.commit() #  haarab ka make_svc()
             sys.stdout.write('A')
             return 0
