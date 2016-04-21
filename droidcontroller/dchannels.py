@@ -42,6 +42,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         self.out_sql = out_sql.split('.')[0]
         #self.s = SQLgeneral()
         self.chg_dict = {} # svc:[member,value] after the change
+        self.io_trust = False # before True do not udp.send() in order to avoid false alarms on restart!
         self.Initialize()
 
 
@@ -122,28 +123,30 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                         try:
                             value = int((result[i] & (2 ** bit)) >> bit) # new bit value
                             #print('decoded new value for mbi, mba, regadd, bit',mbi,mba,regadd+i,bit,'is',value,'was',ovalue) # debug
+                        
+                            # check if outputs must be written
+                            try:
+                                if value != ovalue: # change detected, update dichannels value, chg-flag  - saaks ka maski alusel!!!
+                                    chg = 3 # 2-bit change flag, bit 0 to send and bit 1 to process, to be reset separately
+                                    msg = 'DIchannel mbi.mba.reg '+str(mbi)+'.'+str(mba)+'.'+str(regadd)+' bit '+str(bit)+' change! was '+str(ovalue)+', became '+str(value) # temporary
+                                    log.debug(msg) ##
+                                    #udp.syslog(msg)
+                                    # dichannels table update with new bit values and change flags. no status change here. no update if not changed!
+                                    Cmd = "UPDATE "+self.in_sql+" set value='"+str(value)+"', chg='"+str(chg)+"', ts='"+str(self.ts)+"' where mba='"+str(mba)+"' and regadd='"+str(regadd+i)+"' and mbi="+str(mbi)+" and bit='"+str(bit)+"'"
+                                    # uus bit value ja chg lipp, 2 BITTI!
+                                else: # no value change, just update the timestamp!
+                                    chg = 0
+                                    Cmd = "UPDATE "+self.in_sql+" set ts='"+str(self.ts)+"', chg='"+str(chg)+"' where mba='"+str(mba)+"' and mbi="+str(mbi)+" and regadd='"+str(regadd+i)+"' and bit='"+str(bit)+"'" # old value unchanged, use ts_CHG AS TS!
+                                log.debug('dichannels update cmd: '+Cmd)
+                                conn.execute(Cmd) # write
+                            except:
+                                log.warning('dichannels table update FAILED!')
+                                traceback.print_exc()
                         except:
                             log.warning('read_di_grp problem: result '+str(result)+', i'+str(i)+', bit'+str(bit))
                             traceback.print_exc()
+                            self.io_trust = False
 
-                        # check if outputs must be written
-                        try:
-                            if value != ovalue: # change detected, update dichannels value, chg-flag  - saaks ka maski alusel!!!
-                                chg = 3 # 2-bit change flag, bit 0 to send and bit 1 to process, to be reset separately
-                                msg = 'DIchannel mbi.mba.reg '+str(mbi)+'.'+str(mba)+'.'+str(regadd)+' bit '+str(bit)+' change! was '+str(ovalue)+', became '+str(value) # temporary
-                                log.debug(msg) ##
-                                #udp.syslog(msg)
-                                # dichannels table update with new bit values and change flags. no status change here. no update if not changed!
-                                Cmd = "UPDATE "+self.in_sql+" set value='"+str(value)+"', chg='"+str(chg)+"', ts='"+str(self.ts)+"' where mba='"+str(mba)+"' and regadd='"+str(regadd+i)+"' and mbi="+str(mbi)+" and bit='"+str(bit)+"'"
-                                # uus bit value ja chg lipp, 2 BITTI!
-                            else: # no value change, just update the timestamp!
-                                chg = 0
-                                Cmd = "UPDATE "+self.in_sql+" set ts='"+str(self.ts)+"', chg='"+str(chg)+"' where mba='"+str(mba)+"' and mbi="+str(mbi)+" and regadd='"+str(regadd+i)+"' and bit='"+str(bit)+"'" # old value unchanged, use ts_CHG AS TS!
-                            log.debug('dichannels update cmd: '+Cmd)
-                            conn.execute(Cmd) # write
-                        except:
-                            log.warning('dichannels table update FAILED!')
-                            traceback.print_exc()
                 #time.sleep(0.05)
                 if chg == 0: # no change
                     return 0
@@ -154,7 +157,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 time.sleep(0.2)
                 return 2
         else: #failure, recreate mb[mbi]
-            
+            self.io_trust = False
             #log.warning('recreating modbus channel due to error on '+str(mbhost[mbi]))
             if mba == mb[mbi].get_mba_keepalive(): # recreate mb[] on access failure to this address only
                 port = mb[mbi].get_port() # None if not tcp
@@ -282,6 +285,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             If svc != '' then that one svc has probably been changed??
         '''
         # mask == 1: send changed, mask == 3: send all
+        self.io_trust = True # initially, any failure will reset
         msg = ''
         mba = 0 # local here
         val_reg = ''
@@ -314,34 +318,38 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 log.debug('Cmd: '+Cmd) ##
                 cur.execute(Cmd)
 
-                for row in cur: # services to be processed. either just changed or to be resent
-                    svccount += 1
-                    log.debug('processing di row '+str(repr(row))) ##
-                    val_reg = ''
-                    sta_reg = ''
-                    sumstatus = 0 # initially
+                if self.io_trust or time.time() > ts_init + 300:
+                    for row in cur: # services to be processed. either just changed or to be resent
+                        svccount += 1
+                        log.debug('processing di row '+str(repr(row))) ##
+                        val_reg = ''
+                        sta_reg = ''
+                        sumstatus = 0 # initially
 
-                    if len(row) > 0:
-                        val_reg = row[0] # service name
-                        chg = int(row[1]) # change bitmap by members
-                        val = int(row[2]) # values bitmap by members
-                        #ts_last=int(row[2]) # last reporting time
-                        if chg > 0: # message due to bichannel state change
-                            msg='DI service '+val_reg+' needs to be notified, new val bitmap '+str(hex(val))+', change bitmap '+str(hex(chg))
-                            chg_dict.update({val_reg : [chg, val]})  #### FIXME / kahtlane , 1 asemel 3, 2 asemel 6 jne
-                            log.info(msg)
+                        if len(row) > 0:
+                            val_reg = row[0] # service name
+                            chg = int(row[1]) # change bitmap by members
+                            val = int(row[2]) # values bitmap by members
+                            #ts_last=int(row[2]) # last reporting time
+                            if chg > 0: # message due to bichannel state change
+                                msg='DI service '+val_reg+' needs to be notified, new val bitmap '+str(hex(val))+', change bitmap '+str(hex(chg))
+                                chg_dict.update({val_reg : [chg, val]})  #### FIXME / kahtlane , 1 asemel 3, 2 asemel 6 jne
+                                log.info(msg)
+                                
+                            else:
+                                msg='DI service '+val_reg+' unchanged: '
+
+                            log.debug(msg)
+                            sendtuple = self.make_dichannel_svc(val_reg) # for each service
+                            udp.send(sendtuple)
+                            msg = 'buffered within reporting all '+str(sendtuple) ####
+                            log.debug(msg)
                             
                         else:
-                            msg='DI service '+val_reg+' unchanged: '
-                        log.debug(msg)
-
-                        sendtuple = self.make_dichannel_svc(val_reg) # for each service
-                        udp.send(sendtuple)
-                        msg = 'buffered within reporting all '+str(sendtuple) ####
-                        log.debug(msg)
-                    else:
-                        log.warning('FAILED to select row for '+val_reg)
-
+                            log.warning('FAILED to select row for '+val_reg)
+                else:
+                    log.warning('SKIPPED makke_svc cycle and udp.send() due to no io_trust and instance uptime below 300 s')
+                            
                 self.chg_dict = chg_dict
 
             else:
