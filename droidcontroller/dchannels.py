@@ -1,9 +1,6 @@
-# to be imported to access modbus registers as analogue io
-# 03.04.2014 neeme
-# 04.04.2014
-# 06.04.2014 seguential register read for optimized reading
-# 14.6.2015 mingi jama mone teenusega mis ei tekita sendtuple...
-# 11.9.2015 lisatud chg_dict, aga mingi jama
+# This Python file uses the following encoding: utf-8
+
+# FIXME saadab liiga tihti, peaks muudatused kohe saatma ja muu harvem, doall kaudu? kes updated ts_msg?
 
 ''' mb[mbi].read(mba, reg, count = 1, type = 'h'):  # modbus read example
 
@@ -306,22 +303,22 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             conn.execute(Cmd) # dichannels
 
             # dichannels(mba,regadd,bit,val_reg,member,cfg,block,value,status,ts,chg,desc,comment,ts_msg,type integer)
-            if svc == '': ##  chk all di services for sending
+            if svc == '': ##  notify all di services that are noot sent in last self.sendperiod s
                 #Cmd="select val_reg, max((chg+0) & 1), min(ts_msg+0) from \
                 #    dichannels where ((chg+0 & 1) and ((cfg+0) & 16)) or \
                 #    ("+str(self.ts)+">ts_msg+"+str(self.sendperiod)+") \
                 #    group by val_reg"
-                Cmd = "select val_reg, sum(chg<<(member-1)), sum(value<<(member-1)) from dichannels where ((chg+0 & 1) and ((cfg+0) & 16)) or ("+str(self.ts)+">ts_msg+"+str(self.sendperiod)+") group by val_reg"
-                # take into account cfg! not all changes are to be reported immediately!
+                Cmd = "select val_reg, sum(chg<<(member-1)), sum(value<<(member-1)), ts_msg from dichannels where ((chg+0 & 1) and ((cfg+0) & 16)) or ("+str(self.ts)+">ts_msg+"+str(self.sendperiod)+") group by val_reg"
+                # taking cfg into account! not all changes are to be reported immediately!
                 # cfg is also for application needs, not only monitoring!
 
-                log.debug('Cmd: '+Cmd) ##
+                log.info('Cmd: '+Cmd) ##
                 cur.execute(Cmd)
 
                 if self.io_trust or time.time() > ts_init + 300:
                     for row in cur: # services to be processed. either just changed or to be resent
                         svccount += 1
-                        log.debug('processing di row '+str(repr(row))) ##
+                        #log.info('processing di row '+str(repr(row))) ##
                         val_reg = ''
                         sta_reg = ''
                         sumstatus = 0 # initially
@@ -332,41 +329,35 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                             val = int(row[2]) # values bitmap by members
                             #ts_last=int(row[2]) # last reporting time
                             if chg > 0: # message due to bichannel state change
-                                msg='DI service '+val_reg+' needs to be notified, new val bitmap '+str(hex(val))+', change bitmap '+str(hex(chg))
+                                msg='DI service '+val_reg+' needs to be notified due to change, new val bitmap '+str(hex(val))+', change bitmap '+str(hex(chg))
                                 chg_dict.update({val_reg : [chg, val]})  #### FIXME / kahtlane , 1 asemel 3, 2 asemel 6 jne
                                 log.info(msg)
                                 
                             else:
-                                msg='DI service '+val_reg+' unchanged: '
-
-                            log.debug(msg)
-                            sendtuple = self.make_dichannel_svc(val_reg) # for each service
-                            udp.send(sendtuple)
-                            msg = 'buffered within reporting all '+str(sendtuple) ####
-                            log.debug(msg)
+                                msg='DI service '+val_reg+' unchanged: '+str(val)
+                                log.debug(msg)
+                            
+                            sendtuple = self.make_dichannel_svc(val_reg) # for each (not renotified for long enough time) service
+                            if sendtuple:
+                                udp.send(sendtuple)
+                                msg = 'buffered within reporting all '+str(sendtuple) ####
+                                log.info(msg)
                             
                         else:
                             log.warning('FAILED to select row for '+val_reg)
                 else:
-                    log.warning('SKIPPED makke_svc cycle and udp.send() due to no io_trust and instance uptime below 300 s')
+                    log.warning('SKIPPED make_svc cycle and udp.send() due to no io_trust and instance uptime below 300 s')
                             
                 self.chg_dict = chg_dict
 
-            else:
-                sendtuple = self.make_dichannel_svc(svc)
+            else: ## notify no matter when they were notified
+                sendtuple = self.make_dichannel_svc(svc) # for one (possibly changed) service (if changed or not renotified for long enough time) 
                 if sendtuple:
                     udp.send(sendtuple)
-                    msg = 'buffered due to reporting single '+str(sendtuple) ####
-                    log.debug(msg)
+                    msg = '!buffered due to reporting single '+str(sendtuple) ####
+                    log.info(msg)
 
-            #if sendtuple != None and sendtuple != []:
-            #    udp.send(sendtuple)
-            #    msg += str(sendtuple)
-            #    log.info(msg)
-            #else:
-            #    log.warning('empty sendtuple '+str(sendtuple)+' for svc '+svc)
-            # ilmselt ei ole muutnud ega aeg korrata veel kaes
-
+ 
             conn.commit() # dichannels transaction end
             if svccount > 0:
                 return 1
@@ -375,10 +366,8 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
         except:
             traceback.print_exc()
-            #syslog('err: '+repr(err))
             msg='there was a problem with make_dichannels()! '+str(sys.exc_info()[1])
             log.warning(msg)
-            #syslog(msg)
             return 2
 
     #make_dichannels() lopp
@@ -387,10 +376,10 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
 
     def make_dichannel_svc(self,val_reg): # one service. find status and send away.
-        ''' Find service status and return tuple of sta_reg,status, val_reg,value to be sent away.
-            Execute by make_dichannels() to get transaction
+        ''' Find service status and return None or tuple of (sta_reg,status, val_reg,value) to be sent away.
+            Execute by make_dichannels() to get the transaction committed!
            '''
-        # no transaction started here because we are in transaction (started make_dichannels())
+        # no transaction started or commit used here because we are in transaction (started make_dichannels())
         lisa='' # value string
         values = []
         sumstatus=0 # status calc
@@ -446,9 +435,8 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                     log.warning('svc '+val_reg+' member '+str(member)+' stalled for '+str(int(self.ts - ots))+' s!')
             if value == None:
                 rowproblem = 1 # do not send this svc
-                log.warning('svc '+val_reg+' member '+str(member)+' value None!')
-                log.warning('srow '+str(repr(srow))) ##
-               
+                log.warning('svc '+val_reg+' member '+str(member)+' value None! srow '+str(repr(srow)))
+                
             else:
                 if lisa != '': # not the first member any more
                     lisa = lisa + " "
@@ -476,23 +464,24 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 log.debug(val_reg+'.'+str(member)+' value after status proc '+str(value)+', sumstatus '+str(sumstatus)+', lisa '+str(lisa))
 
 
-            #dichannels table update with new chg and status values. no changes for values! chg bit 0 off! set ts_msg!
-            if rowproblem == 0: # no problem with this svc members
-                Cmd="UPDATE "+self.in_sql+" set ts_msg='"+str(self.ts)+"', chg='"+str(chg&2)+"' where val_reg='"+str(val_reg)+"'" # koik liikmed korraga sama ts_msg
-                conn.execute(Cmd)
 
-        sta_reg=val_reg[:-1]+"S" # service status register name
+        sta_reg = val_reg[:-1]+"S" # service status register name
+           
+        if rowproblem == 0: # self.ts on viimase di sisselugemise aeg, ts_msg viimase teavitamise aeg
+            Cmd="UPDATE "+self.in_sql+" set ts_msg='"+str(self.ts)+"', chg='"+str(chg&2)+"' where val_reg='"+str(val_reg)+"'" # koik liikmed korraga sama ts_msg
+            conn.execute(Cmd)
+            #log.info(Cmd) ##
+        
         if sta_reg == val_reg: # only status will be sent then!
-            val_reg=''
-            lisa=''
+            val_reg = ''
+            lisa = ''
             values.append(status) # for msgbus
-            
-        if rowproblem == 0:
-            if self.msgbus != None:
-                self.msgbus.publish(val_reg, {'values': values, 'status': sumstatus})
-            return [sta_reg, sumstatus, val_reg, lisa]  # returns tuple to send. to be send to udp.send([])
+        
+        if self.msgbus != None:
+            self.msgbus.publish(val_reg, {'values': values, 'status': sumstatus}) # iga teenus eraldi publish, pievat kordamist pole vaja
+            return (sta_reg, sumstatus, val_reg, lisa)  # returns sendtuple to send. to be send buffered via udp.send()
         else:
-            log.warning('no sendtuple due to rowproblem')
+            log.warning('no sendtuple or publish for svc '+val_reg+' due to rowproblem')
             return None
 
 
