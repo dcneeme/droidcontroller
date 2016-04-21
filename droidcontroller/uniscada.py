@@ -337,7 +337,7 @@ class UDPchannel():
     def send(self, servicetuple, timeadd = 0): # store service components to buffer for send and resend
         ''' Adds service components into buffer table to be sent as a string message
             the components are sta_reg = '', status = 0, val_reg = '', value = ''.
-            The last parameter (use negative value!) enables to repeat an earlier value on rapid change.
+            The last parameter (use negative value!) enables to repeat an earlier value before change.
         '''
         if servicetuple == None or len(servicetuple) != 4:
             log.warning('send() ignored INVALID servicetuple (with value None or length other than 4): '+str(servicetuple))
