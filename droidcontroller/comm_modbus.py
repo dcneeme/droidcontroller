@@ -69,9 +69,7 @@ class CommModbus(Comm):
             if '/dev/tty' in self.host: # direct serial connection defined via host
                 self.port = kwargs.get('host')
                 self.do_syncserialclient(port = self.port, speed = self.speed, parity = self.parity)
-                #from pymodbus.client.sync import ModbusSerialClient as ModbusClient
-                #self.client = ModbusClient(method='rtu', stopbits=1, bytesize=8, parity='E', baudrate=19200, timeout=0.5, port=kwargs.get('host'))
-                #log.info('CommModbus() init2: created CommModbus instance for ModbusRTU over RS485 using params '+str(kwargs))
+                print('CommModbus() init2: created CommModbus instance for ModbusRTU over RS485 using params '+str(kwargs))
                 
             elif ('port' in kwargs): # both host and port - must be tcp, but possibly rtu over tcp
                 self.port = kwargs.get('port')
@@ -95,16 +93,13 @@ class CommModbus(Comm):
                     self.client = ModbusClient(
                             host = self.host,
                             port = self.port )
-                    log.info('CommModbus() init4: created CommModbus instance for ModbusTCP over TCP using params '+str(kwargs))
+                    print('CommModbus() init4: created CommModbus instance for ModbusTCP over TCP using params '+str(kwargs))
             
-        else: # serial - siin port COM...?
+        else: 
             try:
                 self.port = kwargs.get('port')
                 self.do_syncserialclient(port = self.port, speed = self.speed, parity = self.parity) # change params later if needed via set_serial()
-                #from pymodbus.client.sync import ModbusSerialClient as ModbusClient
-                #self.client = ModbusClient(method='rtu', stopbits=1, bytesize=8, parity='E', baudrate=19200, timeout=0.5, port=port)
-                #print('CommModbus() init5: created CommModbus instance for ModbusRTU over RS485 using params '+str(kwargs))
-                #log.info('CommModbus() init5: created CommModbus instance for ModbusRTU over RS485 using using params '+str(kwargs))
+                print('CommModbus() init5: created CommModbus instance for ModbusRTU over RS485 using params '+str(kwargs))
             except:
                 log.warning('failed to create CommModbus instance for ModbusRTU over RS485using params '+str(kwargs))
                 traceback.print_exc()
@@ -122,7 +117,7 @@ class CommModbus(Comm):
         if 'str' in str(type(port)) and 'str' in str(type(parity)) and 'int' in str(type(speed)) and 'int' in str(type(bytesize)):
             try:
                 self.client = ModbusClient(method='rtu', stopbits=stopbits, bytesize=bytesize, parity=parity, baudrate=speed, timeout=timeout, port=port)
-                log.info(self.name+' serial ModbusClient (re)created with params '+str(self.port)+', '+str(self.speed)+' '+str(bytesize)+parity+str(stopbits))
+                print(self.name+' serial ModbusClient (re)created with params '+str(self.port)+', '+str(self.speed)+' '+str(bytesize)+parity+str(stopbits))
                 return 0
             except:
                 log.error(self.name+' serial ModbusClient (re)creation FAILED with params '+str(self.port)+', '+str(self.speed)+' '+str(bytesize)+parity+str(stopbits))
