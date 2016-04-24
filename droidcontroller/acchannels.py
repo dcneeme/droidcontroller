@@ -398,6 +398,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             and summary stratus, sends away to UDPchannel.
         '''
         respcode = 0
+        res =0
         mba = 0
         val_reg = ''
         sta_reg = ''
@@ -489,7 +490,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             log.debug('read_all Cmd='+Cmd) ### oli kommenteeritud 31.1?
             cur.execute(Cmd) ### oli kommenteeritud 31.1?
 
-            if io_trust or time.time() > self.ts_init + 300: # in the end something will be sent...
+            if self.io_trust or time.time() > self.ts_init + 300: # in the end something will be sent...
                 for row in cur: # SERVICES LOOP
                     val_reg=row[0] # service value register name
                     #sta_reg=val_reg[:-1]+"S" # status register name ASSUMPTION. BUT MAKE_SVC ACCEPTS NOW STA_REG=''
@@ -933,7 +934,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                             #res = self.cp[self.cpi].calc(ots, raw, ts_now = self.ts) # power calculation based on raw counter increase
                             res = self.cp[self.cpi].calc(raw) # based on current ts only!
                             if res != None and res[0] != None:
-                                log.info('got calc power result from cp['+str(self.cpi)+']: '+str(res)+', based on raw '+str(raw))  ## debug
+                                log.info('got calc power result from cp['+str(self.cpi)+']: '+str(res)+', based on raw '+str(raw)+' for val_reg '+val_reg)  ## debug
                                 if (cfg&128): # on off state from power
                                     raw = res[1] # state on/off 0 or 1
                                     if res[2] != 0: # on/off change
@@ -942,7 +943,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                 else: # just power, not state
                                     raw = int(round(res[0],0)) # power in W, res[0] has 3 decimals!
                             else: # none if no increase detected
-                                log.debug('calc result raw forced to None for cp['+str(self.cpi)+']: '+str(res)+', based on initial raw '+str(raw)) # a normal thing
+                                log.warning('power calc result forced to None for cp['+str(self.cpi)+']: '+str(res)+', based on initial raw '+str(raw)+' for val_reg '+val_reg) # a normal thing on startup
                                 raw = None
                                 value = None
                                 
@@ -1027,7 +1028,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                 ##conn.execute(Cmd) # who commits? the calling method, read_all()!!!
 
                         else:
-                            msg = 'skipped updating '+self.in_sql+' due to '+val_reg+' member '+str(member)+' value None! chk regadd '+str(regadd)
+                            msg = 'skipped updating '+self.in_sql+' due to '+val_reg+' member '+str(member)+' value forced to None!'
                             if self.msg != msg:
                                 self.msg = msg
                                 log.warning(msg)
@@ -1037,7 +1038,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
                 else: # raw == None !!!!
                     pass # value = None
-                    log.warning('SKIPPED svc '+val_reg+'.'+str(member)+' value update due to raw None')
+                    log.warning('SKIPPED svc '+val_reg+'.'+str(member)+' value update due to raw None!  chk regadd '+str(mbi)+'.'+str(mba)+'.'+str(regadd))
 
             elif 's' in regtype: # setup value
                 value = ovalue # use the value in table without conversion or influence on status
