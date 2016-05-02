@@ -86,8 +86,9 @@ class NagiosMessage(object):
             Value can be missing, text, number or number array separated with spaces
         '''
         (sta_reg, status, val_reg, value) = sendtuple
+        value = value.strip(' ')
         if val_reg == '':
-            val_reg = sta_reg
+            val_reg = sta_reg # status-only service
         
         timestamp = int(time.time())
         svc_name = None
@@ -106,8 +107,8 @@ class NagiosMessage(object):
             out_unit = row[1]
             conv_coef = row[2]
             desc = row[3+status]
-            multiperf = row[6].split(' ') if row[6] != None else [svc_name] # liikmete nimetuste list, perf datasse vordusmargi ette
-            multivalue = row[7].split(' ') if row[7] != None else [] # liikmete jrk numbrite list, selle alusel vaartused desc loppu kooloni taha
+            multiperf = row[6].strip(' ').split(' ') if row[6] != None else [svc_name] # liikmete nimetuste list, perf datasse vordusmargi ette
+            multivalue = row[7].strip(' ').split(' ') if row[7] != None else [] # liikmete jrk numbrite list, selle alusel vaartused desc loppu kooloni taha
 
         if not svc_name:
             log.warning('translation for sendtuple '+str(sendtuple)+' not found in table '+self.table)
@@ -121,34 +122,46 @@ class NagiosMessage(object):
         perfdata = '' 
         descvalue = '' # values to desc end after colon, if any, according to multivalue
         if out_unit == '':
-                out_unit = '_' # to align diagrmans with and without unit
+                out_unit = '_' # to align diagrams with and without unit
         
-        if len(multiperf) > 1: # multimember value
-            log.info('num members '+str(multiperf)+', value '+str(value))
-            for i in range(len(multiperf)):
-                if conv_coef != '':
-                    valmember = round(1.0 * int(value.split(' ')[i]) / int(conv_coef),2)
-                else: # int, not to divide
-                    valmember = int(value.split(' ')[i])
-                if len(perfdata) > 0:
-                    perfdata += ' '
-                perfdata += multiperf[i] + '='+str(valmember) + out_unit
-                if desc[-1:] == ':' and str(i + 1) in multivalue:
-                    descvalue += ' '+ str(valmember)
-            if desc[-1:] == ':':
-                descvalue += ' ' + out_unit # unit after the members
+        if val_reg == sta_reg: # status only service!
+            if len(multiperf) > 1:
+                log.error('INVALID service configuration for sta_reg '+sta_reg+', multiperf '+str(multiperf)+', multivalue '+str(multivalue)+', stopped processing '+val_reg)
+                return None
+            else:
+                log.debug('using status as perfdata for '+sta_reg)
+                perfdata += svc_name + '='+str(status)+out_unit
+    
+        elif len(multiperf) > 1: # multimember num values
+            if len(multiperf) == len(value.split(' ')): # member count ok, matches with dataset count
+                log.debug('num members '+str(multiperf)+', value '+str(value))
+                for i in range(len(multiperf)):
+                    if conv_coef != '':
+                        valmember = round(1.0 * int(value.split(' ')[i]) / int(conv_coef),2)
+                    else: # int, not to divide
+                        valmember = int(value.split(' ')[i])
+                    if len(perfdata) > 0:
+                        perfdata += ' '
+                    perfdata += multiperf[i] + '='+str(valmember) + out_unit
+                    if desc[-1:] == ':' and str(i + 1) in multivalue:
+                        descvalue += ' '+ str(valmember)
+                if desc[-1:] == ':':
+                    descvalue += ' ' + out_unit # unit after the members
+            else:
+                log.error('member count for multiperf '+str(multiperf)+' and value '+str(value)+' do not match! stopped processing '+val_reg)
+                return None
                 
         elif len(multiperf) == 1 and value != '': # single member numeric value
             # if dataset name is not given, use service name for perf data
             if (svc_name == 'FlowTotal' or svc_name == 'PumbatudKogus'  or sta_reg[-1:] == 'F'): # hex float
                 value = floatfromhex(value)
-                log.info('hex float to decimal conversion done, new value='+str(value))
+                log.debug('hex float to decimal conversion done, new value='+str(value))
             else:
                 if conv_coef != '' and conv_coef != None:
-                    log.info('single num to be converted')
+                    log.debug('single num to be converted')
                     value = round(1.0 * int(value) / int(conv_coef),2)
                 else: #leave value as it is, nay be string as well
-                    log.info('possible string due to no conf_coef, value='+str(value))
+                    log.debug('possible string due to no conf_coef, value='+str(value))
                     
             #perfdata += svc_name + '='+str(value) + out_unit
             if not 'str' in str(type(value)):
@@ -163,12 +176,10 @@ class NagiosMessage(object):
                 if not 'str' in str(type(value)):
                     descvalue += out_unit
             
-        #elif multiperf == '' and multivalue == '' and conv_coef == '' and out_unit == '_': # status only service!
-        elif val_reg == sta_reg: # status only service!
-            log.info('status as perfdata')
-            perfdata += svc_name + '='+str(status)+out_unit
         else:
-            log.error('INVALID service configuration, svc_name '+svc_name+', multiperf '+str(multiperf)+', multivalue '+str(multivalue)+', value "'+str(value)+'"')
+            log.error('INVALID service configuration, svc_name '+svc_name+', val_reg '+val_reg+', multiperf '+str(multiperf)+', multivalue '+str(multivalue)+', value "'+str(value)+'"')
+            return None
+        
         
         nagstring = "["+str(timestamp)+"] PROCESS_SERVICE_CHECK_RESULT;"+self.host_id+";"+svc_name+";"+str(status)+";"+desc+descvalue+"|"+perfdata+"\n"
         
