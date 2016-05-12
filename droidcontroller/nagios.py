@@ -23,14 +23,18 @@ log = logging.getLogger(__name__)
 #class NagiosMessage(SQLgeneral):
 class NagiosMessage(object):
     ''' Generate Nagios passive check commands for parallel notification and send as UDP '''
-    def __init__(self, host_id, table, nagios_ip='10.0.0.253', nagios_port=50000, debug_svc = False):
+    def __init__(self, host_id, table=None, nagios_ip='10.0.0.253', nagios_port=50000, debug_svc = False):
         self.debug_svc = debug_svc # alakriipsuga algavaid ei edasta, kui see on False
-        self.table = table
+        if table != None:
+            self.table = table
+            self.conn = sqlite3.connect(':memory:')
+            self.cur = self.conn.cursor()
+            self.sqlread() # read in service translation table from sql file
+        else:
+            log.warning('sqlite not used')
+            
         self.host_id = host_id
-        self.conn = sqlite3.connect(':memory:')
-        self.cur = self.conn.cursor()
-        self.sqlread() # read in service translation table from sql file
-
+        
         self.nagaddr = (nagios_ip, nagios_port) # tuple
         self.UDPnagSock = socket(AF_INET,SOCK_DGRAM)
         self.UDPnagSock.settimeout(None) # no answer from nagios
@@ -90,7 +94,6 @@ class NagiosMessage(object):
         if val_reg == '':
             val_reg = sta_reg # status-only service
         
-        timestamp = int(time.time())
         svc_name = None
         conv_coef = ''
         desc = 'UndefDesc'
@@ -110,6 +113,8 @@ class NagiosMessage(object):
             multiperf = row[6].strip(' ').split(' ') if row[6] != None else [svc_name] # liikmete nimetuste list, perf datasse vordusmargi ette
             multivalue = row[7].strip(' ').split(' ') if row[7] != None else [] # liikmete jrk numbrite list, selle alusel vaartused desc loppu kooloni taha
 
+        self.convert(self, sendtuple, svc_name, out_unit, conv_coef, desc, multiperf, multivalue)
+        
         if not svc_name:
             log.warning('translation for sendtuple '+str(sendtuple)+' not found in table '+self.table)
             return '' # will not send this service 
@@ -119,10 +124,24 @@ class NagiosMessage(object):
             return ''
         
         log.info('svc_name '+svc_name+', multiperf '+str(multiperf)+', multivalue '+str(multivalue)+', value '+str(value)) 
-        perfdata = '' 
-        descvalue = '' # values to desc end after colon, if any, according to multivalue
+        
         if out_unit == '':
                 out_unit = '_' # to align diagrams with and without unit
+        
+        return self.convert(sendtuple, svc_name, out_unit, conv_coef, desc, multiperf, multivalue)
+        
+        
+        
+    def convert(self, sendtuple, multiperf, multivalue, svc_name='SvcName', out_unit='', conv_coef='1', desc='kirjeldus:'):
+        ''' creates nagios message based on sendtuple and configuration data '''
+        (sta_reg, status, val_reg, value) = sendtuple
+        perfdata = '' 
+        descvalue = '' # values to desc end after colon, if any, according to multivalue
+        value = value.strip(' ')
+        if val_reg == '':
+            val_reg = sta_reg # status-only service
+            
+        timestamp = int(time.time())
         
         if val_reg == sta_reg: # status only service!
             if len(multiperf) > 1:
