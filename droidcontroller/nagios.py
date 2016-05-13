@@ -128,52 +128,72 @@ class NagiosMessage(object):
         if out_unit == '':
                 out_unit = '_' # to align diagrams with and without unit
         
-        return self.convert(sendtuple, svc_name, out_unit, conv_coef, desc, multiperf, multivalue)
+        return self.convert(sendtuple, svc_name=svc_name, out_unit=out_unit, conv_coef=conv_coef, desc=desc, multiperf=multiperf, multivalue=multivalue, host_id=self.host_id)
         
         
         
-    def convert(self, sendtuple, multiperf, multivalue, svc_name='SvcName', out_unit='', conv_coef='1', desc='kirjeldus:'):
-        ''' creates nagios message based on sendtuple and configuration data '''
+    def convert(self, sendtuple, multiperf, multivalue, svc_name='SvcName', out_unit='', conv_coef='1', desc='kirjeldus:', host_id='host?', ts=None): 
+        ''' creates nagios message based on sendtuple and configuration data. ts '''
         (sta_reg, status, val_reg, value) = sendtuple
         perfdata = '' 
         descvalue = '' # values to desc end after colon, if any, according to multivalue
         value = value.strip(' ')
-        if val_reg == '':
+        
+        if val_reg == '' and sta_reg != None:
             val_reg = sta_reg # status-only service
+        if sta_reg == None and val_reg != '' and val_reg != None:   # status probably in the different datagram from older controllers!
+            sta_reg=val_reg[:-1]+'S' # restore status
+        
+        if host_id == None or svc_name == None or desc == None or host_id == None:
+            log.error('invalid parameters for convert: host_id '+str(host_id)+' or svc_name '+str(svc_name)+' or desc '+str(desc))
+            return None
             
-        timestamp = int(time.time())
+        if ts != None:
+            timestamp = ts
+        else:
+            timestamp = int(time.time()) # used for ts if None
         
         if val_reg == sta_reg: # status only service!
             if len(multiperf) > 1:
-                log.error('INVALID service configuration for sta_reg '+sta_reg+', multiperf '+str(multiperf)+', multivalue '+str(multivalue)+', stopped processing '+val_reg)
+                log.error('INVALID service configuration for sta_reg '+sta_reg+', multiperf '+str(multiperf)+', multivalue '+str(multivalue)+', stopped processing '+val_reg+' for host '+host_id)
                 return None
             else:
                 log.debug('using status as perfdata for '+sta_reg)
                 perfdata += svc_name + '='+str(status)+out_unit
     
         elif len(multiperf) > 1: # multimember num values
-            if len(multiperf) == len(value.split(' ')): # member count ok, matches with dataset count
-                log.debug('num members '+str(multiperf)+', value '+str(value))
-                for i in range(len(multiperf)):
-                    if conv_coef != '':
-                        valmember = round(1.0 * int(value.split(' ')[i]) / int(conv_coef),2)
-                    else: # int, not to divide
-                        valmember = int(value.split(' ')[i])
-                    if len(perfdata) > 0:
-                        perfdata += ' '
-                    perfdata += multiperf[i] + '='+str(valmember) + out_unit
-                    if desc[-1:] == ':' and str(i + 1) in multivalue:
-                        descvalue += ' '+ str(valmember)
-                if desc[-1:] == ':':
-                    descvalue += ' ' + out_unit # unit after the members
+            multivalue = value.split(' ')
+            #if len(multiperf) == len(value.split(' ')): # member count ok, matches with dataset count
+            if len(multiperf) == len(multivalue):
+                membercountOK = True # member count ok, matches with dataset count
             else:
-                log.error('member count for multiperf '+str(multiperf)+' and value '+str(value)+' do not match! stopped processing '+val_reg)
-                return None
+                membercountOK = False
+                log.warning('non-matching count of dataset names and members: '+str(multiperf)+', value '+str(value)+', host '+host_id+', svc '+svc_name)
+                
+            for i in range(len(multivalue)): # loop for member adding
+                if conv_coef != '':
+                    valmember = round(1.0 * int(value.split(' ')[i]) / int(conv_coef),2)
+                else: # int, not to divide
+                    valmember = int(value.split(' ')[i])
+                if len(perfdata) > 0:
+                    perfdata += ' '
+                
+                if membercountOK:
+                    perfdata += multiperf[i]
+                else:
+                    perfdata += 'ds'+str(i+1) + out_unit
+                
+                perfdata += '='+str(valmember) + out_unit
+                
+                if desc[-1:] == ':' and str(i + 1) in multivalue:
+                    descvalue += ' '+ str(valmember)+ out_unit ## siit vota out_unit ara
+            ##if desc[-1:] == ':': # taasta hiljem se ja jargmine rida et ei oleks iga liikme taga yhik
+            ##    descvalue += ' ' + out_unit # unit after the members
                 
         elif len(multiperf) == 1 and value != '': # single member numeric value
             # if dataset name is not given, use service name for perf data
             if (svc_name == 'FlowTotal' or svc_name == 'PumbatudKogus'  or sta_reg[-1:] == 'F'): # hex float
-                value = floatfromhex(value)
+                value = self.floatfromhex(value)
                 log.debug('hex float to decimal conversion done, new value='+str(value))
             else:
                 if conv_coef != '' and conv_coef != None:
@@ -196,11 +216,11 @@ class NagiosMessage(object):
                     descvalue += out_unit
             
         else:
-            log.error('INVALID service configuration, svc_name '+svc_name+', val_reg '+val_reg+', multiperf '+str(multiperf)+', multivalue '+str(multivalue)+', value "'+str(value)+'"')
+            log.error('INVALID service configuration, svc_name '+svc_name+', val_reg '+val_reg+', multiperf '+str(multiperf)+', multivalue '+str(multivalue)+', value "'+str(value)+'", host '+host_id)
             return None
         
         
-        nagstring = "["+str(timestamp)+"] PROCESS_SERVICE_CHECK_RESULT;"+self.host_id+";"+svc_name+";"+str(status)+";"+desc+descvalue+"|"+perfdata+"\n"
+        nagstring = "["+str(timestamp)+"] PROCESS_SERVICE_CHECK_RESULT;"+host_id+";"+svc_name+";"+str(status)+";"+desc+descvalue+"|"+perfdata+"\n"
         
         return nagstring
 
