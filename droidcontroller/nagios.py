@@ -15,7 +15,7 @@ sqlread: successfully created table service_ho_koogu20_ee
 
 '''
 
-import time, sys, traceback, sqlite3
+import time, sys, traceback, sqlite3, decimal
 from socket import *
 import logging
 log = logging.getLogger(__name__)
@@ -25,6 +25,7 @@ class NagiosMessage(object):
     ''' Generate Nagios passive check commands for parallel notification and send as UDP '''
     def __init__(self, host_id, table=None, nagios_ip='10.0.0.253', nagios_port=50000, debug_svc = False):
         self.debug_svc = debug_svc # alakriipsuga algavaid ei edasta, kui see on False
+        self.decget = decimal.getcontext().copy()
         if table != None:
             self.table = table
             self.conn = sqlite3.connect(':memory:')
@@ -161,20 +162,22 @@ class NagiosMessage(object):
                 log.debug('using status as perfdata for '+sta_reg)
                 perfdata += svc_name + '='+str(status)+out_unit
     
-        elif len(multiperf) > 1: # multimember num values
-            multivalue = value.split(' ')
+        #elif len(multiperf) > 1: # multimember num values
+        elif val_reg[-1] == 'W': # multimember num values
+            mvalues = value.strip(' ').split(' ')
             #if len(multiperf) == len(value.split(' ')): # member count ok, matches with dataset count
-            if len(multiperf) == len(multivalue):
+            if len(multiperf) == len(mvalues):
                 membercountOK = True # member count ok, matches with dataset count
             else:
                 membercountOK = False
                 log.warning('non-matching count of dataset names and members: '+str(multiperf)+', value '+str(value)+', host '+host_id+', svc '+svc_name)
                 
-            for i in range(len(multivalue)): # loop for member adding
+            for i in range(len(mvalues)): # loop for member adding
                 if conv_coef != '':
-                    valmember = round(1.0 * int(value.split(' ')[i]) / int(conv_coef),2)
+                    #valmember = round(1.0 * int(value.split(' ')[i]) / int(conv_coef),2)
+                    valmember = round(1.0 * int(mvalues[i]) / float(conv_coef),2)
                 else: # int, not to divide
-                    valmember = int(value.split(' ')[i])
+                    valmember = int(mvalues[i])
                 if len(perfdata) > 0:
                     perfdata += ' '
                 
@@ -185,22 +188,27 @@ class NagiosMessage(object):
                 
                 perfdata += '='+str(valmember) + out_unit
                 
-                if desc[-1:] == ':' and str(i + 1) in multivalue:
-                    descvalue += ' '+ str(valmember)+ out_unit ## siit vota out_unit ara
-            ##if desc[-1:] == ':': # taasta hiljem se ja jargmine rida et ei oleks iga liikme taga yhik
-            ##    descvalue += ' ' + out_unit # unit after the members
+                if desc[-1] == ':' and str(i + 1) in multivalue:
+                    descvalue += ' '+ str(valmember) # + out_unit ## siit vota out_unit ara
+            if desc[-1:] == ':': # tsykkel labi, liikmevaartuste joru taha yhik
+                descvalue += ' ' + out_unit # unit after the members
                 
-        elif len(multiperf) == 1 and value != '': # single member numeric value
+        elif (val_reg[-1] == 'V' or val_reg[-1] == 'F') and len(multiperf) == 1 and value != '': # single member numeric or string value
             # if dataset name is not given, use service name for perf data
             if (svc_name == 'FlowTotal' or svc_name == 'PumbatudKogus'  or sta_reg[-1:] == 'F'): # hex float
                 value = self.floatfromhex(value)
                 log.debug('hex float to decimal conversion done, new value='+str(value))
-            else:
+            else: ## AGA kui on string siis perf datasse olek!
                 if conv_coef != '' and conv_coef != None:
                     log.debug('single num to be converted')
-                    value = round(1.0 * int(value) / int(conv_coef),2)
-                else: #leave value as it is, nay be string as well
+                    #value = round(1.0 * int(value) / int(conv_coef),2)
+                    value = round(1.0 * int(value) / float(conv_coef),2)
+                    ## decget=decimal.getcontext().copy() # initisse
+                    #value=round(self.decget.create_decimal(str(float(value)/float(conv_coef))),2)
+                    
+                else: # add value to desc if colon, use status as value
                     log.debug('possible string due to no conf_coef, value='+str(value))
+                    
                     
             #perfdata += svc_name + '='+str(value) + out_unit
             if not 'str' in str(type(value)):
@@ -210,13 +218,13 @@ class NagiosMessage(object):
             else:
                 perfdata += svc_name + '_status='+str(status) + out_unit
             
-            if desc[-1:] == ':':
+            if desc[-1] == ':':
                 descvalue += ' '+ str(value)
                 if not 'str' in str(type(value)):
                     descvalue += out_unit
             
         else:
-            log.error('INVALID service configuration, svc_name '+svc_name+', val_reg '+val_reg+', multiperf '+str(multiperf)+', multivalue '+str(multivalue)+', value "'+str(value)+'", host '+host_id)
+            log.error('INVALID service, svc_name '+svc_name+', sta_reg '+str(sta_reg)+', status '+str(status)+', val_reg '+str(val_reg)+', multiperf '+str(multiperf)+', multivalue '+str(multivalue)+', value "'+str(value)+'", host '+host_id)
             return None
         
         
