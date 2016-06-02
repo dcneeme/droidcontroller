@@ -492,7 +492,7 @@ class RegularComm(SQLgeneral): # r
                     if (self.uptime[0] < 1800) or (self.uptime[1] < 1800): # sys, app uptime
                         status = 1
 
-                elif svc == 'IPV' or svc == 'ip' or svc == 'ipV': # ip address currently in use
+                elif svc == 'IPV' or svc == 'ipV': # ip address currently in use
                     valuestring = self.get_host_ip() # ip address in use from a list starting with tun0
                     # status = 0 # make it warning if vpn active?
 
@@ -526,7 +526,7 @@ class RegularComm(SQLgeneral): # r
                         log.warning('psutil.disk_usage failed')
                         #traceback.print_exc()
                 else:
-                    valuestring = 'regular service '+svc+' not yet supported'
+                    valuestring = None # 'regular service '+svc+' not yet supported' # naiteks d2W
 
                 if valuestring != None and len(valuestring) > 0:
                     res += udp.send([svc[:-1]+'S', status, svc, valuestring]) # via buffer. udp.send() adds ts
