@@ -308,8 +308,8 @@ class Gcal(object):
             return False
 
 
-    def get_min(self, title='el_energy_EE', ts_max=0): # ts_until 0 means until the values for title end
-        ''' select ts,min(value) from changes where mac='el_energy_EE' and ts+0 < tsmax and ts+0>tsnow '''
+    def get_min(self, title, ts_max=0): # ts_until 0 means until the values for title end
+        ''' get minimum value time before or equal to ts_max '''
         found = 0
         tsnow = time.time()
         if ts_max == 0:
@@ -333,7 +333,7 @@ class Gcal(object):
 
 
     def next_time2sec(self, hour, minute=0):
-        ''' convert the next occurence of localtime hour,min into sec '''
+        ''' convert the next occurence of localtime hour, min into sec '''
         # time.asctime(time.localtime(int(row[1]))))
         tsnow = int(time.time())
         d = time.localtime(tsnow) # y, m, d, h, min, sec, wd, yd, isdst
@@ -346,10 +346,10 @@ class Gcal(object):
         return sec
 
 
-    def set_untilmin(self, title_set, title_ref='el_energy_EE', maxhour=5, maxminute=0):
-        ''' sets event from now until now+len '''
+    def set_untilmin(self, title_set, title_ref, maxhour=5, maxminute=0):
+        ''' sets title_set event from now until title_ref min value. '''
         ts_max = self.next_time2sec(maxhour, maxminute)
-        ts_until = self.get_min(title='el_energy_EE', ts_max=ts_max)[0] # ts of minvalue only needed here
+        ts_until = self.get_min(title_ref, ts_max=ts_max)[0] # ts of minvalue only needed here
         if ts_until == None: # minimum or ref value not found
             log.error('minimum or ref value for calendar pulse setting NOT found')
             return None
@@ -380,8 +380,10 @@ class Gcal(object):
             return None # kui insert ei onnestu, siis ka delete ei toimu
 
 
-    def set_top(self, title_set, title_ref='el_energy_EE', tophours=6, inv = False): # 6h is 25% of 24h # ei tohi kustutada viimast eventi?
-        ''' set values 1 if the hours are in the top price selection. use before midnight. IF inv == True, top low instead of top hi is set! '''
+    def set_top(self, title_set, title_ref, tophours=6, inv = False): # 6h is 25% of 24h # ei tohi kustutada viimast eventi?
+        ''' set title_set values 1 if the hours are in the top values selection of title_ref. use before midnight. 
+            IF inv == True, top low instead of top hi is set! 
+        '''
         midnight = self.next_time2sec(0, minute=0) # next midnight, prices known 24h ahead from that
         threshold = None
         if tophours > 23:

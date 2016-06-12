@@ -260,13 +260,18 @@ class SerialConf:
 
     def doall(self):
         ''' read, write, read configuration '''
-        self.set_mode() # switching into at command mode, changing speed/parity if needed
+        res = self.set_mode() # switching into at command mode, changing speed/parity if needed
         ##self.get_conf() # read current config
+        if res != 0:
+            return
+            
         print('going to write new configuration\n')
         self.set_conf() # set new config and restarts
         print('wait for module restart\n')
         time.sleep(10)
         self.set_mode() # switching into at command mode
+        if res != 0:
+            return
         self.get_conf() # read new config
         if self.mode == 'sta':
             self.get_networks() # show networks

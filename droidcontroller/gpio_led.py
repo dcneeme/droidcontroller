@@ -57,7 +57,7 @@ class GPIOLED:
             return 1
             
     def commLED(self, state): # olinuxino gpio pin10
-        ''' Parameter 1 lights LED. 0 turns off. Via PIN15 '''
+        ''' Parameter 1 lights up the green LED. 0 turns off. Via PIN15 '''
         try:
             GPIO.output(GPIO.PIN15, (state&1)) # only 0 or 1 allowed
             return 0
@@ -67,7 +67,7 @@ class GPIOLED:
             return 1
 
     def alarmLED(self, state): # olinuxino gpio pin11
-        ''' Parameter 1 lights LED. 0 turns off. Via PIN17 '''
+        ''' Parameter 1 lights up the red LED. 0 turns off. Via PIN17 '''
         try:
             GPIO.output(GPIO.PIN17, (state&1)) # only 0 or 1 allowed
             return 0

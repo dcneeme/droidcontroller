@@ -1,11 +1,8 @@
 # This Python file uses the following encoding: utf-8
 
 '''  control pwm based on values difference using pid and io it5888 '''
-
-#from codecs import encode # for encode to work in py3
 import time
 import traceback
-#import struct  # struct.unpack for float from hex
 from droidcontroller.pid import PID
 from droidcontroller.statekeeper import StateKeeper # state
 
@@ -23,7 +20,7 @@ class Diff2Pwm(object):
         self.pwm = None
         self.mb = mb # CommModbus instance
         self.name = name
-        self.state = StateKeeper(name='vent_state', off_tout=off_tout)
+        self.state = StateKeeper(name=name, off_tout=off_tout)
         self.upspeed = upspeed
         self.dnspeed = dnspeed
         self.mbi = out_ch[0] # modbus channel, the same for input and output!
@@ -40,15 +37,14 @@ class Diff2Pwm(object):
         except:
             log.error('FAILED to write period into register 150 at mbi.mba '+str(self.mbi)+'.'+str(self.mba))
 
-        # setpoint = 0, P = 1.0, I = 0.01, D = 0.0, min = None, max = None, outmode = 'nolist', name='undefined', dead_time = 0, inv=False):
         self.pid = PID(name=name, P=P, I=I, D=D, min=self.outMin, max=self.outMax, outmode='list') # for fast pwm control. D mainly for change speed!
 
 
     def react(self, invalues, outMin=None, delay=5):
         ''' no need to react too often ... keep 5 s delay. returns self.pwm, [pidcomp], state '''
         ts = time.time()
-        if ts < self.ts_react + 5:
-            return None # not this time...
+        ## if ts < self.ts_react + 5:
+        ##    return None # not this time...
 
         self.ts_react = ts
         if outMin != None:
@@ -67,9 +63,9 @@ class Diff2Pwm(object):
 
         if len(invalues) == 2: # setpoint, actual. add ventilation if setpoint below actual
             #if self.outMin > 0 or (invalues[0] > invalues[1]):
-            if self.outMin > 0 and (invalues[0] > invalues[1]): # avoid restart
+            if (invalues[0] > invalues[1]): 
                 self.state.up() # igal juhul lubatud
-                log.info(self.name+' state up due to outMin '+str(self.outMin)+', invalues '+str(invalues))
+                log.info(self.name+' state up due to invalues '+str(invalues)) # no speed to watch
             self.pid.setSetpoint(invalues[0])
             self.pid.set_actual(invalues[1])
             pidout = self.pid.output()
@@ -80,8 +76,6 @@ class Diff2Pwm(object):
                 pidcomp = pidout[1:4]
                 chgspeed = pidcomp[2] # p, i, d
                 if self.upspeed != None and statetuple[0] == 0: # not yet started but could perhaps
-                    #if (chgspeed > self.upspeed and self.outMin > 0): # error decreasing fast
-                    #if (chgspeed > self.upspeed and pwm > self.outMin): # lylitame varem sisse kiire temp tousu korral
                     if chgspeed > self.upspeed: # lylitame sisse kiire temp tousu korral
                         self.state.up()
                         log.info(self.name+' state up due to chgspeed '+str(chgspeed))
@@ -89,16 +83,15 @@ class Diff2Pwm(object):
                         log.warning(self.name+' state up due to speed, pwm '+str(pwm)+', chgspeed '+str(chgspeed)+', upspeed '+str(self.upspeed))
                 
                 if self.dnspeed != None and statetuple[0] == 1:
-                    #if chgspeed < self.dnspeed and self.outMin == 0:
                     if chgspeed < self.dnspeed and self.outMin < 250:
                         self.state.dn()
                         log.warning(self.name+' state down due to speed, pwm '+str(pwm)+', chgspeed '+str(chgspeed)+', dnspeed '+str(self.dnspeed))
                 
                 if pwm > self.outMax:
-                    log.warning('fixing pid output for pwm '+str(pwm)+' to max '+str(self.outMax))
+                    log.warning(self.name+' fixing pid output for pwm '+str(pwm)+' to max '+str(self.outMax))
                     pwm = self.outMax
                 if pwm < self.outMin:
-                    log.warning('fixing pid output for pwm '+str(pwm)+' to min '+str(self.outMin))
+                    log.warning(self.name+' fixing pid output for pwm '+str(pwm)+' to min '+str(self.outMin))
                     pwm = self.outMin
                 
                 if pwm == 0:
@@ -110,24 +103,25 @@ class Diff2Pwm(object):
 
                 if statetuple[0] == 1 and statetuple[1] < self.boost_time: # on for less than
                     pwm = self.outMax
-                    log.warning('pwm temporarely boosted to '+str(self.outMax)+' due to state just turned ON')
+                    log.warning(self.name+' pwm temporarely boosted to '+str(self.outMax)+' due to state just turned ON')
 
                 if statetuple[0] == 0: # state off
                     pwm = 0
 
                 res = self.output(pwm) # send to output
             else:
-                pwm = None # due to pid output None 
+                pwm = None # due to pid output None
+                log.error('pwm output None due to pid output None!')
                 
             if pwm != self.pwm:
-                log.info(self.name+' new pwm value '+str(pwm)+' replacing the old '+str(self.pwm))
+                log.info(self.name+' new pwm value '+str(pwm)+', old was '+str(self.pwm))
                 self.pwm = pwm
                 
             
             if self.pwm != None:
                 return self.pwm, [pidcomp], statetuple[0] # pidcom is list
             else:
-                log.warning('pwm None due to some reason. invalues '+str(invalues)+', pidout '+str(pidout))
+                log.error(self.name+' pwm None due to some reason. invalues '+str(invalues)+', pidout '+str(pidout))
                 return None
                 
 

@@ -114,7 +114,7 @@ class NagiosMessage(object):
             multiperf = row[6].strip(' ').split(' ') if row[6] != None else [svc_name] # liikmete nimetuste list, perf datasse vordusmargi ette
             multivalue = row[7].strip(' ').split(' ') if row[7] != None else [] # liikmete jrk numbrite list, selle alusel vaartused desc loppu kooloni taha
 
-        self.convert(self, sendtuple, svc_name, out_unit, conv_coef, desc, multiperf, multivalue)
+        self.convert(sendtuple, svc_name, out_unit, conv_coef, desc, multiperf, multivalue)
         
         if not svc_name:
             log.warning('translation for sendtuple '+str(sendtuple)+' not found in table '+self.table)

@@ -18,7 +18,7 @@ class MyBasenSend(object):
     '''
 
     def __init__(self, aid = '', uid = b'', passwd = b'', path= 'tutorial/testing'):
-        ''' Sender to mybase '''
+        ''' Sender to mybasen '''
         self.url = 'https://mybasen.pilot.basen.com/_ua/'+aid+'/v0.1/data'
         self.uid = uid # binary!
         self.passwd = passwd # binary!

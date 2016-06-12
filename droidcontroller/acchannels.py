@@ -1,7 +1,7 @@
 # This Python file uses the following encoding: utf-8
 
 from droidcontroller.sqlgeneral import * # SQLgeneral  / vaja ka time,mb, conn jne
-s=SQLgeneral() # esialgu vaid selleparast, et main seest kasutatakse veel... asendada d. ja ac. -ga!
+s=SQLgeneral() ## esialgu vaid selleparast, et mones kohas main seest kasutatakse veel... asendada d. ja ac. -ga!
 from droidcontroller.counter2power import *  # Counter2Power() as cp handles power calculation based on pulse count increments
 
 import time
@@ -122,7 +122,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                             # replace actual counters only if bigger than existing or zero and not 1wire channel, no limits for setup type 's!'
                             member = valmember+1
 
-                            log.debug('going to replace '+key+' member '+str(member)+' existing value '+str(sqlvalue)+' with '+str(value)) # debug
+                            log.info('going to replace '+key+' member '+str(member)+' value '+str(sqlvalue)+' with '+str(value)) # debug
                             # faster to use physical data instead of svc. also clear counter2power buffer if cp[] exsists!
 
                             if regtype == 's!': # setup row, external modif allowed (!)
@@ -133,7 +133,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                         log.info(msg)
                                         #udp.syslog(msg)
                                     else:
-                                        msg = 'svc member setting problem for key '+str(key)+', member '+str(member)+' to value '+str(value)
+                                        msg = 'setup PROBLEM with svc '+str(key)+', member '+str(member)+', needed value '+str(value)
                                         log.warning(msg)
                                         #udp.syslog(msg)
                                         res += 1
@@ -170,8 +170,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         else: # skip
                             log.warning('SKIPPED restore for key '+key+' due to regtype '+regtype+', sqlvalue '+str(sqlvalue)+', value '+str(value))
 
-            if found > 0:  # process status too
-                self.make_svc(key,'') ### processing svc and notify about new counter value
+            #if found > 0:  # process status too
+            #    self.make_svc(key,'') ### processing svc and notify about new counter value ## THIS WILL REPORT svc!!
 
         if setup_changed == 1:
             log.info('going to dump table '+self.in_sql)
@@ -490,16 +490,16 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             log.debug('read_all Cmd='+Cmd) ### oli kommenteeritud 31.1?
             cur.execute(Cmd) ### oli kommenteeritud 31.1?
 
-            if self.io_trust or time.time() > self.ts_init + 300: # in the end something will be sent...
-                for row in cur: # SERVICES LOOP
-                    val_reg=row[0] # service value register name
-                    #sta_reg=val_reg[:-1]+"S" # status register name ASSUMPTION. BUT MAKE_SVC ACCEPTS NOW STA_REG=''
+            #if self.io_trust or time.time() > self.ts_init + 300: # in the end something will be sent...  WHAT>?>>>
+            #    for row in cur: # SERVICES LOOP
+            #        val_reg=row[0] # service value register name
+            #        #sta_reg=val_reg[:-1]+"S" # status register name ASSUMPTION. BUT MAKE_SVC ACCEPTS NOW STA_REG=''
 
-                    #log.debug('processing '+self.in_sql+' rows into service with val_reg '+val_reg+' sta_reg '+sta_reg)
-                    #self.make_svc(val_reg,sta_reg) ## sets status and notifies id status chg in any member
-                    self.make_svc(val_reg) ## sets status and notifies id status chg in any member. self.cpi?
-            else:
-                log.warning('skipped make_svc loop due to no io_trust and instance uptime below 300 s')
+            #        #log.debug('processing '+self.in_sql+' rows into service with val_reg '+val_reg+' sta_reg '+sta_reg)
+            #        #self.make_svc(val_reg,sta_reg) ## sets status and notifies id status chg in any member
+            #        self.make_svc(val_reg) ## sets status and notifies id status chg in any member. self.cpi?
+            #else:
+            #    log.warning('skipped make_svc loop due to no io_trust and instance uptime below 300 s')
             conn.commit() #  haarab ka make_svc()
             sys.stdout.write('A')
             return 0
@@ -875,13 +875,13 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 val_reg = srow[2] # see on string
                 member = int(srow[3]) if srow[3] != '' else 0
                 cfg = int(srow[4]) if srow[4] != '' else 0 # konfibait nii ind kui grp korraga, esita hex kujul hiljem
-                x1 = float(srow[5]) if srow[5] != '' else 0
-                x2 = float(srow[6]) if srow[6] != '' else 0
-                y1 = float(srow[7]) if srow[7] != '' else 0
-                y2 = float(srow[8]) if srow[8] != '' else 0
-                outlo = float(srow[9]) if srow[9] != '' else None
-                outhi = float(srow[10]) if srow[10] != '' else None
-                avg = float(srow[11]) if srow[11] != '' else 0  #  averaging strength, values 0 and 1 do not average!
+                x1 = int(srow[5]) if srow[5] != '' else 0
+                x2 = int(srow[6]) if srow[6] != '' else 0
+                y1 = int(srow[7]) if srow[7] != '' else 0
+                y2 = int(srow[8]) if srow[8] != '' else 0
+                outlo = int(srow[9]) if srow[9] != '' else None
+                outhi = int(srow[10]) if srow[10] != '' else None # siia tuleb vahel value, kui ta olemas on??
+                avg = int(srow[11]) if srow[11] != '' else 0  #  averaging strength, values 0 and 1 do not average!
                 block = int(srow[12]) if srow[12] != '' else 0 # off-tout for power related on/off
                 raw = int(srow[13]) if srow[13] != '' else None # None on vaja! 0 ei tohi saata kui oige vaartus puudub!
                 ovalue = int(srow[14]) if (srow[14] != '' ) else None # teenuseliikme endine vaartus
@@ -1021,7 +1021,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                 conn.execute(Cmd) # who commits? the calling method, read_all()!!!
                                 log.debug(Cmd) # status and value update based on raw
                             else:
-                                log.warning('val_reg '+val_reg+'.'+str(member)+' value '+str(value)+' out of allowed band from '+str(lolim)+' to ' +str(hilim)+', raw '+str(raw))
+                                log.warning('val_reg '+val_reg+'.'+str(member)+' value '+str(value)+' out of allowed band from '+str(lolim)+' to ' +str(hilim)+', raw '+str(raw)+', nolim ' +str(nolim)+', outlo ' +str(outlo)+', outhi ' +str(outhi))
                                 raw = None  ## but still updating status... to avoid excessive status change related reporting with faulty limits ????
                                 value = None
                                 #Cmd="update "+self.in_sql+" set status='"+str(mstatus)+"' where val_reg='"+val_reg+"' and member='"+str(member)+"'"
@@ -1203,7 +1203,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             if self.chg > 0:
                 log.info('irregular ac reporting due to '+str(self.chg)+' value change(s)')
             else:
-                log.debug('normal reporting due sendperiod '+str(self.sendperiod)+' elapsed')
+                log.info('normal ac reporting due to sendperiod '+str(self.sendperiod)+' elapsed')
 
             self.ts_send = self.ts
             try:

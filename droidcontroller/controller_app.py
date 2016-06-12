@@ -15,7 +15,7 @@ from droidcontroller.acchannels import *
 from droidcontroller.dchannels import *
 # the previous block also generated sqlgeneral and uniscada instances, like s, udp, tcp
 from droidcontroller.speedometer import * # cycle speed for statistics
-from droidcontroller.msgbus import MsgBus # cycle speed for statistics
+from droidcontroller.msgbus import MsgBus # publish events and results
 
 
 #########
@@ -92,7 +92,7 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         udp.add_reader_callback(self.udp_reader)
 
         # ioloop timers for regular execution
-        self.udpcomm_scheduler = PeriodicCallback(self.udp_comm, udp_period * 1000) # this is periodical, but ack will lauch immediate send!
+        self.udpcomm_scheduler = PeriodicCallback(self.udp_comm, udp_period * 1000) # this send trials are periodical, but arriving ack will lauch an immediate new send from the buffer!
         self.regular_scheduler = PeriodicCallback(self.regular_svc, reg_period * 1000) # send regular svc
         self.di_scheduler = PeriodicCallback(self.di_reader, 10) # read DI asap. was 50 ms
         self.ai_scheduler = PeriodicCallback(self.ai_reader, ai_readperiod * 1000) # intervall iomain kaudu ette
@@ -156,9 +156,9 @@ class ControllerApp(object): # default modbus address of io in controller = 1
                 self.got_parse(got)
                 if 'inums' in got:
                     gotack = True
-                got = udp.udpread()
+                got = udp.udpread() # miks uus katse? vastus None...
                 if gotack:
-                    #log.info('send more from buffer as something was deleted')
+                    #log.info('got ack, sending more from buffer')
                     self.udpcomm_scheduler.run_now() # immediate, then next time after normal delay
                     
             if udp.sk.get_state()[3] == 1: # firstup
@@ -217,19 +217,21 @@ class ControllerApp(object): # default modbus address of io in controller = 1
         reslist = self.d.doall() # returns di, do, svc signals 0 1 2 = nochg chg err
         di_dict = self.d.get_chg_dict()
         if reslist == [0, 0, 0]:
-            log.warning('di_reader done, NO change, di scanning speed '+str(self.spm.get_speed())) # et naha oleks  logis
-            #sys.stdout.write('d') # no flush
-            #sys.stdout.flush() # debugging flush on no chg as well
+            #log.debug('di_reader done, NO change, di scanning speed '+str(self.spm.get_speed())) # et naha oleks  logis
+            sys.stdout.write('d') # no flush
+            sys.stdout.flush() # debugging flush on no chg as well
+        elif reslist == [None, None, None]:
+            pass
+            #log.debug('di_reader did nothing, probably due to empty dichannels.sql')
+            
         else:
-            log.warning('di_reader done, some change, reslist '+str(reslist)) ## et naha oleks  logis
-            self.app(sys._getframe().f_code.co_name, attentioncode = 1)
+            log.info('di_reader done, some change, reslist '+str(reslist)) ## et naha oleks  logis
+            self.app(sys._getframe().f_code.co_name, attentioncode = 1) # chk possible rules in iomain.app
             self.udp_comm()
             
-            #sys.stdout.write('D') # some change
-            #sys.stdout.flush() # flush now, when something was changed
-
             return ###
             
+            ## the following is unnecessary...
             if (reslist[0] & 1):  # change in di
                 di_dict = self.d.get_chg_dict()
                 log.info('di change detected: '+str(di_dict)+', reslist '+str(reslist)) # mis siin on , chg voi svc?
@@ -246,15 +248,15 @@ class ControllerApp(object): # default modbus address of io in controller = 1
 
 
     def ai_reader(self): # AICO reader
-        log.warning('ai_reader run') ## 
+        log.info('ai_reader run') ## 
         self.ac.doall()
         self.app(sys._getframe().f_code.co_name, attentioncode = 2) # d, a attention bits / use msgbus instead
-        if self.led: # ajutine
-            self.led.alarmLED(0)
+        #if self.led: # ajutine
+        #    self.led.alarmLED(0)
         #FIXME ai olekute / value suurte muudatuste avastamisel korral kaivita self.udpcomm()
 
 
-    def regular_svc(self): # FIXME - send on change too! pakkida?
+    def regular_svc(self): # FIXME - send on change too!
         sys.stdout.write('R') #
         sys.stdout.flush()
         self.r.regular_svc() # UPW, UTW, ipV, baV, cpV. mfV are default services.

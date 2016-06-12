@@ -2,7 +2,7 @@
 # marko libmbus, python-mbus
 import sys, traceback, time # tornado
 #from droidcontroller.mbus import * # neeme old
-from mbus.MBus import MBus # by marko
+    
 import xmltodict
 
 import tornado.ioloop
@@ -13,6 +13,12 @@ EXECUTOR = ThreadPoolExecutor(max_workers=1)
 
 import logging
 log = logging.getLogger(__name__)
+
+from mbus.MBus import MBus # by marko
+try:
+    from mbus.MBusLowLevel import MBUS_ADDRESS_NETWORK_LAYER # sec aadressi jaoks
+except:
+    log.warning('no secondary addressing possible due to mbus.MbusLowLevel failed import')
 
 ''' Usage example
 from mbus_watermeter import MbusWaterMeter # libmbus c-library is needed too!
@@ -40,12 +46,12 @@ class MbusWaterMeter(object): # FIXME averaging missing!
             traceback.print_exc()
             time.sleep(3)
 
-    def read_sync(self, debug = False):
+    def read_sync(self, addr=254, debug = False):
         ''' Query mbus device, waits for reply, lists all if debug == True '''
         if debug:
             log.info('sending out a sync mbus query')
         try:
-            self.mbus.send_request_frame(254)
+            self.mbus.send_request_frame(addr) # 254 is broadcats, see accessnumber in xml reqading one by one
             reply = self.mbus.recv_frame()
             reply_data = self.mbus.frame_data_parse(reply)
             self.xml = self.mbus.frame_data_xml(reply_data)
