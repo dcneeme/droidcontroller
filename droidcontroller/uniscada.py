@@ -769,8 +769,9 @@ class UDPchannel():
 
         if len(datagram) > 0: # something arrived
             #log.info('>>> got from receiver '+str(repr(data)))
+            self.ts_udpgot = time.time()
             self.traffic[0] = self.traffic[0]+len(datagram) # adding top the incoming UDP byte counter
-            udpdelay = 1000 * (self.ts_udpgot - self.ts_udpsent)
+            udpdelay = int(round(1000 * (self.ts_udpgot - self.ts_udpsent),0))
             log.info('<<== got from server (delay '+str(udpdelay)+' ms):'+str(datagram.replace('\n', ' ')))
 
             if (int(raddr[1]) < 1 or int(raddr[1]) > 65536):
@@ -793,7 +794,6 @@ class UDPchannel():
                 else: # valid id in the message from the server
                     log.debug('got ack or cmd from server '+str(raddr[0])) ####
                     self.sk.up() # alive state
-                    self.ts_udpgot = time.time() # self.ts # timestamp of last udp received
                     if 'led' in dir(self):
                         self.led.commLED(1) # data from server, comm OK
 
