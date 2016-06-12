@@ -94,7 +94,7 @@ class MyBasenSend(object):
         ''' event of https put response '''
         #log.info('response received')
         self.ts = time.time()
-        delay = round(1000 * (self.ts - self.ts_send),3)
+        delay = int(round(1000 * (self.ts - self.ts_send),0))
         if response.error:
             log.error('response error: %s', str(response.error))
         else:
