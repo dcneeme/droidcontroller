@@ -86,6 +86,8 @@ class UDPchannel():
         self.sent = '' # last servicetuple sent to the buffer
         self.age = 0 # unsent history age, also to be queried
         self.APVER = 'app ver undefined'
+        self.cmd = ('', '') # last command received / to avoid repeats
+        self.ts_cmd = 0 # last command received
         self.Initialize()
 
     def Initialize(self):
@@ -807,9 +809,14 @@ class UDPchannel():
                             svalue = line[1] # setup reg value
                             log.debug('processing key:value '+sregister+':'+svalue)
                             if sregister != 'in' and sregister != 'id': # may be setup or command (cmd:)
-                                msg='got setup/cmd reg:val '+sregister+':'+svalue  # need to reply in order to avoid retransmits of the command(s)
-                                log.info(msg)
-                                data_dict.update({ sregister : svalue }) # in and id may be included in dict as inums and ints!
+                                if (sregister, svalue) != self.cmd or time.time() > self.ts_cmd + 1: # avoid reaction to repeating commands
+                                    self.ts_cmd = time.time()
+                                    self.cmd = (sregister, svalue)
+                                    msg='got setup/cmd reg:val '+sregister+':'+svalue  # need to reply in order to avoid retransmits of the command(s)
+                                    log.info(msg)
+                                    data_dict.update({ sregister : svalue }) # in and id may be included in dict as inums and ints!
+                                else:
+                                    log.warning('skipped repeated cmd '+str((sregister, svalue)))
 
                             else:
                                 if sregister == "in": # one such a key in message
