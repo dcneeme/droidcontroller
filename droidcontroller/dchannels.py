@@ -16,7 +16,7 @@
 
 
 from droidcontroller.sqlgeneral import * # SQLgeneral
-s=SQLgeneral()
+s=SQLgeneral() ## mittevajalik instance!!?  ara siis main ega kusagil s. kasuta...
 
 import time
 
@@ -52,9 +52,8 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         self.sendperiod = invar
 
 
-    #def sqlread(self,table):
-    #    s.sqlread(table) # restore dichannels from file
-    # available from parent
+    #def sqlread(self, table):
+    #    self.sqlread(table) # restore dichannels from file,  available from parent
 
     def Initialize(self): # before using this create s=SQLgeneral()
         ''' initialize delta t variables, create tables and modbus connection '''
@@ -312,7 +311,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 # taking cfg into account! not all changes are to be reported immediately!
                 # cfg is also for application needs, not only monitoring!
 
-                log.info('Cmd: '+Cmd) ##
+                #log.info('Cmd: '+Cmd) ##
                 cur.execute(Cmd)
 
                 if self.io_trust or time.time() > ts_init + 300:
@@ -337,11 +336,8 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                                 msg='DI service '+val_reg+' unchanged: '+str(val)
                                 log.debug(msg)
                             
-                            sendtuple = self.make_dichannel_svc(val_reg) # for each (not renotified for long enough time) service
-                            if sendtuple:
-                                udp.send(sendtuple)
-                                msg = 'buffered within reporting all '+str(sendtuple) ####
-                                log.info(msg)
+                            self.make_dichannel_svc(val_reg) # also publishes or sends
+                                # for each (not renotified for long enough time) service
                             
                         else:
                             log.warning('FAILED to select row for '+val_reg)
@@ -350,14 +346,9 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                             
                 self.chg_dict = chg_dict
 
-            else: ## notify no matter when they were notified
-                sendtuple = self.make_dichannel_svc(svc) # for one (possibly changed) service (if changed or not renotified for long enough time) 
-                if sendtuple:
-                    udp.send(sendtuple)
-                    msg = '!buffered due to reporting single '+str(sendtuple) ####
-                    log.info(msg)
-
- 
+            else: ## notify one service no matter what
+                self.make_dichannel_svc(svc) # for one (possibly changed) service (if changed or not renotified for long enough time) 
+                
             conn.commit() # dichannels transaction end
             if svccount > 0:
                 return 1
@@ -382,9 +373,10 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         # no transaction started or commit used here because we are in transaction (started make_dichannels())
         lisa='' # value string
         values = []
-        sumstatus=0 # status calc
-        cur=conn.cursor()
-        Cmd="select * from dichannels where val_reg='"+val_reg+"' order by member asc" # data for one service ###########
+        res = 0 # # 0=nobuff 1=some buff 2=error
+        sumstatus = 0 # status calc
+        cur = conn.cursor()
+        Cmd = "select * from dichannels where val_reg='"+val_reg+"' order by member asc" # data for one service ###########
         cur.execute(Cmd)
         rowproblem = 0 # do not report service where member of type h is stalled
         
@@ -477,12 +469,18 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             lisa = ''
             values.append(status) # for msgbus
         
-        if self.msgbus != None:
-            self.msgbus.publish(val_reg, {'values': values, 'status': sumstatus}) # iga teenus eraldi publish, pievat kordamist pole vaja
-            return (sta_reg, sumstatus, val_reg, lisa)  # returns sendtuple to send. to be send buffered via udp.send()
+        # publish only if value not None
+        if rowproblem == 0:
+            if self.msgbus != None:
+                log.info('publishing '+str((val_reg, {'values': values, 'status': sumstatus})))
+                self.msgbus.publish(val_reg, {'values': values, 'status': sumstatus}) # iga teenus eraldi publish, mittemuutuva kordamist pole vaja
+            #else: # NOT BOTH
+            log.info('buffering '+str([sta_reg, sumstatus, val_reg, lisa]))
+            udp.send([sta_reg, sumstatus, val_reg, lisa])  # sendtuple to send.
+            return 1 # 0=nobuff 1=some buff 2=error # nobuff never?
         else:
-            log.warning('no sendtuple or publish for svc '+val_reg+' due to rowproblem')
-            return None
+            log.warning('NO sendtuple nor publish for svc '+val_reg+' due to rowproblem!')
+            return 2
 
 
 
@@ -713,8 +711,8 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
     def set_divalue(self,svc,member,value): # sets binary variables within services for remote control, based on service name and member number
         ''' Setting member value using sqlgeneral set_membervalue. adding sql table below for that '''
-        #return s.set_membervalue(svc,member,value,self.in_sql)
-        return self.set_membervalue(svc,member,value,self.in_sql) # from parent
+        return s.set_membervalue(svc,member,value,self.in_sql)
+        #return self.set_membervalue(svc,member,value,self.in_sql) # from parent
 
     def set_dovalue(self,svc,member,value): # sets binary variables within services for remote control, based on service name and member number
         ''' Setting member value using sqlgeneral set_membervalue. adding sql table below for that '''
@@ -810,7 +808,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
  
     def doall(self): # do this regularly
         ''' Does everything on time if executed regularly '''
-        res = [2, 2, 2] # returncodes list
+        res = [None, None, None] # returncodes list
         self.ts = round(time.time(),1)
         if self.ts - self.ts_read>self.readperiod:
             self.ts_read = self.ts
@@ -820,4 +818,4 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 res[2] = self.make_dichannels() # 0 1 2 = nobuff, somebuff, error
             except:
                 traceback.print_exc()
-        return res # list of what was done
+        return res # list of what was done. if members None, then skipped due to timing
