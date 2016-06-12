@@ -1,4 +1,4 @@
-''' Send data into mybasen server.
+''' Send data into mybasen server in async manner.
     Needs the data to be arranged in arrays of self.values2basen, 
     configured in dictionary self.channels2basen like {0:['TempSauna','double',10]} # name, type, divisor
     where key is the self.values2basen index
@@ -58,8 +58,8 @@ class MyBasenSend(object):
         ''' Create json message for the given subpath and uid+password '''
         # [{"dstore":{"path":"tutorial/testing/unit1","rows":[{"channels":[{"channel":"temp","double":23.3},{"channel":"weather","string":"Balmy"}]}]}}] # naide
         # [{"dstore":{"path":"tutorial/testing/sauna","rows":[{"channels":[{"channel":"TempSauna","double":0.1},{"channel":"TempBath","double":0.2}]}]}}] # tekib ok
-        self.ts = int(time.time())
-        self.ts_send = self.ts
+        #self.ts = int(time.time())
+        self.ts = time.time()
         
         msg = '[{\"dstore\":{\"path\":'
         msg += '\"' + self.path + '\",'
@@ -75,7 +75,8 @@ class MyBasenSend(object):
 
     def basen_send(self, values2basen):
         ''' the whole sending process with ioloop timer '''
-        log.info('sending at '+str(self.ts)+' values '+str(values2basen))
+        self.ts_send = time.time()
+        #log.info('sending at '+str(int(self.ts_send))+' values '+str(values2basen))
         if len(values2basen) > 0: # initially empty
             rows = self.mybasen_rows(values2basen)
             self.mybasen_send(self.domessage(rows))
@@ -92,10 +93,10 @@ class MyBasenSend(object):
     def _async_handle_request(self, response):
         ''' event of https put response '''
         #log.info('response received')
-        self.ts = int(time.time())
-        delay = self.ts - self.ts_send
+        self.ts = time.time()
+        delay = round(1000 * (self.ts - self.ts_send),3)
         if response.error:
             log.error('response error: %s', str(response.error))
         else:
-            log.info('response (delay '+str(delay)+' s): %s', response.body)
+            log.info('response (delay '+str(delay)+' ms): %s', response.body)
 
