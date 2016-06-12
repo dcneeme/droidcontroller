@@ -339,15 +339,22 @@ class UDPchannel():
             the components are sta_reg = '', status = 0, val_reg = '', value = ''.
             The last parameter (use negative value!) enables to repeat an earlier value before change.
         '''
-        if servicetuple == None or len(servicetuple) != 4:
-            log.warning('send() ignored INVALID servicetuple (with value None or length other than 4): '+str(servicetuple))
-            return 2
-
         try:
-            sta_reg = str(servicetuple[0])
-            status = int(servicetuple[1])
-            val_reg = str(servicetuple[2])
-            value = str(servicetuple[3])
+            if servicetuple == None or len(servicetuple) != 4:
+                log.warning('send() ignored INVALID servicetuple (with value None or length other than 4): '+str(servicetuple))
+                return 2
+        except:
+            log.error('INVALID servicetuple '+str(servicetuple))
+            traceback.print_exc()
+            return 2
+            
+        try:
+            #sta_reg = str(servicetuple[0])
+            #status = int(servicetuple[1])
+            #val_reg = str(servicetuple[2])
+            #value = str(servicetuple[3])
+            sta_reg, status, val_reg, value = servicetuple
+            
             if value == '' and val_reg != '': # status only tuple is allowed
                 log.error('refused to save into buffer INVALID servicetuple '+str(servicetuple))
                 return 1
@@ -357,11 +364,12 @@ class UDPchannel():
             #print(Cmd) # debug
             self.conn.execute(Cmd)
             #self.last = servicetuple
-            if self.copynotifier:
+            if self.copynotifier != None:
                 self.copynotifier(servicetuple) # see on nagios.py sees asuv output_and_send
+            log.info('buffered to be sent servicetuple '+str(servicetuple))
             return 0
         except:
-            msg = 'FAILED to write svc into buffer, recreating table buff2server'
+            msg = 'FAILED to write '+str(servicetuple)+' into buffer, recreating table buff2server'
             self.makebuffer()
             #syslog(msg) # incl syslog
             log.warning(msg)
@@ -369,11 +377,7 @@ class UDPchannel():
             return 1
 
 
-    #def get_last(self):
-    #    ''' Return last servicetuple sent to the buffer. Can be used for parallel messaging for example. '''
-    #    return self.last
-
-
+  
     def unsent(self, maxage=3600):   # 24 hours max history to be kept 86400 s, trying with 1h first, was 400 s until 12.1.2016
         ''' Counts the non-acknowledged messages and removes older than maxage seconds (24h by default).
             If no more lines in buffer, dump empty table into sql file to avoid rows de ja vue on next start
@@ -681,14 +685,14 @@ class UDPchannel():
             log.info(msg)
             #syslog(msg)
             sendstring = ''
-            self.ts_udpsent = self.ts # last successful udp send
+            self.ts_udpsent = time.time() # last udp send try
             self.sk_send.up() # send success
             return int(sendlen)
         except:
             msg = 'send FAILURE to'+str(self.saddr)+' for '+str(int(self.ts - self.ts_udpsent))+' s, '+str(self.linecount)+' dumped rows'
             log.warning(msg)
             self.sk_send.dn() # FIXME this should be used instead of below...
-            self.ts_udpunsent = self.ts # last UNsuccessful udp send
+            self.ts_udpunsent = self.ts # last UNsuccessful udp send # not used!
             traceback.print_exc()
 
             if 'led' in dir(self):
@@ -766,7 +770,8 @@ class UDPchannel():
         if len(datagram) > 0: # something arrived
             #log.info('>>> got from receiver '+str(repr(data)))
             self.traffic[0] = self.traffic[0]+len(datagram) # adding top the incoming UDP byte counter
-            log.info('<<== got from server '+str(datagram.replace('\n', ' ')))
+            udpdelay = 1000 * (self.ts_udpgot - self.ts_udpsent)
+            log.info('<<== got from server (delay '+str(udpdelay)+' ms):'+str(datagram.replace('\n', ' ')))
 
             if (int(raddr[1]) < 1 or int(raddr[1]) > 65536):
                 msg='illegal remote port '+str(raddr[1])+' in the message received from '+raddr[0]
@@ -788,7 +793,7 @@ class UDPchannel():
                 else: # valid id in the message from the server
                     log.debug('got ack or cmd from server '+str(raddr[0])) ####
                     self.sk.up() # alive state
-                    self.ts_udpgot = self.ts # timestamp of last udp received
+                    self.ts_udpgot = time.time() # self.ts # timestamp of last udp received
                     if 'led' in dir(self):
                         self.led.commLED(1) # data from server, comm OK
 
