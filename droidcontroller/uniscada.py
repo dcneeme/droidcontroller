@@ -349,18 +349,18 @@ class UDPchannel():
             log.error('INVALID servicetuple '+str(servicetuple))
             traceback.print_exc()
             return 2
-            
+
         try:
             #sta_reg = str(servicetuple[0])
             #status = int(servicetuple[1])
             #val_reg = str(servicetuple[2])
             #value = str(servicetuple[3])
             sta_reg, status, val_reg, value = servicetuple
-            
+
             if value == '' and val_reg != '': # status only tuple is allowed
                 log.error('refused to save into buffer INVALID servicetuple '+str(servicetuple))
                 return 1
-                
+
             self.ts = int(round(time.time(), 0)) # no decimals
             Cmd = "INSERT into "+self.table+" values('"+sta_reg+"',"+str(status)+",'"+val_reg+"','"+value+"',"+str(int(self.ts+timeadd))+",0,0)" # inum and ts_tried left initially empty
             #print(Cmd) # debug
@@ -379,7 +379,7 @@ class UDPchannel():
             return 1
 
 
-  
+
     def unsent(self, maxage=3600):   # 24 hours max history to be kept 86400 s, trying with 1h first, was 400 s until 12.1.2016
         ''' Counts the non-acknowledged messages and removes older than maxage seconds (24h by default).
             If no more lines in buffer, dump empty table into sql file to avoid rows de ja vue on next start
@@ -454,7 +454,7 @@ class UDPchannel():
             do not try to send and assign inum to next rows if there are undeleted rows with inum.
             resend the already sent (long enough time ago) rows only until there are no rows waiting for ack and deletion.
         '''
-        log.info('buff2server start') ###
+        #log.info('buff2server start') ###
         timetoretry = 0 # local
         ts_created = 0 # local
         svc_count = 0 # local
@@ -463,7 +463,7 @@ class UDPchannel():
         #cur = self.conn.cursor()
         cur2 = self.conn.cursor()
         self.actlimit = self.sk.get_state()[0] * self.limit + 1  ##  unique ts numbers to include into message
-        
+
         age = 0 # the oldest, will be self.age later
         #first find out if there are unacked rows in the buffer. if there is, these should be resent if they were sent more that retrysend_delay ago.
         unacked = self.read_buffer(mode = 2)
@@ -500,15 +500,15 @@ class UDPchannel():
 
         Cmd = "BEGIN IMMEDIATE TRANSACTION" # buff2server first try to send, assigning inum
         self.conn.execute(Cmd)
-        
+
         if self.actlimit < 1:
             log.warning('fixed INVALID limit to 1 from '+str(self.actlimit))
             self.actlimit = 1
-            
+
         Cmd = 'select ts_created from '+self.table+' group by ts_created limit '+str(self.actlimit) # find the oldest creation timestamp(s)
         try:
             self.cur.execute(Cmd)
-                
+
             for row in self.cur: # ts alusel, iga ts jaoks oma in
                 ts_created = int(round(row[0],0)) if row[0] != '' else 0 # should be int
 
@@ -544,8 +544,7 @@ class UDPchannel():
                     self.conn.execute(Cmd)
                 else:
                     log.error('!! got NO svc data for ts selection with limit'+str(self.actlimit))
-       
-            
+
             # end loop, seems sendlenn was below self.mtu
             self.conn.commit() # buff2server transaction end
 
@@ -553,15 +552,14 @@ class UDPchannel():
             log.error('buff2server() FAILED')
             traceback.print_exc()
             return
-        
+
 
         if svc_count > 0: # there is something to be sent!
-            #sendstring = "in:" + str(self.inum) + ","+str(ts_created)+"\n" + sendstring # in alusel vastuses toimub puhvrist kustutamine
             sendstring = "id:" + str(self.host_id) + "\n" + sendstring # alustame sellega datagrammi
-            log.info('==buff2server done, svc_count '+str(svc_count)+', ts limit used: '+str(self.actlimit)) ##
+            log.info('buff2server done, svc_count '+str(svc_count)+', sql limit used: '+str(self.actlimit)) ##
             self.udpsend(sendstring, self.age) # sending away. self.age is used by baV svc too.
-            
-            
+
+
     def buff_resend(self):
         ''' Used to resend the unacked rows, delays sending newer data via buffer '''
         age =0
@@ -663,7 +661,7 @@ class UDPchannel():
         sendlenbin = len(sendbin)
         sendlencomp = sendlenbin
         if sendlenbin > 300:
-            try: # compression 
+            try: # compression
                 sendbin = gzip.compress(sendbin) # gzip compression to the whole datagram to be sent
                 sendlencomp = len(sendbin)
                 #log.info('==compression done, new size '+str(sendlencomp))
@@ -675,8 +673,8 @@ class UDPchannel():
             if self.limit > 1:
                 self.limit -= 1  # for next time
                 log.info('== self.limit reduced to '+str(self.limit)+' due to sendlencomp '+str(sendlencomp)+' > mtu '+str(self.mtu))
-        
-                
+
+
         try: # actual send
             sendlen = self.UDPSock.sendto(sendbin,self.saddr) # tagastab saadetud baitide arvu
             self.traffic[1] += sendlen # traffic counter udp out
