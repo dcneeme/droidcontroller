@@ -82,8 +82,12 @@ class Sensor:
 
     
     def reopen(self, tout=3, speed=9600):
-        self.ser = serial.Serial(self.port, self.speed, timeout=tout, parity=serial.PARITY_NONE) # also opening the port
-    
+        try:
+            self.ser = serial.Serial(self.port, self.speed, timeout=tout, parity=serial.PARITY_NONE) # also opening the ports
+            log.info('reopened serial port '+self.port)
+        except:
+            log.error('FAILED to open serial port '+self.port)
+        
     def chk_crc(self): # works against m.mbm
         if self.mbm != None and len(self.mbm) > 10:
             chk = ord(self.mbm[-2:-1]) # chksum as int
@@ -142,6 +146,7 @@ class Sensor:
                 log.warning('no answer from sensor device')
         except:
             log.error('USB port probably disconnected!!')
+            self.mbm = ''
             self.errors += 1 # sure increase needed
         return 1
         
@@ -160,6 +165,7 @@ class Sensor:
                 log.warning('no answer from particle sensor device')
         except:
             log.error('USB port probably disconnected!!')
+            self.mbm = ''
             self.errors += 1 # sure increase needed
         return 1
         
