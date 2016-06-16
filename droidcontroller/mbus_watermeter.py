@@ -46,12 +46,24 @@ class MbusWaterMeter(object): # FIXME averaging missing!
             traceback.print_exc()
             time.sleep(3)
 
-    def read_sync(self, addr=254, debug = False):
-        ''' Query mbus device, waits for reply, lists all if debug == True '''
+    def read_sync(self, addr=254, debug=False, secondary=''): # using primary address either broadcast 254 or known 0...250
+        ''' Query mbus device using primary address either broadcast 254 or known 1...250, waits for reply, lists all if debug == True 
+            DO NOT use primary addressing if more than one meters share the same primary address! sensus watermeters 0 by default! 
+        '''
         if debug:
-            log.info('sending out a sync mbus query')
+            if secondary != '':
+                sec = True
+                logadd = 'secondary address '+secondary
+            else:
+                sec = False
+                logadd = 'primary address '+str(addr)
+            log.info('sending out a sync mbus query using '+logadd)
         try:
-            self.mbus.send_request_frame(addr) # 254 is broadcats, see accessnumber in xml reqading one by one
+            if sec:
+                self.mbus.select_secondary_address(secondary)
+                self.mbus.send_request_frame(MBUS_ADDRESS_NETWORK_LAYER) # secondary
+            else:
+                self.mbus.send_request_frame(addr) # primary
             reply = self.mbus.recv_frame()
             reply_data = self.mbus.frame_data_parse(reply)
             self.xml = self.mbus.frame_data_xml(reply_data)
