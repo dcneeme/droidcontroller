@@ -695,8 +695,8 @@ class UDPchannel():
             self.ts_udpunsent = self.ts # last UNsuccessful udp send # not used!
             traceback.print_exc()
 
-            if 'led' in dir(self):
-                self.led.alarmLED(1) # send failure
+            #if 'led' in dir(self):
+            #    self.led.alarmLED(1) # send failure / LEAVE THIS LED TO APP, not connectivity
 
             return None
 

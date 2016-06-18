@@ -32,8 +32,8 @@ class MyBasenSend(object):
         log.info(str(self.channels2basen))
 
 
-    def mybasen_rows(self, values2basen):
-        ''' Create data rows for mybasen '''
+    def mybasen_rows(self, values2basen): # to be used on microagent
+        ''' Create data rows for mybasen based on {numkey:value}, taking channels2basen into account'''
         rows = []
         for key in values2basen: # some channels may be without value in the beginning. add time?
             # show chan, type, value
@@ -52,6 +52,13 @@ class MyBasenSend(object):
                 log.debug(row)
                 rows.append(row)
         return rows
+
+        
+    def uniscada2mybasen_rows(self, row): # to be used on uniscada server
+        ''' Create data rows for mybasen based on {key:value} '''
+        rows = []
+        rows.append(row)
+        return rows  # one svc at the time?
 
 
     def domessage(self, rows):
@@ -87,8 +94,8 @@ class MyBasenSend(object):
         headers = { "Content-Type": "application/json; charset=utf-8" }
         log.debug('sending PUT request, body '+str(message))
         tornado.httpclient.AsyncHTTPClient().fetch(self.url, self._async_handle_request, method='PUT', headers=headers,
-            body=message, auth_username=self.uid, auth_password=self.passwd, auth_mode="basic")
-
+            body=message, auth_username=self.uid, auth_password=self.passwd, auth_mode="basic", connect_timeout=10.0, request_timeout=10.0)
+        # added timeout 14.6.2016
 
     def _async_handle_request(self, response):
         ''' event of https put response '''
@@ -100,3 +107,7 @@ class MyBasenSend(object):
         else:
             log.info('response (delay '+str(delay)+' ms): %s', response.body)
 
+    def doall(self): # to be used in uniscada receiver
+        ''' everything to form and send mybasen message '''
+        pass
+        

@@ -23,13 +23,13 @@ except:
 ''' Usage example
 from mbus_watermeter import MbusWaterMeter # libmbus c-library is needed too!
 m=MbusWaterMeter(id=1) # meter instance, id=1 for HRI, 4 for itron
-m.read_sync() # sync read, async is also possible using future. 
+m.read_sync(debug=True) # sync read, async is also possible using future. 
 m.parse(debug=True) # to list all possible values from the meter
 m.parse() # to get the needed value only
 '''
 
-class MbusWaterMeter(object): # FIXME averaging missing!
-    ''' Publish values to services via msgbus '''  # FIXME use IOloop too
+class MbusWaterMeter(object): 
+    ''' Publish values to services via msgbus or return a single value '''
     def __init__(self, id = 4, msgbus=None, svclist=[['XYW',1,1,'undefined']]): # svc, member, id, name
         ''' id=4 for itron, id=1 for HRI-B '''
         self.id = id

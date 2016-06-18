@@ -1,18 +1,19 @@
 # This Python file uses the following encoding: utf-8
 
-''' Send out Nagios passive check messages as UDP, translation based on 
-    register name and service table as in uniscada server.
+''' Send out Nagios passive check messages or mybasen messages, translation based on 
+    register name and service table. usable both in uniscada receiver or uniscada compatible microagent.
     
   possible testing in 10.0.0.14  
 >>> import sys, logging
 >>> from droidcontroller.nagios import *
->>> n = NagiosMessage('000101100000','service_ho_koogu20_ee', debug_svc=True)
+>>> n = NagiosMessage('000101100000','service_ho_koogu20_ee', debug_svc=True) or n = NagiosMessage('host_dummy', debug_svc = True)
 sqlread: successfully created table service_ho_koogu20_ee
 >>> n.output(['D2S',0,'D2W','0 0 0 0 0 0 0 0'])
 '[1460920743] PROCESS_SERVICE_CHECK_RESULT;000101100000;_DoDebug;0;DO kanalid (1..8):|_DoDebug=0 0 0 0 0 0 0 0\n'
 >>> n.output(['ETS',1,'',''])
 '[1460920752] PROCESS_SERVICE_CHECK_RESULT;000101100000;ElektriToide;1;Vahelduvtoide kahtlane|ElektriToide=1\n'
-
+without sql in use>
+n.convert(('PWS',0,'',''), '', '', svc_name='Power', out_unit='', conv_coef='', desc='Toite olemasolu', host_id='000101100000')
 '''
 
 import time, sys, traceback, sqlite3, decimal
@@ -133,7 +134,7 @@ class NagiosMessage(object):
         
         
         
-    def convert(self, sendtuple, multiperf, multivalue, svc_name='SvcName', out_unit='', conv_coef='1', desc='kirjeldus:', host_id='host?', ts=None): 
+    def convert(self, sendtuple, multiperf, multivalue, svc_name='SvcName', out_unit='', conv_coef='1', desc='kirjeldus:', host_id='host?', ts=None): # for nagios
         ''' creates nagios message based on sendtuple and configuration data. ts '''
         (sta_reg, status, val_reg, value) = sendtuple
         perfdata = '' 
@@ -142,9 +143,10 @@ class NagiosMessage(object):
         
         if val_reg == '' and sta_reg != None:
             val_reg = sta_reg # status-only service
+            value = str(status) 
         if sta_reg == None and val_reg != '' and val_reg != None:   # status probably in the different datagram from older controllers!
-            sta_reg=val_reg[:-1]+'S' # restore status
-        
+            sta_reg = val_reg[:-1]+'S' # restore status
+            status = 0
         if host_id == None or svc_name == None or desc == None or host_id == None:
             log.error('invalid parameters for convert: host_id '+str(host_id)+' or svc_name '+str(svc_name)+' or desc '+str(desc))
             return None
@@ -233,7 +235,67 @@ class NagiosMessage(object):
         return nagstring
 
 
-    def send(self, msg):
+    def convert2mybasen(self, sendtuple, multiperf, multivalue, svc_name='SvcName', out_unit='', conv_coef='1', desc='kirjeldus:', host_id='host?', ts=None): # for mybasen, one svc for now
+        ''' 
+            {
+                "channel": "Temperature",
+                "double": 10.0,
+                "unit": "degC",
+                "comment": "Room temperature"
+            }
+        '''
+        (sta_reg, status, val_reg, value) = sendtuple
+        perfdata = '' 
+        descvalue = '' # values to desc end after colon, if any, according to multivalue
+        value = value.strip(' ')
+        
+        if val_reg == '' and sta_reg != None:
+            val_reg = sta_reg # status-only service
+            value = str(status) 
+        if sta_reg == None and val_reg != '' and val_reg != None:   # status probably in the different datagram from older controllers!
+            sta_reg = val_reg[:-1]+'S' # restore status
+            status = 0
+        
+        if host_id == None or svc_name == None or desc == None or host_id == None:
+            log.error('invalid parameters for convert: host_id '+str(host_id)+' or svc_name '+str(svc_name)+' or desc '+str(desc))
+            return None
+            
+        if ts != None:
+            timestamp = ts
+        else:
+            timestamp = int(time.time()) # used for ts if None
+        
+        if val_reg == sta_reg: # status only service!
+            if len(multiperf) > 1:
+                log.error('INVALID service configuration for sta_reg '+sta_reg+', multiperf '+str(multiperf)+', multivalue '+str(multivalue)+', stopped processing '+val_reg+' for host '+host_id)
+                return None
+            else:
+                log.debug('using status as perfdata for '+sta_reg)
+                perfdata += svc_name + '='+str(status)+out_unit
+
+        if (val_reg[-1] == 'V' or val_reg[-1] == 'F' or val_reg[-1] == 'S') and value != '': # single member numeric or string value, possibly crteated from status alone
+            if (svc_name == 'FlowTotal' or svc_name == 'PumbatudKogus'  or sta_reg[-1:] == 'F'): # hex float
+                value = self.floatfromhex(value)
+                log.debug('hex float to decimal conversion done, new value='+str(value))
+            else: ## AGA kui on string siis perf datasse olek!
+                if conv_coef != '' and conv_coef != None:
+                    log.debug('single num to be converted')
+                    value = round(1.0 * int(value) / float(conv_coef),2)
+                        
+            row = "{"
+            row += "\"channel\":\"" + svc_name + "\","
+            row += "\"double\":" + str(value) + ","
+            if out_unit != '':
+                row += "\"unit\":\"" + out_unit + "\","
+            row += "\"comment\":\"" + desc + "\""
+            row += "}"
+            #log.debug(row)
+            return row
+        else:
+            log.error('INVALID data to convert2mybasen()')
+            
+    
+    def send(self, msg): # to nagios
         ''' Send Nagios passive check as udp message to self.nagaddr '''
         if len(msg) > 20: # nagios passive check message cannot be too short
             try: #

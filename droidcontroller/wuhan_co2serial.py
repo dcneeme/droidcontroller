@@ -207,8 +207,6 @@ class Sensor:
         # svclist=[['TDV',1,'temperature'], ['HDV',1,'humidity'], ['CDV',1,'co2']]
         val = None
         res = {}
-        #self.read() # self.mbm created
-        res.update({ 'co2' : self.decode_co2() })
         
         for svc in self.svclist:
             if svc[2] == 'temperature':
@@ -228,6 +226,7 @@ class Sensor:
                 #log.info('published '+str(svc[0])+', '+str( {'values': [ val ], 'status': 0}))
             #else:
                 #log.info('no msgbus in use')
+        self.mbm = '' # give valid response once after read
         return res # dict
         
         
