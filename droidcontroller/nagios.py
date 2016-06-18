@@ -287,7 +287,7 @@ class NagiosMessage(object):
             row += "\"double\":" + str(value) + ","
             if out_unit != '':
                 row += "\"unit\":\"" + out_unit + "\","
-            row += "\"comment\":\"" + desc + "\""
+            row += "\"comment\":\"" + desc.strip(':') + "\""
             row += "}"
             #log.debug(row)
             return row
