@@ -54,13 +54,6 @@ class MyBasenSend(object):
         return rows
 
         
-    def uniscada2mybasen_rows(self, row): # to be used on uniscada server
-        ''' Create data rows for mybasen based on {key:value} '''
-        rows = []
-        rows.append(row)
-        return rows  # one svc at the time?
-
-
     def domessage(self, rows):
         ''' Create json message for the given subpath and uid+password '''
         # [{"dstore":{"path":"tutorial/testing/unit1","rows":[{"channels":[{"channel":"temp","double":23.3},{"channel":"weather","string":"Balmy"}]}]}}] # naide
