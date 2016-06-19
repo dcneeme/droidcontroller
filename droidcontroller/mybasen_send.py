@@ -82,7 +82,6 @@ class MyBasenSend(object):
 
     def basen_send(self, values2basen):
         ''' the whole sending process with ioloop timer '''
-        self.ts_send = time.time()
         #log.info('sending at '+str(int(self.ts_send))+' values '+str(values2basen))
         if len(values2basen) > 0: # initially empty
             rows = self.mybasen_rows(values2basen)
@@ -90,12 +89,13 @@ class MyBasenSend(object):
 
 
     def mybasen_send(self, message):
-        ''' Actually sending '''
+        ''' Actually sending http request '''
+        self.ts_send = time.time()
         headers = { "Content-Type": "application/json; charset=utf-8" }
-        log.debug('sending PUT request, body '+str(message))
+        log.info('sending PUT request, body '+str(message))
         tornado.httpclient.AsyncHTTPClient().fetch(self.url, self._async_handle_request, method='PUT', headers=headers,
             body=message, auth_username=self.uid, auth_password=self.passwd, auth_mode="basic", connect_timeout=10.0, request_timeout=10.0)
-        # added timeout 14.6.2016
+        # added timeout 10 14.6.2016
 
     def _async_handle_request(self, response):
         ''' event of https put response '''
@@ -103,7 +103,7 @@ class MyBasenSend(object):
         self.ts = time.time()
         delay = int(round(1000 * (self.ts - self.ts_send),0))
         if response.error:
-            log.error('response error: %s', str(response.error))
+            log.error('response error (delay '+str(delay)+' ms): %s', str(response.error))
         else:
             log.info('response (delay '+str(delay)+' ms): %s', response.body)
 
