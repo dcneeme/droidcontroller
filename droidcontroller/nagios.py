@@ -156,10 +156,13 @@ class NagiosMessage(object):
         descvalue = '' # values to desc end after colon, if any, according to multivalue
         descunit = ''
         value = value.strip(' ') # str, from sendtuple[3]
+        mvalues = None
         
         if val_reg == '' and sta_reg != None:
             val_reg = sta_reg # status-only service
-            value = str(status) 
+            value = str(status)
+            mvalues = [value] # status to value for mybasen
+            
         if sta_reg == None and val_reg != '' and val_reg != None:   # status probably in the different datagram from older controllers!
             sta_reg = val_reg[:-1]+'S' # restore status
             status = 0
@@ -257,7 +260,11 @@ class NagiosMessage(object):
         
         
         nagstring = "["+str(timestamp)+"] PROCESS_SERVICE_CHECK_RESULT;"+host_id+";"+svc_name+";"+str(status)+";"+desc+descvalue+' '+descunit+"|"+perfdata+"\n"
-        mybasen_row = self.format_mybasen_row(svc_name, status, mvalues, multiperf=multiperf, comment=desc.strip(':'), unit=out_unit, mtype=mtype) # koik value liikmed lahevad kui double. yhine unit ja comment.
+        if mvalues != None:
+            mybasen_row = self.format_mybasen_row(svc_name, status, mvalues, multiperf=multiperf, comment=desc.strip(':'), unit=out_unit, mtype=mtype) # koik value liikmed lahevad kui double. yhine unit ja comment.
+        else:
+            log.error('missing mvalue from processing '+svc_name)
+            mybasen_row = ''
         
         if format == 1:
             return nagstring
@@ -282,7 +289,8 @@ class NagiosMessage(object):
             log.error('INVALID mvalue member type, must be str!')
             return None
         row = ''
-        print('formatting mybasen row type '+mtype)
+        
+        #print('formatting mybasen row type '+mtype+' for '+channel)
         if mtype == 'T': # text value
             row += "{"
             row += "\"channel\":\"" + channel + "\"," 
