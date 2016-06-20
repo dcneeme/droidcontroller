@@ -17,7 +17,7 @@ class MyBasenSend(object):
         Listens for response, non-blocking, relies on tornado IOLoop.
     '''
 
-    def __init__(self, aid = '', uid = b'', passwd = b'', path= 'tutorial/testing'):
+    def __init__(self, aid = '', uid = b'', passwd = b'', path= 'tutorial/testing', led = None):
         ''' Sender to mybasen '''
         self.url = 'https://mybasen.pilot.basen.com/_ua/'+aid+'/v0.1/data'
         self.uid = uid # binary!
@@ -25,6 +25,7 @@ class MyBasenSend(object):
         self.path = path
         self.ts = int(time.time())
         self.ts_send = 0
+        self.led = led # indication control possible via commLED, alarmLED if self.led not None
 
     def set_channels(self, in_dict):
         ''' channel configuration as dictionary {id:[name,type,coeff]} '''
@@ -89,6 +90,7 @@ class MyBasenSend(object):
         tornado.httpclient.AsyncHTTPClient().fetch(self.url, self._async_handle_request, method='PUT', headers=headers,
             body=message, auth_username=self.uid, auth_password=self.passwd, auth_mode="basic", connect_timeout=10.0, request_timeout=10.0)
         # added timeout 10 14.6.2016
+        
 
     def _async_handle_request(self, response):
         ''' event of https put response '''
@@ -99,8 +101,7 @@ class MyBasenSend(object):
             log.error('response error (delay '+str(delay)+' ms): %s', str(response.error))
         else:
             log.info('response (delay '+str(delay)+' ms): %s', response.body)
-
-    def doall(self): # to be used in uniscada receiver
-        ''' everything to form and send mybasen message '''
-        pass
-        
+            if self.led != None:
+                self.led.alarmLED(0) # red off, is on during tcp delay
+                
+      

@@ -137,11 +137,12 @@ class ControllerApp(object): # default modbus address of io in controller = 1
     def udp_comm(self): # only send, started by timer or udp_read
         sys.stdout.write('U') # dot without newline
         sys.stdout.flush()
-        udp.iocomm() # chk buff and send to monitoring
+        res = udp.iocomm() # chk buff and send to monitoring
+        if self.led != None and res > 0: # something was sent
+            self.led.commLED(0) # green off - aga voinb olla polegi midagi saata?
         # chk for udb receive ability
         send_state = udp.sk_send.get_state()
         receive_state = udp.sk.get_state()
-        #self.reset_sender_timeout() # FIXME
 
 
     def udp_reader(self, udp, fd, events): # no timer! on event!
@@ -152,11 +153,13 @@ class ControllerApp(object): # default modbus address of io in controller = 1
             log.error('UDP socket error!')
         elif events & self.loop.READ:
             got = udp.udpread() # loeb ainult!
+            if self.led != None:
+                self.led.commLED(1) # green on
             while got != None and got != {}: # read until buffer empty. also inums present in got
                 self.got_parse(got)
                 if 'inums' in got:
                     gotack = True
-                got = udp.udpread() # miks uus katse? vastus None...
+                got = udp.udpread() # None when buffer empty
                 if gotack:
                     #log.info('got ack, sending more from buffer')
                     self.udpcomm_scheduler.run_now() # immediate, then next time after normal delay
@@ -244,7 +247,8 @@ class ControllerApp(object): # default modbus address of io in controller = 1
                 di_dict = self.d.get_chg_dict()
                 log.info('di svc to send: '+str(di_dict)+', reslist '+str(reslist))
 
-            self.udp_comm() # immediate notification, should reset timer too!
+            self.udpcomm_scheduler.run_now()
+            #self.udp_comm() # immediate notification, should reset timer too!
 
 
     def ai_reader(self): # AICO reader

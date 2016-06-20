@@ -34,7 +34,7 @@ logging.basicConfig(stream=sys.stderr, level=logging.INFO) ## kui imporditav mai
 log = logging.getLogger(__name__)
 
 import serial.tools.list_ports
-print(list(serial.tools.list_ports.comports()))
+print('portlist',list(serial.tools.list_ports.comports()))
 # [('/dev/ttyUSB1', 'FTDI TTL232R FTH8AIQ9', 'USB VID:PID=0403:6001 SNR=FTH8AIQ9')]
 
 class Sensor:
@@ -82,6 +82,15 @@ class Sensor:
 
     
     def reopen(self, tout=3, speed=9600):
+        portlist = []
+        ports = list(serial.tools.list_ports.comports())
+        for i in range(len(ports)):
+            portlist.append((ports[i][0], ports[i][1])) # list of tuples
+        print('portlist',str(portlist))
+        if '/dev/ttyUSB0' in str(portlist):
+            self.port = '/dev/ttyUSB0'
+        elif '/dev/ttyUSB1' in str(portlist):
+            self.port = '/dev/ttyUSB1'
         try:
             self.ser = serial.Serial(self.port, self.speed, timeout=tout, parity=serial.PARITY_NONE) # also opening the ports
             log.info('reopened serial port '+self.port)
@@ -143,11 +152,13 @@ class Sensor:
                 log.info('got a message from sensor, length ' + str(len(self.mbm)) + ' bytes: '+str(encode(self.mbm, 'hex_codec')))
                 return 0
             else:
-                log.warning('no answer from sensor device')
+                log.warning('no answer from sensor device, reopen serial port')
+                self.reopen()
         except:
-            log.error('USB port probably disconnected!!')
+            log.error('USB port probably disconnected!! reopen serial port')
             self.mbm = ''
             self.errors += 1 # sure increase needed
+            self.reopen()
         return 1
         
 

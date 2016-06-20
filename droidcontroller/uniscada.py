@@ -390,7 +390,8 @@ class UDPchannel():
         mintscreated = 0
         maxtscreated = 0
         delcount = 0
-
+        linecount = 0
+        
         try:
             Cmd="BEGIN IMMEDIATE TRANSACTION"  # buff2server
             self.conn.execute(Cmd)
@@ -902,12 +903,12 @@ class UDPchannel():
         self.buff2server() # send away. the ack for this is available on next comm() hopefully
         return udpgot
 
-    def iocomm(self): # for ioloop, send only
+    def iocomm(self): # for ioloop, send only # could return somethjing iof there was something to send
         ''' Send to monitoring server, chk the unsent, dump. Read on event! '''
         self.ts = int(round(time.time(),0)) # current time
-        unsent_count = self.unsent() # delete too old records, dumps buffer and sync if needed!
+        unsent_count = self.unsent() # count but also delete too old records, dumps buffer and sync if needed!
         self.buff2server() # send away. the ack for this is available on next comm() hopefully
-
+        return unsent_count # how many key/value pairs to send
 
 class TCPchannel(UDPchannel): # used this parent to share self.syslog()
     ''' Communication via TCP (pull, push, calendar)  '''

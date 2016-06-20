@@ -60,6 +60,7 @@ class GPIOLED:
         ''' Parameter 1 lights up the green LED. 0 turns off. Via PIN15 '''
         try:
             GPIO.output(GPIO.PIN15, (state&1)) # only 0 or 1 allowed
+            log.info('commLED ' + str(state))
             return 0
         except:
             print('error with commLED() param',state)
@@ -70,6 +71,7 @@ class GPIOLED:
         ''' Parameter 1 lights up the red LED. 0 turns off. Via PIN17 '''
         try:
             GPIO.output(GPIO.PIN17, (state&1)) # only 0 or 1 allowed
+            log.info('alarmLED ' + str(state))
             return 0
         except:
             print('error with alarmLED() param',state)
