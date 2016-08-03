@@ -59,7 +59,7 @@ class Counter2Power(): # returns power in W (and more)
 
 
     def chk_state(self, count):
-        ''' decide about on or off state based on time between the increases. returns state None (no opinion), 0 (off) or 1 (on) '''
+        ''' decide about on or off state based on time between the increases. returns state None (no opinion), 0 (off) or 1 (on) plus chg inc'''
         ts = time.time()
         chg = 0 # change 0 or +/- 1
         inc = False
@@ -94,12 +94,13 @@ class Counter2Power(): # returns power in W (and more)
         ts = time.time() # current timestamp, calculate in real time only
         count_inc = None
         ts_inc = None
-        state, chg, inc = self.chk_state(count) # status 1 = ON. change flag 1 means just turned on, -1 means off. 0 means no change.
-        #log.info('got from chk_state(): '+str((state, chg, inc)))
+        self.state, chg, inc = self.chk_state(count) # status 1 = ON. change flag 1 means just turned on, -1 means off. 0 means no change.
+        #log.info('got from chk_state(): '+str((self.state, chg, inc)))
 
-        if state != 1:
+        if self.state != 1:
             self.power = 0
             self.inc_dict = {} # after a break new calc will begin
+            log.info('no power calc for '+self.svc_name+'.'+str(self.svc_member)+' due to state '+str(self.state))
             return self.power, self.state, chg
 
         # now state == 1, power calc is possible
@@ -109,11 +110,12 @@ class Counter2Power(): # returns power in W (and more)
             #log.info('inc_dict updated to: '+str(self.inc_dict))
 
             if len(self.inc_dict) < 2: # not enough members, next time perhaps
+                log.info('not enough inc_dict members for '+self.svc_name+'.'+str(self.svc_member)+' yet: '+str(self.inc_dict))
                 return None, self.state, False
-
-            while min(self.inc_dict) < ts - self.off_tout: # remove the oldest element
-                del self.inc_dict[min(self.inc_dict)]
-                #log.info('inc_dict shortened to: '+str(self.inc_dict))
+            else:
+                while min(self.inc_dict) < ts - self.off_tout and len(self.inc_dict) > 2: # remove the oldest element
+                    del self.inc_dict[min(self.inc_dict)]
+                    log.info('inc_dict for '+self.svc_name+'.'+str(self.svc_member)+' shortened to: '+str(self.inc_dict))
 
             if len(self.inc_dict) > 1:
                 timefrom = min(self.inc_dict) # min ts
@@ -122,16 +124,17 @@ class Counter2Power(): # returns power in W (and more)
                 count_inc = count - countfrom
                 ts_inc = ts - timefrom if ts - timefrom > 0 else 0
                 if ts_inc == 0:
-                    log.error('no time increase since last execution!')
+                    log.error('no time increase for '+self.svc_name+'.'+str(self.svc_member)+' since last execution!')
                     return None, self.state, False
 
                 self.power = round((3600000.0 / self.pulses4kWh)*(1.0*count_inc/ts_inc),3) # use buffer (with time-span close to off_tout) for increased precision
-                log.debug(self.svc_name+' calculated power '+str(self.power)+' W')
+                log.info('power calculated for '+self.svc_name+'.'+str(self.svc_member)+' = '+str(self.power)+' W based on count_inc '+str(count_inc)+', ts_inc '+str(ts_inc))
         else:
             self.power = None
             count_inc = 0
             ts_inc = None
-        return self.power, self.state, chg, count_inc, ts_inc
+            log.info('no power calc for '+self.svc_name+'.'+str(self.svc_member)+' due to no count increment')
+        return self.power, self.state, chg #, count_inc, ts_inc
 
 
 
