@@ -1,4 +1,5 @@
 # lighting control listening services from msgbus and publishing new services to mgsbus
+# 28.6.206 tee DEOL andurite anal teenuste asemele kahebitised di teenused (komp)!
 
 from droidcontroller.util_n import UN # for val2int()
 from droidcontroller.statekeeper import StateKeeper
@@ -14,7 +15,7 @@ class DO(object): # parent for Lamp instances
 
 
 ##############
-class Lamp(object): # one instance per floor loop. no d or ac needed, just msgbus!
+class Lamp(object): # one instance per lamp. no d or ac needed, just msgbus!
     def __init__(self, d, msgbus=None, in_svc={'K1W':[(1,1), (2,1)], 'KAW':[(1,3)], 'DKS':[(1,19)], 'DAS':[(1,6)], 'LAS':[(1,5)]}, 
             out_svc=['DOV',1], name = 'undefined', timeout = None, out = 0): # timeout in s
         #K1W like a switch, KAW like a pir, DAS like dim all, LAS like light all

@@ -1,5 +1,6 @@
-# neeme 2015..2016
-# marko libmbus, python-mbus
+# This Python file uses the following encoding: utf-8
+# neeme 2015..2016. usable for one meter for now, using broadcast primary addressing. add settable address, primary or secondary!
+
 import sys, traceback, time # tornado
 #from droidcontroller.mbus import * # neeme old
     

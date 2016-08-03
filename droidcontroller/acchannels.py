@@ -934,7 +934,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                             #res = self.cp[self.cpi].calc(ots, raw, ts_now = self.ts) # power calculation based on raw counter increase
                             res = self.cp[self.cpi].calc(raw) # based on current ts only!
                             if res != None and res[0] != None:
-                                log.info('got calc power result from cp['+str(self.cpi)+']: '+str(res)+', based on raw '+str(raw)+' for val_reg '+val_reg)  ## debug
+                                log.info('got calc power result from cp['+str(self.cpi)+']: '+str(res)+', based on raw '+str(raw)+' for val_reg '+val_reg+'.'+str(member))  ## debug
                                 if (cfg&128): # on off state from power
                                     raw = res[1] # state on/off 0 or 1
                                     if res[2] != 0: # on/off change

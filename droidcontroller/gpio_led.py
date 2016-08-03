@@ -42,7 +42,7 @@ class GPIOLED:
         GPIO.setoutput(GPIO.PIN15) # set to output green OK (commLED) 
         GPIO.setoutput(GPIO.PIN17) # set to output red Fault (alarmLED)
         self.cpuLED(1) # always output
-        self.commLED(1)
+        self.commLED(0)
         self.alarmLED(1)
         
             

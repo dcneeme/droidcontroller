@@ -2,11 +2,7 @@
 # Copyright 2016-> BaseN Corporation
 # See http://www.basen.net
 #
-# A generic M-Bus reader for DC6888 droid4linux and IT6888 IO board. Configuration specifies which slaves and which registers
-# to read. Supports long, float and generic 16bit input and holding registers.
-#This allows single reader to read multiple different devices with different slaves, so there is
-#only one master on the bus.
-#
+# A generic M-Bus reader.
 
 import sys
 from os import path
@@ -18,12 +14,12 @@ import httplib2
 import InformerBase
 import time
 from mbus.MBus import MBus
+from mbus.MBusLowLevel import MBUS_ADDRESS_NETWORK_LAYER
 import xmltodict
-# import traceback
+import os
 
 SENDCONFFN = path.join("config", "DC6888MBusReader.cfg")
 NAME = "DC6888MBusReader"
-
 
 class Reader(InformerBase.InformerBase):
     """The sender."""
@@ -39,17 +35,26 @@ class Reader(InformerBase.InformerBase):
     def initVariable(self,config):
         self.port = config.get(NAME, "port")
         self.slaveids = config.get(NAME, "slaveid")
+        self.baudrate = config.get(NAME, "baudrate")
+        self.host = config.get(NAME, "host")
         self.config = config
+
+    def gpioRed(self,state):
+        os.system('sudo /usr/local/bin/gpioleds.sh RED '+str(state))
+
+    def gpioGreen(self,state):
+        os.system('sudo /usr/local/bin/gpioleds.sh GREEN '+str(state))
 
     def run(self):
         """Run the task and send/store result."""
 
+        self.gpioRed(0)
         ids = self.slaveids.split(",")
     
         origPath = self.path
         #loop over all known slave ids, each is stored in a separate subpath
         for id in ids:
-            id = int(id)
+            # id = int(id)
             
             self.path = origPath+"."+str(id)
             result = self.measure(str(id))
@@ -71,29 +76,73 @@ class Reader(InformerBase.InformerBase):
         row.setSubPath('log')
 
         debug = False
-        
-        svclist=[['XYW',1,1,'undefined']]
-        #self.svclist = svclist # svc, member, id, name
+        tcpConn = False
+        if(len(self.host)>0):
+            tcpConn = True
+            tcpHost = self.host.split(":")[0]
+            tcpPort = self.host.split(":")[1]
+                
+        if(tcpConn):
+            try:
+                mbus = MBus(host=str(tcpHost),port=int(tcpPort))
+                mbus.connect()
+            except:
+                row.addString("Error", 'MBus TCP connection failed, '+host+':'+str(port),"","")
+                logging.error('MBus TCP connection failed, '+host+':'+str(port))
+                self.gpioRed(1)
+                return msg
+        else:   
+            try:
+                mbus = MBus(device=self.port)
+                mbus.connect()
+            except:
+                row.addString("Error", 'Mbus connection NOT possible, probably no suitable USB port found!',"","")
+                logging.error('Mbus connection NOT possible, probably no suitable USB port found!')
+                self.gpioRed(1)
+                return msg
 
         try:
-            mbus = MBus(device=self.port)
-            mbus.connect()
+            if(tcpConn==False):
+                os.system("stty " + str(self.baudrate) + " < " + self.port)
+                # print(os.system("stty -a < /dev/ttyUSB0"))
+            reply=mbus.recv_frame()
         except:
-            row.addString("Error", 'Mbus connection NOT possible, probably no suitable USB port found!',"","")
-            logging.error('Mbus connection NOT possible, probably no suitable USB port found!')
-            return msg
+            pass
 
-        try:
-            mbus.send_request_frame(0xFE) # Wrong address, MBUS_ADDRESS_BROADCAST_REPLY
-            reply = mbus.recv_frame()
+        loops=0
+        reply=None
+        while loops<2:
+            if(tcpConn==False):
+                os.system("stty " + str(self.baudrate) + " < " + self.port)
+            try:
+                if( len(slaveid) == 16 ):
+                    # secondary
+                    mbus.select_secondary_address(slaveid)
+                    mbus.send_request_frame(MBUS_ADDRESS_NETWORK_LAYER)
+                else:
+                    # primary
+                    mbus.send_request_frame(int(slaveid))
+                reply = mbus.recv_frame()
+                loops=2
+            except:
+                loops+=1
+
+        if reply==None:
+            row.addString("Error", 'Nothing received from slave, '+str(slaveid),"","")
+            logging.error('Nothing received from slave, '+str(slaveid))
+            self.gpioRed(1)
+            return msg
+                
+        try:       
             reply_data = mbus.frame_data_parse(reply)
             xml = mbus.frame_data_xml(reply_data)
             mbus.disconnect()
             if debug:
                 print(xml)
         except:
-            row.addString("Error", 'FAILED to get data from mbus',"","")
-            logging.error('FAILED to get data from mbus')
+            row.addString("Error", 'M-Bus data parse failure',"","")
+            logging.error('M-Bus data parse failure')
+            self.gpioRed(1)
             return msg
 
         try:
@@ -101,6 +150,7 @@ class Reader(InformerBase.InformerBase):
         except Exception as ex:
             logging.error("parse error: %s" % ex)
             row.addString("Error", "parse error: %s" % ex,"","")
+            self.gpioRed(1)
             return msg
 
         # Parse SlaveInformation
@@ -119,6 +169,7 @@ class Reader(InformerBase.InformerBase):
         except Exception as ex:
             logging.error("SlaveInformation parse error: %s" % ex)
             row.addString("Error", "SlaveInformation parse error: %s" % ex,"","")
+            self.gpioRed(1)
             return msg
             
         # Parse each DataRecord
@@ -135,9 +186,11 @@ class Reader(InformerBase.InformerBase):
             except Exception as ex:
                 logging.error("DataRecord parse error: %s" % ex)
                 row.addString("Error", "DataRecord parse error: %s" % ex,"","")
+                self.gpioRed(1)
                 return msg
 
         logging.debug("Done")
+        # self.gpioGreen(0)
         return msg
 
 def sigtermhandler(signum, frame):
