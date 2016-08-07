@@ -100,7 +100,7 @@ class Counter2Power(): # returns power in W (and more)
         if self.state != 1:
             self.power = 0
             self.inc_dict = {} # after a break new calc will begin
-            log.info('no power calc for '+self.svc_name+'.'+str(self.svc_member)+' due to state '+str(self.state))
+            log.info('power 0 for '+self.svc_name+'.'+str(self.svc_member)+' due to state '+str(self.state))
             return self.power, self.state, chg
 
         # now state == 1, power calc is possible

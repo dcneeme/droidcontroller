@@ -291,7 +291,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             #this above should be fixed. value is already saved, put it there!
 
             Delay in the end attempts to increase reliability of reading on mba change. INVESTIGATE, is it possibly a slave (ioboard) related problem?
-            FIMXME:  do not attempt to access counters that are not defined in devices.sql! this should be an easy way to add/remove devices.
+            FIMXME:  do not attempt to access counters that are not defined in devices.sql! this should be an easy way to add/remove devices. really??
         '''
         self.ts = int(round(time.time(),0)) # refresh timestamp for raw, common for grp members
         step = int(abs(wcount))
@@ -310,7 +310,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 else:
                     msg += ' -- no mb[]!'
 
-                log.info(msg) ###### See on hea kompaktne raw kontroll
+                log.info(msg) ###
 
             except:
                 msg += ' -- FAILED!'
@@ -806,7 +806,10 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             return
 
 
-
+    def count2power(self):
+        ''' find power services and calc new values '''
+        pass
+        
 
     def make_svc(self, val_reg, sta_reg=''):  # ONE svc, both val_reg and sta_reg exist for ai and counters
         ''' Make a single service record WITH STATUS based on existing values and update the scaled value in sql table.
@@ -815,7 +818,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             If sta_reg is empty and vale_reg ends with W, S is assumed for sta_reg name end.
 
             self.cpi must be set before executing!
-            FIXME - do not send a svs out if any of the members is missing / None!
+            Do not send a svs out if any of the members is missing / None!
+            FIXME / calculate power immediately on count increase, in a new count2power() method!
         '''
 
         status = 0 # initially for whole service
@@ -892,7 +896,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 mbi = srow[20] # int
                 wcount = int(srow[21]) if srow[21] != '' else 1  # word count
                 ##chg = 0 # member status change flag
-                log.debug('>>> val_reg '+val_reg+' member '+str(member)+', cfg='+str(cfg)+', raw='+str(raw)+', ovalue='+str(ovalue)+', outlo='+str(outlo)+', outhi='+str(outhi)) ##
+                #log.info('>>> val_reg '+val_reg+' member '+str(member)+', cfg='+str(cfg)+', raw='+str(raw)+', ovalue='+str(ovalue)+', outlo='+str(outlo)+', outhi='+str(outhi)) ##
                 #print('val_reg '+val_reg+' member '+str(member)+', cfg='+str(cfg)+', raw='+str(raw)+', ovalue='+str(ovalue)+', outlo='+str(outlo)+', outhi='+str(outhi)) # debug
 
             except:
@@ -1042,6 +1046,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
             elif 's' in regtype: # setup value
                 value = ovalue # use the value in table without conversion or influence on status
+                #log.info('>>> setup value to add to lisa: '+str(value)) ## debug
                 if mba:
                     log.warning('NO mba SHOULD be set for setup value '+val_reg+'.'+str(member)) # debug
 
@@ -1051,8 +1056,10 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 
             try: # what if None? exception?
                 if value != None:
-                    lisa += str(int(round(value))) # adding member values into one string
-                    values.append(int(round(value))) # for msgbus
+                    #lisa += str(int(round(value,0))) # adding member values into one string
+                    #values.append(int(round(value,0))) # for msgbus
+                    lisa += str(value) # adding member values into one string
+                    values.append(value) # for msgbus
                     
                 else:
                     log.warning('invalid value None from regtype '+regtype+', reg '+val_reg+', member '+str(member))
@@ -1077,6 +1084,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         # service members done, check if all of them valid to use in svc tuple
         if rowproblemcount == 0: # all members valid
             sendtuple = [sta_reg, status, val_reg, lisa] # sending service to buffer
+            #log.info('>>> finished sendtuple: '+str(sendtuple)+', values: '+str(values)) ## 
             udp.send(sendtuple) # send end result here, possibly the old result was sent once again before 
             if self.msgbus != None:
                 try:
