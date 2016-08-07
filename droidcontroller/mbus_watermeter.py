@@ -27,13 +27,17 @@ m=MbusWaterMeter(id=1) # meter instance, id=1 for HRI, 4 for itron
 m.read_sync(debug=True) # sync read, async is also possible using future. 
 m.parse(debug=True) # to list all possible values from the meter
 m.parse() # to get the needed value only
+
+find out secondary address> mbus-serial-scan-secondary -b 2400 /dev/ttyUSB0
 '''
 
 class MbusWaterMeter(object): 
     ''' Publish values to services via msgbus or return a single value '''
-    def __init__(self, id = 4, msgbus=None, svclist=[['XYW',1,1,'undefined']]): # svc, member, id, name
-        ''' id=4 for itron, id=1 for HRI-B '''
-        self.id = id
+    def __init__(self, id = 4, msgbus=None, svclist=[['XYW',1,1,'undefined']], primary=254, secondary=''): # svc, member, id, name
+        ''' id=4 for itron, id=1 for HRI-B. for heat meters, use id list (FIXME!) '''
+        self.primary = primary # 254 is broadcast address, usable for single meter on the line
+        self.secondary = secondary # hex string, primary addresses can be the same, if secondary addresses used!
+        self.id = id # FIXME / data portion from the xml, see debug=True for read_sync()
         self.msgbus = msgbus # publish to msgbus, if not None
         self.svclist = svclist # svc, member, id, name
         self.xml = ''
@@ -47,24 +51,29 @@ class MbusWaterMeter(object):
             traceback.print_exc()
             time.sleep(3)
 
-    def read_sync(self, addr=254, debug=False, secondary=''): # using primary address either broadcast 254 or known 0...250
+    def read_sync(self, debug=False): # prints xml data if debug True
         ''' Query mbus device using primary address either broadcast 254 or known 1...250, waits for reply, lists all if debug == True 
             DO NOT use primary addressing if more than one meters share the same primary address! sensus watermeters 0 by default! 
         '''
+        if self.secondary != '':
+            sec = True
+        else:
+            sec = False
+        
         if debug:
-            if secondary != '':
-                sec = True
-                logadd = 'secondary address '+secondary
+            if sec:
+                logadd = 'secondary address '+self.secondary
             else:
-                sec = False
-                logadd = 'primary address '+str(addr)
+                logadd = 'primary address '+str(self.primary)
             log.info('sending out a sync mbus query using '+logadd)
         try:
             if sec:
-                self.mbus.select_secondary_address(secondary)
+                self.mbus.select_secondary_address(self.secondary)
                 self.mbus.send_request_frame(MBUS_ADDRESS_NETWORK_LAYER) # secondary
             else:
-                self.mbus.send_request_frame(addr) # primary
+                self.mbus.send_request_frame(self.primary) # primary
+                self.mbus.send_request_frame(self.primary) # primary
+                self.mbus.send_request_frame(self.primary) # primary
             reply = self.mbus.recv_frame()
             reply_data = self.mbus.frame_data_parse(reply)
             self.xml = self.mbus.frame_data_xml(reply_data)
@@ -72,6 +81,7 @@ class MbusWaterMeter(object):
                 print(self.xml)
         except:
             log.error('FAILED to get data from mbus')
+            traceback.print_exc()
             return 1
 
         try:
