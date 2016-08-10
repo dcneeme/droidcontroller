@@ -730,7 +730,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         return mb[mbi].read(mba, regadd, count = 1, type='h')
 
     def set_dowords(self,mba,regadd,values,mbi=0): # sets holding register without services ivolvment
-        ''' Setting holding registwer (like pwm channel for pulse or pwm) '''
+        ''' Setting holding register (like pwm channel for pulse or pwm) directly, no sql in between (?) '''
         return mb[mbi].write(mba, regadd, values = values) # values must be list
 
     def ask_values(self): # from server, use on init and conn up, send ? to server if value type = 's!'
