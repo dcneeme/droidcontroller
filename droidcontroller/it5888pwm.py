@@ -91,7 +91,7 @@ class IT5888pwm(object):
                     self.d.set_doword(self.mba, 100 + bit, value=self.fullvalues[i], mbi=self.mbi)
                     log.debug(self.name+' new pwm value '+str(value)+', fullvalue '+str(hex(self.fullvalues[i]))+' set for channel '+str(i)+'/ bit '+str(bit)+', phase '+str(self.phases[i])+', periodic '+str(self.periodics[i]))
             else:
-                log.error('INVALID '+self.name+' chan'+str(chan)+' / bit '+str(bit)+' used! chan should be < len(bits) '+str(len(self.bits))+', self.bits '+str(self.bits))
+                log.error('INVALID '+self.name+' chan'+str(chan)+' / bit '+str(i)+' used! chan should be < len(bits) '+str(len(self.bits))+', self.bits '+str(self.bits))
                 return 1
             return 0
         except:
@@ -101,15 +101,15 @@ class IT5888pwm(object):
 
 
     def set_values(self, values): # full list according to bits
-        ''' Set one channel to the new PWM value. Will be sent to modbus register if differs from the previous '''
+        ''' Set exactly all pwm channels in this io module to the new PWM values (give as list). '''
         chg = 0
         try:
             if len(values) == len(self.bits):
                 if values != self.values or self.phaseset:  # change, refresh need in IO!
                     #self.values = values # tehakse set_value() sees
-                    for i in range(len(self.bits)):
-                        self.set_value(self.bits[i], values[i])
-                log.debug('all changed '+self.name+' PWM values sent to IO')
+                    for i in range(len(values)):
+                        self.set_value(i, values[i])
+                #log.debug(self.name+' PWM values sent to IO')
             else:
                 log.warning('invalid length for values list:'+str(len(values))+', values '+str(values)+', bits '+str(self.bits))
                 return 1
