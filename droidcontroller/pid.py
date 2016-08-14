@@ -269,8 +269,8 @@ class PID:
         if setpoint != None:
             self.setPoint = setpoint # replacing setpoint if given
         if actual != None:
-            da = actual - self.actual if self.actual != None else 0
-        self.actual = actual
+        #    da = actual - self.actual if self.actual != None else 0
+            self.actual = actual
         self.extnoint = noint
         direction = ['down','','up'] # up or down / FIXME use enum here! add Limit class! reusable for everybody...
         try:
@@ -298,24 +298,30 @@ class PID:
                 ##self.Ci += self.error * dt   # integral term
                 if self.error > 0: # actual (possibly temperature) is increasing
                     self.Ci += self.error * dt * self.Ki # integral term
-                    print('integration up, da '+str(da))
+                    #print('integration up)
                 else:
                     self.Ci += (self.error * dt * self.Ki) * self.downspeed # integral term during passive cooling is smaller
-                    print('integration down or steady, da '+str(da)+', downspeed '+str(self.downspeed))
+                    #print('integration down or steady, downspeed '+str(self.downspeed))
             else:
                 #pass
                 log.info(self.name+' integration '+direction[self.onLimit+1]+' forbidden, onLimit '+str(self.onLimit)+', extnoint '+str(self.extnoint)+', dead_time '+str(self.dead_time))
 
-        self.Cd = 0
-        if dt > 0:                              # no div by zero
+        #self.Cd = 0
+        if dt > 0 and self.out != None:                 # no div by zero
             ##Cd = de/dt                     # derivative term
-            Cd = da/dt * self.Kd   # derivative term based on actual change, less jumps!
+            old_pi = self.out - self.Cd
+            new_pi = self.Cp + self.Ci
+            dpi = new_pi - old_pi
+            self.Cd = 1.0 * dpi/dt * self.Kd   # derivative term based on P + I, less jumpy than error, more dynamic than actual!
+            print('old_pi '+str(old_pi)+', new_pi '+str(new_pi)+', dpi '+str(dpi)+', Cd '+str(self.Cd))
             #if self.out != None:
             #    if abs(Cd) < (self.outMax - self.outMin): # seems normal
             #        self.Cd = (Cd + self.Cd) / 2 # averaging to make the differential spikes smoother
             #    else:
             #        log.warning('IGNORED too large Cd '+str(Cd)+', de '+str(de)+', dt '+str(dt)+' above allowed output span')
-
+        else:
+            self.Cd = 0
+            
         self.prevtm = self.currtime               # save t for next pass
         self.prev_err = self.error                   # save t-1 self.error
 
@@ -371,7 +377,7 @@ class PID:
         self.out = out
 
         if self.outmode == 'list':
-            return pout, round(self.Cp), round(self.Ki * self.Ci), round(self.Kd * self.Cd), round(self.error), self.onLimit, self.extnoint
+            return pout, round(self.Cp), round(self.Ci), round(self.Cd), round(self.error), self.onLimit, self.extnoint
         else:
             return pout # summary value only
 
