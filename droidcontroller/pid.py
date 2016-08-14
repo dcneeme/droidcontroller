@@ -32,8 +32,11 @@ class PID:
         This class implements a simplistic PID control algorithm
     '''
 
-    def __init__(self, setpoint = 0, P = 1.0, I = 0.01, D = 0.0, min = 5, max = 995, outmode = 'nolist', name='undefined', dead_time = 0, inv=False):
-        ''' if outmode = 'list', then extra data is returned after summary output. mina and max are required for normal operation! '''
+    def __init__(self, setpoint = 0, P = 1.0, I = 0.01, D = 0.0, min = 5, max = 995, outmode = 'nolist', name='undefined', dead_time = 0, inv=False, downspeed=1):
+        ''' if outmode = 'list', then extra data is returned from output(). 
+         min and max are required for normal operation! 
+         downspeed is used to multiply Ki, Ki, Kd in out calc if da<0, to enable asymmetry (fast heating, slow cooling for example)
+        '''
         self.outmode = outmode # remove later, temporary help to keep list output for some installations
         self.error = 0
         self.inv = inv # inversion if True (negate error)
@@ -54,6 +57,7 @@ class PID:
         self.dead_time = dead_time # time for reaction start for the controlled object
         self.extnoint = 0 # from outside, on output()
         self.noint = 0 # internal saturation-initiated dead time signal to prevent outer loop integration in one direction
+        self.downspeed = downspeed
         self.Initialize()
         #msg=str(self.getvars())
         log.info('PID '+self.name+' init done')
@@ -281,7 +285,8 @@ class PID:
         dt = self.currtime - self.prevtm          # get delta t
         de = self.error - self.prev_err              # get delta self.error
 
-        self.Cp = self.Kp * self.error               # proportional term
+        self.Cp = self.Kp * self.error  # proportional term. should we take da sign into account?
+        
         if self.Ki > 0:
             if ((self.onLimit == 0 and
                     ((self.extnoint == 0) or
@@ -291,7 +296,12 @@ class PID:
                     (self.onLimit == 1 and self.error < 0)): # ok to integrate both, up, down
                 #integration is only allowed if Ki not zero and no limit reached or when output is moving away from limit
                 ##self.Ci += self.error * dt   # integral term
-                self.Ci += self.error * dt * self.Ki # integral term
+                if self.error > 0: # actual (possibly temperature) is increasing
+                    self.Ci += self.error * dt * self.Ki # integral term
+                    print('integration up, da '+str(da))
+                else:
+                    self.Ci += (self.error * dt * self.Ki) * self.downspeed # integral term during passive cooling is smaller
+                    print('integration down or steady, da '+str(da)+', downspeed '+str(self.downspeed))
             else:
                 #pass
                 log.info(self.name+' integration '+direction[self.onLimit+1]+' forbidden, onLimit '+str(self.onLimit)+', extnoint '+str(self.extnoint)+', dead_time '+str(self.dead_time))
