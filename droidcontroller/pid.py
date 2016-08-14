@@ -57,14 +57,14 @@ class PID:
         self.Initialize()
         #msg=str(self.getvars())
         log.info('PID '+self.name+' init done')
-        
+
 
     def set_actual(self, invar):
         if invar != None:
             self.actual = invar
         else:
             log.warning('ignored illegal actual value None! keeping '+str(self.actual))
-    
+
     def setSetpoint(self, invar):
         ''' Set the goal for the actual value '''
         if invar != None:
@@ -94,7 +94,7 @@ class PID:
             if self.Ki > 0 and invar > 0 and self.Ki != invar:
                 log.info('setKi with initialize')
                 self.Ki = invar
-                self.Initialize()
+                #self.Initialize() # enam pole vaja, sest meeles peame integraali Ki ja errori korrutisest  14.8.2016
             else:
                 self.Ki = invar
         except:
@@ -145,8 +145,8 @@ class PID:
             'outMin' : self.outMin, \
             'outMax' : self.outMax, \
             'outP' : self.Cp, \
-            'outI' : self.Ki * self.Ci, \
-            'outD' : self.Kd * self.Cd, \
+            'outI' : self.Ci, \
+            'outD' : self.Cd, \
             'setpoint' : self.setPoint, \
             'onlimit' : self.onLimit, \
             'error' : self.error, \
@@ -213,8 +213,9 @@ class PID:
         # term result variables
         self.Cp = 0
         if self.Ki >0 and self.outMin != None and self.outMax != None:
-            self.Ci=(2 * self.outMin + self.outMax) / (3 * self.Ki) # to avoid long integration to normal level, set int between outmin and outmax
-            log.debug('pid: integral biased to '+str(round(self.Ci))+' while Ki='+str(self.Ki))
+            #self.Ci=(2 * self.outMin + self.outMax) / (3 * self.Ki) # to avoid long integration to normal level, set int between outmin and outmax
+            self.Ci=(2 * self.outMin + self.outMax) / 3 # to avoid long integration to normal level
+            log.info('pid: integral component biased to '+str(round(self.Ci))+' while Ki='+str(self.Ki))
         else:
             self.Ci = 0
         self.Cd = 0
@@ -223,9 +224,9 @@ class PID:
 
 
     def getLimit(self, onlimit=None):
-        ''' Returns the limit state and the saturation age as list. 
-            Also asuggestion not to integrate for outer loop id age < deadtime. 
-            If noint is finished, then no new noint with the same value during deadzone! 
+        ''' Returns the limit state and the saturation age as list.
+            Also asuggestion not to integrate for outer loop id age < deadtime.
+            If noint is finished, then no new noint with the same value during deadzone!
             noint cannot be restarted!
         '''
         if onlimit != None:
@@ -245,12 +246,12 @@ class PID:
                     self.noint = 0
                     self.tsLimit = time.time() # stop time
                     log.info('stopped noint at age '+str(int(age))+' for '+self.name)
-        else: 
+        else:
             if self.noint != 0:
                 log.info('noint '+str(self.noint)+' ongoing, age '+str(int(age))+'s for '+self.name)
             else:
                 log.info('noint protection time lasting '+str(int(age))+'s ongoing for '+self.name)
-            
+
         return self.onLimit, age, self.noint # noint on sama plaarsusega kui onlimit, kehtides deadzone pikkuses
 
 
@@ -258,13 +259,14 @@ class PID:
         ''' Performs PID computation and returns a control value and it's components (and self.error and saturation)
             based on the elapsed time (dt) and the difference between actual value and setpoint.
             Added oct 2015: noint value other than 0 will stop integration in both directions.
-            
+
             If actual and/or setpoint is not given, these should be defined and updated via set_actual(), setSetpoint() !
         '''
         if setpoint != None:
             self.setPoint = setpoint # replacing setpoint if given
         if actual != None:
-            self.actual = actual
+            da = actual - self.actual if self.actual != None else 0
+        self.actual = actual
         self.extnoint = noint
         direction = ['down','','up'] # up or down / FIXME use enum here! add Limit class! reusable for everybody...
         try:
@@ -288,24 +290,27 @@ class PID:
                     (self.onLimit == -1 and self.error > 0) or
                     (self.onLimit == 1 and self.error < 0)): # ok to integrate both, up, down
                 #integration is only allowed if Ki not zero and no limit reached or when output is moving away from limit
-                self.Ci += self.error * dt   # integral term
+                ##self.Ci += self.error * dt   # integral term
+                self.Ci += self.error * dt * self.Ki # integral term
             else:
                 #pass
                 log.info(self.name+' integration '+direction[self.onLimit+1]+' forbidden, onLimit '+str(self.onLimit)+', extnoint '+str(self.extnoint)+', dead_time '+str(self.dead_time))
 
         self.Cd = 0
         if dt > 0:                              # no div by zero
-            Cd = de/dt                     # derivative term
-            if self.out != None:
-                if abs(Cd) < (self.outMax - self.outMin): # seems normal
-                    self.Cd = (Cd + self.Cd) / 2 # averaging to make the differential spikes smoother
-                else:
-                    log.warning('IGNORED too large Cd '+str(Cd)+', de '+str(de)+', dt '+str(dt)+' above allowed output span')
+            ##Cd = de/dt                     # derivative term
+            Cd = da/dt * self.Kd   # derivative term based on actual change, less jumps!
+            #if self.out != None:
+            #    if abs(Cd) < (self.outMax - self.outMin): # seems normal
+            #        self.Cd = (Cd + self.Cd) / 2 # averaging to make the differential spikes smoother
+            #    else:
+            #        log.warning('IGNORED too large Cd '+str(Cd)+', de '+str(de)+', dt '+str(dt)+' above allowed output span')
 
         self.prevtm = self.currtime               # save t for next pass
         self.prev_err = self.error                   # save t-1 self.error
 
-        out = self.Cp + (self.Ki * self.Ci) + (self.Kd * self.Cd) # sum the terms and return the result
+        ##out = self.Cp + (self.Ki * self.Ci) + (self.Kd * self.Cd) # sum the terms and return the result
+        out = self.Cp + self.Ci + self.Cd # sum the components
 
         if self.outMax != None and self.outMin != None:
             if self.outMax < self.outMin or self.outMax == self.outMin: # avoid faulty limits
@@ -318,7 +323,7 @@ class PID:
                     self.onLimit = 1 # reached hi limit
                     self.tsLimit = self.currtime
                     log.warning('loop '+self.name+' output reached hi limit '+str(out)+' while set='+str(self.setPoint)+', act='+str(self.actual))
- 
+
 
         if self.outMin is not None:
             if out < self.outMin:
@@ -352,13 +357,15 @@ class PID:
         else:
             pout = None
             log.warning('pid out None, possibly due to init')
-            
+
         self.out = out
-        
+
         if self.outmode == 'list':
             return pout, round(self.Cp), round(self.Ki * self.Ci), round(self.Kd * self.Cd), round(self.error), self.onLimit, self.extnoint
         else:
             return pout # summary value only
+
+
 
 
 class ThreeStep:
@@ -504,8 +511,8 @@ class ThreeStep:
 
     def set_onlimit(self, invar):
         self.setLimit(invar) # starman main_rescue jaoks ajutine abi
-        
-        
+
+
     def setLimit(self, invar):
         ''' Sets the 3step instance into saturated state based on external signal (limit switch for example) '''
         try:
