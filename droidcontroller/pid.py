@@ -132,7 +132,7 @@ class PID:
         ''' Returns the limit state and the saturation age as list. Also asuggestion not to integrate for outer loop id age < deadtime. '''
         noint = 0 # recalculated every time based on age and onLimit
         if self.onLimit != 0:
-            age = int(time.time() - self.tsLimit)
+            age = int(time.time() - self.tsLimit) # limitation age
             if self.dead_time > age:
                 noint = self.onLimit
         else:
@@ -215,7 +215,7 @@ class PID:
         self.prev_err = 0
         self.onLimit = 0 # value 0 means between limits, -10 on lo limit, 1 on hi limit
         # term result variables
-        self.Cp = 0
+        self.Cp = 0 
         if self.Ki >0 and self.outMin != None and self.outMax != None:
             #self.Ci=(2 * self.outMin + self.outMax) / (3 * self.Ki) # to avoid long integration to normal level, set int between outmin and outmax
             self.Ci=(2 * self.outMin + self.outMax) / 3 # to avoid long integration to normal level
@@ -229,7 +229,7 @@ class PID:
 
     def getLimit(self, onlimit=None):
         ''' Returns the limit state and the saturation age as list.
-            Also asuggestion not to integrate for outer loop id age < deadtime.
+            Also noint as a suggestion not to integrate for outer loop while limitation age < deadtime.
             If noint is finished, then no new noint with the same value during deadzone!
             noint cannot be restarted!
         '''
@@ -284,7 +284,7 @@ class PID:
         self.currtime = time.time()               # get t
         dt = self.currtime - self.prevtm          # get delta t
         de = self.error - self.prev_err              # get delta self.error
-
+        
         self.Cp = self.Kp * self.error  # proportional term. should we take da sign into account?
         
         if self.Ki > 0:
@@ -306,21 +306,21 @@ class PID:
                 #pass
                 log.info(self.name+' integration '+direction[self.onLimit+1]+' forbidden, onLimit '+str(self.onLimit)+', extnoint '+str(self.extnoint)+', dead_time '+str(self.dead_time))
 
-        #self.Cd = 0
         if dt > 0 and self.out != None:                 # no div by zero
-            ##Cd = de/dt                     # derivative term
-            old_pi = self.out - self.Cd
-            new_pi = self.Cp + self.Ci
-            dpi = new_pi - old_pi
-            self.Cd = 1.0 * dpi/dt * self.Kd   # derivative term based on P + I, less jumpy than error, more dynamic than actual!
-            print('old_pi '+str(old_pi)+', new_pi '+str(new_pi)+', dpi '+str(dpi)+', Cd '+str(self.Cd))
-            #if self.out != None:
-            #    if abs(Cd) < (self.outMax - self.outMin): # seems normal
-            #        self.Cd = (Cd + self.Cd) / 2 # averaging to make the differential spikes smoother
-            #    else:
-            #        log.warning('IGNORED too large Cd '+str(Cd)+', de '+str(de)+', dt '+str(dt)+' above allowed output span')
+            Cd = 1.0 * self.Kd * de/dt                     # derivative term
+            #old_pi = self.out - self.Cd
+            #new_pi = self.Cp + self.Ci
+            #dpi = new_pi - old_pi
+            #Cd = 1.0 * self.Kd * dpi/dt    # derivative term based on P + I, less jumpy than error, more dynamic than actual!
+            #print('old_pi '+str(old_pi)+', new_pi '+str(new_pi)+', dpi '+str(dpi)+', Cd '+str(self.Cd))
+            if abs(Cd) < (self.outMax - self.outMin): # seems normal
+                self.Cd = (Cd + self.Cd) / 2 # averaging to make the differential spikes smoother
+            else:
+                #self.Cd = 0 # jaagu endine
+                log.warning('IGNORED too large Cd '+str(Cd)+', de '+str(de)+', dt '+str(dt)+' above allowed output span')
         else:
             self.Cd = 0
+            
             
         self.prevtm = self.currtime               # save t for next pass
         self.prev_err = self.error                   # save t-1 self.error
