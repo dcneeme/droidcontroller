@@ -1,3 +1,5 @@
+# This Python file uses the following encoding: utf-8
+
 #-------------------------------------------------------------------------------
 # PID.py
 # A simple implementation of a PID controller and also the threestep motor control
@@ -6,7 +8,7 @@
 # by J. M. Hughes, published by O'Reilly Media, December 2010,
 # ISBN 978-0-596-80956-0.
 #-------------------------------------------------------------------------------
-# modified and ThreeStep class added by droid4control.com 2014
+# modified and ThreeStep class added by droid4control.com 2014, Neeme Takis
 #
 # usage example:
 # from pid import *
@@ -22,6 +24,18 @@
 # pid: fixing onLimit value 1 to zero!
 # pid: fixing onLimit value -1 to zero!
 # OCT 2015  added noint variable to output() in order to fight dead-time reset windup (use this whenever the if inner loop is saturated)
+# aug 2016 tuning tests, downspeed added (natural cooling vs active heating)
+
+''' SOOVITUSI
+  1. mõõtmisi teosta 20 x kiiremini kui võimalik võnkumisperiood, ja ilma keskmistamata
+  2. kaskaadlylituse korral välisesse loopi ainult I, 10 x väiksem, kui sisemises
+  3. sisemine häälesta enne, PI, PID on ebatäpse mõõtmisega igal juhul jama.
+  4. välise loobi aktiveerimisel vahenda sisemise loobi Kp, Ki 10..20%. Kd kõigil alati 0!
+
+  häälestamiseks Ki=0, Kd=0. suurenda Kp kuni vongub. registreeri periood Tu s, Ku=Kp
+  PI jaoks optimaalne Kp=Ku*0.45, Ki=1.2*Ku/Tu
+
+'''
 
 import time
 import logging
@@ -33,8 +47,8 @@ class PID:
     '''
 
     def __init__(self, setpoint = 0, P = 1.0, I = 0.01, D = 0.0, min = 5, max = 995, outmode = 'nolist', name='undefined', dead_time = 0, inv=False, downspeed=1):
-        ''' if outmode = 'list', then extra data is returned from output(). 
-         min and max are required for normal operation! 
+        ''' if outmode = 'list', then extra data is returned from output().
+         min and max are required for normal operation!
          downspeed is used to multiply Ki, Ki, Kd in out calc if da<0, to enable asymmetry (fast heating, slow cooling for example)
         '''
         self.outmode = outmode # remove later, temporary help to keep list output for some installations
@@ -215,7 +229,7 @@ class PID:
         self.prev_err = 0
         self.onLimit = 0 # value 0 means between limits, -10 on lo limit, 1 on hi limit
         # term result variables
-        self.Cp = 0 
+        self.Cp = 0
         if self.Ki >0 and self.outMin != None and self.outMax != None:
             #self.Ci=(2 * self.outMin + self.outMax) / (3 * self.Ki) # to avoid long integration to normal level, set int between outmin and outmax
             self.Ci=(2 * self.outMin + self.outMax) / 3 # to avoid long integration to normal level
@@ -284,9 +298,9 @@ class PID:
         self.currtime = time.time()               # get t
         dt = self.currtime - self.prevtm          # get delta t
         de = self.error - self.prev_err              # get delta self.error
-        
+
         self.Cp = self.Kp * self.error  # proportional term. should we take da sign into account?
-        
+
         if self.Ki > 0:
             if ((self.onLimit == 0 and
                     ((self.extnoint == 0) or
@@ -320,8 +334,8 @@ class PID:
                 log.warning('IGNORED too large Cd '+str(Cd)+', de '+str(de)+', dt '+str(dt)+' above allowed output span')
         else:
             self.Cd = 0
-            
-            
+
+
         self.prevtm = self.currtime               # save t for next pass
         self.prev_err = self.error                   # save t-1 self.error
 
