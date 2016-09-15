@@ -65,7 +65,8 @@ class MbusMeter(object):
         self.modeldata.update({'axisSKU03': 
             {5:['Energy (kWh)',1,'kWh'], 6:['Volume (l)',0.001,'m3'], 9:['Flow temperature (deg C)',10,'ddegC'], 
             10:['Return temperature (deg C)',10,'ddegC'], 7:['Power (W)',1000,'W'], 8:['Volume flow (l/h)',1000,'l/h']}})
-        self.modeldata.update({'cyble': {4:['Volume (l)',1,'l']}}) # water meter
+        self.modeldata.update({'cyble': {4:['Volume (l)',1,'l']}}) # water meter koogu20
+        self.modeldata.update({'APA': {2:['Volume (l)',1,'l'], 3:['Volume flow (l/h))',1,'l']}}) # water meter vaatsakool
          
          
     def set_model(self, invar):
@@ -182,57 +183,73 @@ class MbusMeter(object):
     
     def parse1(self, id):
         ''' Return one Value with matching id from self.nodes '''
-        if id < len(self.nodes):
-            return int(round(float(self.nodes[id].firstChild.nodeValue) * self.modeldata[self.model][id][1],0))
-        else:
-            log.error('invalid id '+str(id)+' while self.nodes len '+str(len(self.nodes)))
-            return None
+        try:
+            value = int(round(float(self.nodes[id].firstChild.nodeValue) * self.modeldata[self.model][id][1],0))
+        except:
+            value = self.nodes[id].firstChild.nodeValue
+        return value
         
-    def find_id(self, name): # name is 'Energy' or smthg...
+    def find_id(self, name): # name is 'Energy', 'Volume flow' or smthg...
         idlist = list(self.modeldata[self.model].keys())
         for id in idlist:
-            if name == self.modeldata[self.model][id][0].split(' ')[0]:
+            if name in self.modeldata[self.model][id][0]:
                 break
             else:
                 id = None
         return id
         
     def get_energy(self):
-        id = self.find_id('Energy')
+        if self.xml != '':
+            id = self.find_id('Energy')
+        else:
+            log.error('use read() first'); id = None
         if id != None:
             return self.parse1(id) # kWh
         else:
             return None
 
     def get_power(self):
-        id = self.find_id('Power')
+        if self.xml != '':
+            id = self.find_id('Power')
+        else:
+            log.error('use read() first'); id = None
         if id != None:
             return self.parse1(id) # W
         else:
             return None
 
     def get_volume(self):
-        id = self.find_id('Volume')
+        if self.xml != '':
+            id = self.find_id('Volume')
+        else:
+            log.error('use read() first'); id = None
         if id != None:
             return self.parse1(id) # litres
         else:
             return None
 
     def get_flow(self):
-        id = self.find_id('Volume flow')
+        if self.xml != '':
+            id = self.find_id('Volume flow')
+        else:
+            log.error('use read() first'); id = None
         if id != None:
             return self.parse1(id) # l/h
         else:
             return None
 
-    def get_temperatures(self): # FIXME
-        ''' returns multiple values with same keyword (temperature) '''
-        idlist = list(self.modeldata[self.model].keys())
-        self.find_id('ow temperature') # FIXME
-        ton = self.parse1(id) # ddegC
-        id = self.find_id('Return')
-        tret = self.parse1(id) # ddegC
-        return ton, tret
+    def get_temperatures(self):
+        ''' returns a tuple of onflow and return temperatures '''
+        if self.xml != '':
+            self.find_id('Flow temperature')
+            ton = self.parse1(id) # ddegC
+            id = self.find_id('Return temperature')
+            tret = self.parse1(id) # ddegC
+            return ton, tret
+        else:
+            log.error('use read() first')
+        return None
+        
         
     def get_all(self): # kogu info nagemiseks vt self.xml
         out = {}
