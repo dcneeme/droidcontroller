@@ -241,7 +241,7 @@ class MbusMeter(object):
     def get_temperatures(self):
         ''' returns a tuple of onflow and return temperatures '''
         if self.xml != '':
-            self.find_id('Flow temperature')
+            id = self.find_id('Flow temperature')
             ton = self.parse1(id) # ddegC
             id = self.find_id('Return temperature')
             tret = self.parse1(id) # ddegC
