@@ -262,10 +262,17 @@ class MbusMeter(object):
         
     def get_all(self): # kogu info nagemiseks vt self.xml
         out = {}
+        name = ''
+        member = None
         conf = self.modeldata[self.model]
         for id in conf:
             value = self.parse1(id)
-            out.update({id:[conf[id][0], value]})
-        
+            for svc in self.svclist:
+                if svc[2] == id:
+                    name, member = svc[0:2]
+                    
+            out.update({id:[conf[id][0], value, name, member]})
+            
         return out
-        
+    
+    
