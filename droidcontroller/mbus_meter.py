@@ -190,13 +190,17 @@ class MbusMeter(object):
         return value
         
     def find_id(self, name): # name is 'Energy', 'Volume flow' or smthg...
+        found = 0
         idlist = list(self.modeldata[self.model].keys())
         for id in idlist:
             if name in self.modeldata[self.model][id][0]:
+                found = 1
                 break
-            else:
-                id = None
-        return id
+            
+        if found == 1:
+            return id
+        else:
+            return None
         
     def get_energy(self):
         if self.xml != '':
