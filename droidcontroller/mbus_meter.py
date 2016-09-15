@@ -254,7 +254,7 @@ class MbusMeter(object):
                 id = self.find_id('Temperature Difference')
                 tdif = self.parse1(id) #
             
-            return ton, tret, tdiff
+            return ton, tret, tdif
         else:
             log.error('use read() first')
         return None
