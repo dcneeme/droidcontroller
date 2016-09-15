@@ -58,7 +58,7 @@ class MbusMeter(object):
         self.modeldata = {} # define only  what's important, based on xml
         self.modeldata.update({'kamstrup402': 
             {1:['Energy (kWh)',1,'kWh'], 2:['Volume (1e-2  m^3)',0.01,'m3'], 4:['Flow temperature (1e-2 deg C)',0.1,'ddegC'], 
-            5:['Return temperature (1e-2 deg C)',0.1,'ddegC'], 7:['Power (100 W)',100,'W'], 9:['Volume flow (m m^3/h)',1,'l/h']}})
+            5:['Return temperature (1e-2 deg C)',0.1,'ddegC'], 6:['Temperature Difference (1e-2 deg C)',0.1,'ddegC'], 7:['Power (100 W)',100,'W'], 9:['Volume flow (m m^3/h)',1,'l/h']}})
         self.modeldata.update({'kamstrup602': 
             {1:['Energy (kWh)',1,'kWh'], 2:['Volume (1e-2  m^3)',0.01,'m3'], 4:['Flow temperature (1e-2 deg C)',0.1,'ddegC'], 
             5:['Return temperature (1e-2 deg C)',0.1,'ddegC'], 7:['Power (100 W)',100,'W'], 9:['Volume flow (m m^3/h)',1,'l/h']}})
@@ -243,13 +243,18 @@ class MbusMeter(object):
             return None
 
     def get_temperatures(self):
-        ''' returns a tuple of onflow and return temperatures '''
+        ''' returns a tuple of onflow and return temperatures, kamtrup402 also diff_temp '''
+        tdif = None
         if self.xml != '':
             id = self.find_id('Flow temperature')
-            ton = self.parse1(id) # ddegC
+            ton = self.parse1(id) # 
             id = self.find_id('Return temperature')
-            tret = self.parse1(id) # ddegC
-            return ton, tret
+            tret = self.parse1(id) #
+            if self.model == 'kamstrup402':
+                id = self.find_id('Temperature Difference')
+                tdif = self.parse1(id) #
+            
+            return ton, tret, tdiff
         else:
             log.error('use read() first')
         return None
