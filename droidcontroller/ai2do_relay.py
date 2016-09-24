@@ -47,13 +47,21 @@ class Relay(object):
         try:
             if self.setval != None and self.actval != None and self.outval != None:
                 if self.actval > self.setval + self.hyst:
-                    if self.outval == (0 ^ self.invbit):
-                        self.d.set_dovalue(self.out[0], self.out[1],(0 ^ self.invbit))
-                        log.info('Relay channel '+self.name+' change to '+str(0 ^ self.invbit)+' due to actual '+str(self.actval)+' above setpoint '+str(self.setval)+', hyst '+str(self.hyst))
+                    if self.outval != (0 ^ self.invbit):
+                        self.outval = (1 ^ self.invbit)
+                        self.d.set_dovalue(self.out[0], self.out[1], self.outval)
+                        log.info('Relay channel '+self.name+' change to '+str(self.outval)+' due to actual '+str(self.actval)+' above setpoint '+str(self.setval)+', hyst '+str(self.hyst)+', inv '+str(self.invbit))
+                    else: ##
+                        log.info('outval already '+str(self.outval) ##
                 elif self.actval < self.setval - self.hyst:
-                    if self.outval == (1 ^ self.invbit):
-                        self.d.set_dovalue(self.out[0], self.out[1],(1 ^ self.invbit))
-                        log.info('Relay channel '+self.name+' change to '+str(1 ^ self.invbit)+' due to actual '+str(self.actval)+' below setpoint '+str(self.setval)+', hyst '+str(self.hyst))
+                    if self.outval != (1 ^ self.invbit):
+                        self.outval = (1 ^ self.invbit)
+                        self.d.set_dovalue(self.out[0], self.out[1], self.outval)
+                        log.info('Relay channel '+self.name+' change to '+str(self.outval)+' due to actual '+str(self.actval)+' below setpoint '+str(self.setval)+', hyst '+str(self.hyst)+', inv '+str(self.invbit))
+                    else: ##
+                        log.info('outval already '+str(self.outval) ##
+                else: ##
+                    log.info('no outval change needed, still '+str(self.outval)) ##
                 return 0
             else:
                 log.warning('value None from '+str(self.set)+':'+str(self.setval)+' or '+str(self.act)+':'+str(self.actval)+' or '+str(self.out)+':'+str(self.outval)) # may be ok next time
