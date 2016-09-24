@@ -811,8 +811,9 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         pass
         
 
-    def make_svc(self, val_reg, sta_reg=''):  # ONE svc, both val_reg and sta_reg exist for ai and counters
+    def make_svc(self, val_reg, sta_reg='', send=True):  # ONE svc, both val_reg and sta_reg exist for ai and counters
         ''' Make a single service record WITH STATUS based on existing values and update the scaled value in sql table.
+            SEND TO BUFFER IF send == True! use send False if just value needs to be updated
             Use block as hysteresis in value units for status change, if cfg&8192 == True.
             Use block as off_tout in s for counters with power-on/off detection if cfg&64 == True.
             If sta_reg is empty and vale_reg ends with W, S is assumed for sta_reg name end.
@@ -1083,16 +1084,18 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 
         # service members done, check if all of them valid to use in svc tuple
         if rowproblemcount == 0: # all members valid
-            sendtuple = [sta_reg, status, val_reg, lisa] # sending service to buffer
-            #log.info('>>> finished sendtuple: '+str(sendtuple)+', values: '+str(values)) ## 
-            udp.send(sendtuple) # sending end result to buffer, possibly the old result was sent once again before 
-            if self.msgbus != None:
-                try:
-                    self.msgbus.publish(val_reg, {'values': values, 'status': status})
-                    #log.debug('published to msgbus: '+str(val_reg)+' values '+str(values)+', status '+str(status)) ##
-                except:
-                    traceback.print_exc()
-            
+            if send:
+                sendtuple = [sta_reg, status, val_reg, lisa] # sending service to buffer
+                #log.info('>>> finished sendtuple: '+str(sendtuple)+', values: '+str(values)) ## 
+                udp.send(sendtuple) # sending end result to buffer, possibly the old result was sent once again before 
+                if self.msgbus != None:
+                    try:
+                        self.msgbus.publish(val_reg, {'values': values, 'status': status})
+                        #log.debug('published to msgbus: '+str(val_reg)+' values '+str(values)+', status '+str(status)) ##
+                    except:
+                        traceback.print_exc()
+            else:
+                log.info('skipping sending to buffer due to send False')
         else:
             log.warning(val_reg+' had '+str(rowproblemcount)+' problematic members')
             

@@ -31,8 +31,8 @@ class Relay(object):
     def readval(self):
         ''' check input '''
         try:
-            self.ac.make_svc(self.set[0]) # generates values based on raw, otherwise about 3 min delay in true value!
-            self.ac.make_svc(self.act[0])
+            self.ac.make_svc(self.set[0], send=False) # generates values based on raw, otherwise about 3 min delay in true value!
+            self.ac.make_svc(self.act[0], send=False) # no svc send to monitoring
             self.setval = self.ac.get_aivalue(self.set[0], self.set[1])[0] # get_aivalue() returns tuple, lo hi included!
             self.actval = self.ac.get_aivalue(self.act[0], self.act[1])[0]
             self.outval = self.d.get_divalue(self.out[0], self.out[1])
