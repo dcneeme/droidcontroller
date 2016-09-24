@@ -36,7 +36,7 @@ class Relay(object):
             self.setval = self.ac.get_aivalue(self.set[0], self.set[1])[0] # get_aivalue() returns tuple, lo hi included!
             self.actval = self.ac.get_aivalue(self.act[0], self.act[1])[0]
             self.outval = self.d.get_divalue(self.out[0], self.out[1])
-            print('set, act, out', setval, actval, outval) ##
+            #print('set, act, out', self.setval, self.actval, self.outval) ##
         except:
             log.info('Relay channel '+self.name+ ' readval problem!')
             traceback.print_exc()
@@ -51,7 +51,7 @@ class Relay(object):
                         self.d.set_dovalue(self.out[0], self.out[1],(0 ^ self.invbit))
                         log.info('Relay channel '+self.name+' change to '+str(0 ^ self.invbit)+' due to actual '+str(self.actval)+' above setpoint '+str(self.setval)+', hyst '+str(self.hyst))
                 elif self.actval < self.setval - self.hyst:
-                    if outval == (1 ^ self.invbit):
+                    if self.outval == (1 ^ self.invbit):
                         self.d.set_dovalue(self.out[0], self.out[1],(1 ^ self.invbit))
                         log.info('Relay channel '+self.name+' change to '+str(1 ^ self.invbit)+' due to actual '+str(self.actval)+' below setpoint '+str(self.setval)+', hyst '+str(self.hyst))
                 return 0
