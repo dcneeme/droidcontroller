@@ -48,7 +48,7 @@ class Relay(object):
             if self.setval != None and self.actval != None and self.outval != None:
                 if self.actval > self.setval + self.hyst:
                     if self.outval != (0 ^ self.invbit):
-                        self.outval = (1 ^ self.invbit)
+                        self.outval = (0 ^ self.invbit)
                         self.d.set_dovalue(self.out[0], self.out[1], self.outval)
                         log.info('Relay channel '+self.name+' change to '+str(self.outval)+' due to actual '+str(self.actval)+' above setpoint '+str(self.setval)+', hyst '+str(self.hyst)+', inv '+str(self.invbit))
                     else: ##
