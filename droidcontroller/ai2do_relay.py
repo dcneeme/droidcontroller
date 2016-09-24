@@ -80,6 +80,6 @@ class Relay(object):
         res2 = self.output()
         if res1 == 0 and res2 == 0:
             return 0
-        else
+        else:
             return 1
         
