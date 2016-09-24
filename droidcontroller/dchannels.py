@@ -1,6 +1,5 @@
 # This Python file uses the following encoding: utf-8
 
-# FIXME saadab liiga tihti, peaks muudatused kohe saatma ja muu harvem, doall kaudu? kes updated ts_msg?
 
 ''' mb[mbi].read(mba, reg, count = 1, type = 'h'):  # modbus read example
 
@@ -40,6 +39,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         #self.s = SQLgeneral()
         self.chg_dict = {} # svc:[member,value] after the change
         self.io_trust = False # before True do not udp.send() in order to avoid false alarms on restart!
+        self.ts_init = time.time() # paneme viitega io_trust selle alusel True
         self.Initialize()
 
 
@@ -59,7 +59,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         ''' initialize delta t variables, create tables and modbus connection '''
         self.ts = round(time.time(),1)
         self.ts_read = self.ts # time of last read
-        self.ts_send = self.ts -150 # time of last reporting
+        self.ts_send = self.ts # -150 # time of last reporting
         #self.conn = sqlite3.connect(':memory:')
         self.sqlread(self.in_sql) # read dichannels
         self.sqlread(self.out_sql) # read dochannels if exist
@@ -68,9 +68,6 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
     def read_di_grp(self,mba,regadd,count,mbi=0, regtype='h'): # using self,in_sql as the table to store in.
         ''' Read sequential register group and store raw into table self.in_sql. Inside transaction! return 1 if change, 0- no chg, 2 error '''
-        if self.ts == 0:
-            self.ts=int(round(time.time())) # for debugging time is needed
-
         cur=conn.cursor()
         msg='d_grp read from mba '+str(mba)+', regadd '+str(regadd)+', count '+str(count)+', regtype '+regtype
 
@@ -81,7 +78,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                     msg += ' OK, raw '+str(result)
                     if self.msgbus != None:
                         self.msgbus.publish('di_grp_result', {'mbi': mbi, 'mba': mba, 'regadd': regadd, 'result': result})
-                    log.debug(msg) ##
+                    #log.debug(msg) ##
                 else:
                     msg += ' -- FAIL, no mb[] for '+str(mbi)
                     log.warning(msg)
@@ -125,15 +122,14 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                                 if value != ovalue: # change detected, update dichannels value, chg-flag  - saaks ka maski alusel!!!
                                     chg = 3 # 2-bit change flag, bit 0 to send and bit 1 to process, to be reset separately
                                     msg = 'DIchannel mbi.mba.reg '+str(mbi)+'.'+str(mba)+'.'+str(regadd)+' bit '+str(bit)+' change! was '+str(ovalue)+', became '+str(value) # temporary
-                                    log.debug(msg) ##
-                                    #udp.syslog(msg)
+                                    log.info(msg) ##
                                     # dichannels table update with new bit values and change flags. no status change here. no update if not changed!
                                     Cmd = "UPDATE "+self.in_sql+" set value='"+str(value)+"', chg='"+str(chg)+"', ts='"+str(self.ts)+"' where mba='"+str(mba)+"' and regadd='"+str(regadd+i)+"' and mbi="+str(mbi)+" and bit='"+str(bit)+"'"
                                     # uus bit value ja chg lipp, 2 BITTI!
                                 else: # no value change, just update the timestamp!
                                     chg = 0
                                     Cmd = "UPDATE "+self.in_sql+" set ts='"+str(self.ts)+"', chg='"+str(chg)+"' where mba='"+str(mba)+"' and mbi="+str(mbi)+" and regadd='"+str(regadd+i)+"' and bit='"+str(bit)+"'" # old value unchanged, use ts_CHG AS TS!
-                                log.debug('dichannels update cmd: '+Cmd)
+                                #log.debug('dichannels update cmd: '+Cmd)
                                 conn.execute(Cmd) # write
                             except:
                                 log.warning('dichannels table update FAILED!')
@@ -176,7 +172,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 
                 log.warning('recreated mb['+str(mbi)+'] due to read FAILURE for mbi,mba,regadd,count '+str(mbi)+', '+str(mba)+', '+str(regadd)+', '+str(count))
                 time.sleep(0.5) # hopefully helps to avoid sequential error / recreations
-            return 1
+            return 3
 
 
     def sync_di(self): # binary input readings to sqlite, to be executed regularly.
@@ -201,7 +197,12 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         bcount = 0 # number of registers to read
         regtype = ''
         bregtype = ''
-
+        if not self.io_trust:
+            if self.ts > self.ts_init + 30: # ehk on selle ajaga on paar di lugemist juba tehtud?
+                self.io_trust = True
+            else:
+                log.warning('waiting for io_trust, passed s '+str(int(self.ts - self.ts_init)))
+            
         # -- DI CONF BITS
         # 1 - value 1 = warningu (values can be 0 or 1 only)
         # 2 - value 1 = critical,
@@ -214,7 +215,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         try:
             Cmd = "BEGIN IMMEDIATE TRANSACTION" # hoiab kinni kuni mb suhtlus kestab? teised seda ei kasuta samal ajal nagunii. iga tabel omaette.
             conn.execute(Cmd)
-            ##log.info('--di_sync transaction START')
+            #log.info('--di_sync transaction START') ##
             Cmd = "select mba,regadd,mbi,regtype from "+self.in_sql+" where mba != '' and regadd != '' group by mbi,mba,regtype,regadd" # sorditud registrid lugemiseks
             ## kas index mbi, mba, regtype, regadd kiirendaks?
             cur.execute(Cmd) # selle paringu alusel raw update, hiljem teha value arvutused iga teenuseliikme jaoks eraldi
@@ -281,7 +282,6 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
             If svc != '' then that one svc has probably been changed??
         '''
         # mask == 1: send changed, mask == 3: send all
-        self.io_trust = True # initially, any failure will reset
         msg = ''
         mba = 0 # local here
         val_reg = ''
@@ -314,7 +314,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 #log.info('Cmd: '+Cmd) ##
                 cur.execute(Cmd)
 
-                if self.io_trust or time.time() > ts_init + 300:
+                if self.io_trust:
                     for row in cur: # services to be processed. either just changed or to be resent
                         svccount += 1
                         #log.info('processing di row '+str(repr(row))) ##
@@ -334,7 +334,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                                 
                             else:
                                 msg='DI service '+val_reg+' unchanged: '+str(val)
-                                log.debug(msg)
+                                #log.debug(msg)
                             
                             self.make_dichannel_svc(val_reg) # also publishes or sends
                                 # for each (not renotified for long enough time) service
@@ -342,7 +342,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                         else:
                             log.warning('FAILED to select row for '+val_reg)
                 else:
-                    log.warning('SKIPPED make_svc cycle and udp.send() due to no io_trust and instance uptime below 300 s')
+                    log.warning('SKIPPED make_svc cycle and udp.send() due to no io_trust')
                             
                 self.chg_dict = chg_dict
 
@@ -508,7 +508,11 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         cur = conn.cursor()
         res = 0 # returncode 0 1 2 = nochg chg error
         # coils not handled yet
-
+        if not self.io_trust:
+            log.warning('SKIPPED sync_do due to no io_trust')
+            return 3
+            
+        
         ##Cmd="BEGIN IMMEDIATE TRANSACTION" # transaction, di, do
         ##conn.execute(Cmd) # dichannels
         # only write the new word if at least one bits in dochannel is not equal to the corresponding bit in dichannels
@@ -584,7 +588,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                     ombi = mbi
                     
                 except:
-                    msg = 'failure in creating tmp_array '+repr(tmp_array)+' '+str(sys.exc_info()[1])
+                    msg = 'failure in do_sync: '+str(sys.exc_info()[1])
                     res = (res | 2)# add error bit
                     log.warning(msg)
                     #udp.syslog(msg)
