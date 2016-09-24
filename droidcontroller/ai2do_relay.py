@@ -35,18 +35,21 @@ class Relay(object):
             outval = self.d.get_divalue(self.out[0], self.out[1])
             print('set, act, out', setval, actval, outval) ## 
             
-            if actval > setval + self.hyst:
-                if outval == (0 ^ self.invbit):
-                    self.d.set_dovalue(self.out[0], self.out[1],(1 ^ self.invbit))
-                    log.info('Relay channel '+self.name+' change to '+str(1 ^ self.invbit)+' due to actual '+str(actval)+' above setpoint '+str(setval)+', hyst '+str(self.hyst))
-            elif actval < setval - self.hyst:
-                if outval == (1 ^ self.invbit):
-                    self.d.set_dovalue(self.out[0], self.out[1],(0 ^ self.invbit))
-                    log.info('Relay channel '+self.name+' change to '+str(1 ^ self.invbit)+' due to actual '+str(actval)+' below setpoint '+str(setval)+', hyst '+str(self.hyst))
-            return 0
-            
+            if setval != None and actval != None and outval != None:
+                if actval > setval + self.hyst:
+                    if outval == (0 ^ self.invbit):
+                        self.d.set_dovalue(self.out[0], self.out[1],(1 ^ self.invbit))
+                        log.info('Relay channel '+self.name+' change to '+str(1 ^ self.invbit)+' due to actual '+str(actval)+' above setpoint '+str(setval)+', hyst '+str(self.hyst))
+                elif actval < setval - self.hyst:
+                    if outval == (1 ^ self.invbit):
+                        self.d.set_dovalue(self.out[0], self.out[1],(0 ^ self.invbit))
+                        log.info('Relay channel '+self.name+' change to '+str(1 ^ self.invbit)+' due to actual '+str(actval)+' below setpoint '+str(setval)+', hyst '+str(self.hyst))
+                return 0
+            else:
+                log.warning('value None from '+str(self.set)+' or '+str(self.set)+' or '+str(self.set)) # may be ok next time
+                return 1
         except:
             log.info('Relay channel '+self.name+ ' problem!')
             traceback.print_exc()
-            return 1
+            return 2
         
