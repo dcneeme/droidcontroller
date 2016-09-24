@@ -50,16 +50,18 @@ class Relay(object):
                     outval = (0 ^ self.invbit)
                     if outval != self.outval:
                         self.d.set_dovalue(self.out[0], self.out[1], outval)
-                        log.info('Relay channel '+self.name+' change to '+str(outval)+' due to actual '+str(self.actval)+' above setpoint '+str(self.setval)+', hyst '+str(self.hyst)+', inv '+str(self.invbit))
+                        self.outval = outval
+                        log.info('Relay channel '+self.name+' change from '+str(self.outval)+' to '+str(outval)+' due to actual '+str(self.actval)+' above setpoint '+str(self.setval)+', hyst '+str(self.hyst)+', inv '+str(self.invbit))
                     else: ##
-                        log.info('outval already '+str(self.outval)) ##
+                        log.info('outval while act hi already '+str(self.outval)+' as calculated new value '+str(outval)) ##
                 elif self.actval < self.setval - self.hyst:
                     outval = (1 ^ self.invbit)
                     if outval != self.outval:
                         self.d.set_dovalue(self.out[0], self.out[1], outval)
-                        log.info('Relay channel '+self.name+' change to '+str(outval)+' due to actual '+str(self.actval)+' below setpoint '+str(self.setval)+', hyst '+str(self.hyst)+', inv '+str(self.invbit))
+                        self.outval = outval
+                        log.info('Relay channel '+self.name+' change from '+str(self.outval)+' to '+str(outval)+' due to actual '+str(self.actval)+' below setpoint '+str(self.setval)+', hyst '+str(self.hyst)+', inv '+str(self.invbit))
                     else: ##
-                        log.info('outval already '+str(self.outval)) ##
+                        log.info('outval while act low already '+str(self.outval)+' as calculated new value '+str(outval)) ##
                 else: ##
                     log.info('no outval change needed, still '+str(self.outval)) ##
                 return 0
