@@ -48,11 +48,11 @@ class Relay(object):
             if self.setval != None and self.actval != None and self.outval != None:
                 if self.actval > self.setval + self.hyst:
                     if self.outval == (0 ^ self.invbit):
-                        self.d.set_dovalue(self.out[0], self.out[1],(1 ^ self.invbit))
-                        log.info('Relay channel '+self.name+' change to '+str(1 ^ self.invbit)+' due to actual '+str(self.actval)+' above setpoint '+str(self.setval)+', hyst '+str(self.hyst))
+                        self.d.set_dovalue(self.out[0], self.out[1],(0 ^ self.invbit))
+                        log.info('Relay channel '+self.name+' change to '+str(0 ^ self.invbit)+' due to actual '+str(self.actval)+' above setpoint '+str(self.setval)+', hyst '+str(self.hyst))
                 elif self.actval < self.setval - self.hyst:
                     if outval == (1 ^ self.invbit):
-                        self.d.set_dovalue(self.out[0], self.out[1],(0 ^ self.invbit))
+                        self.d.set_dovalue(self.out[0], self.out[1],(1 ^ self.invbit))
                         log.info('Relay channel '+self.name+' change to '+str(1 ^ self.invbit)+' due to actual '+str(self.actval)+' below setpoint '+str(self.setval)+', hyst '+str(self.hyst))
                 return 0
             else:
