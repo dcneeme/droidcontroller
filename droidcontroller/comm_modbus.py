@@ -1,6 +1,6 @@
 # This Python file uses the following encoding: utf-8
 
-# additional modules by neeme in the end!
+# Neeme Takis 2011..2015
 
 from droidcontroller.comm import Comm
 from pymodbus import *
@@ -17,16 +17,13 @@ import time # had no effect in init for type 'u' only
 import logging
 log = logging.getLogger(__name__)
 
-# USE FAST VERSION OF PYMODBUS! 0.5 s timepout for RTU
+# USE FAST VERSION OF PYMODBUS! 0.5 s timeout for RTU
 
 class CommModbus(Comm):
     ''' Implementation of Modbus communications
-        also reads and writes io via subprocess, like
-        >>> mb[0].read(1,100,4)
-        [0, 0, 0, 0]
-
-        Use improved by cougar ModbusClient package with expected response length calculation!
-        Otherwise 0.5 s tout is used for every transaction!!
+ 
+        Suggested to use improved by cougar ModbusClient package with expected response length calculation!
+        Otherwise 0.5 s timeout is used for every transaction! Speed can be increased about 10 times.
     '''
 
     def __init__(self, **kwargs):
@@ -58,8 +55,11 @@ class CommModbus(Comm):
         self.type = '' # normal modbus, may be changed to n or u for npe
         self.port = None # only for tcp or rtu over tcp, numeric not com port name!
         self.host = None # can be com port name or ip address
-        self.speed = kwargs.get('speed','19200') # default speed 19200
-        self.parity = kwargs.get('parity','E') # default EVEN
+        self.speed = kwargs.get('speed',19200) # default speed 19200
+        self.bytesize = kwargs.get('bytesize',8) # default 8
+        self.stopbits = kwargs.get('stopbits',1) # default 1
+        self.parity = kwargs.get('parity','E') # default E
+        self.timeout = kwargs.get('timeout',0.5) # default 0.5 s
         self.name = kwargs.get('name','undefined')
         self.mba_keepalive = kwargs.get('mba_keepalive',1) # this address (1 by default) must respond, recreating mb[] if not
         #print(kwargs) # debug
@@ -68,7 +68,7 @@ class CommModbus(Comm):
             self.host = kwargs.get('host','127.0.0.1')
             if '/dev/tty' in self.host: # direct serial connection defined via host
                 self.port = kwargs.get('host')
-                self.do_syncserialclient(port = self.port, speed = self.speed, parity = self.parity)
+                self.do_syncserialclient()
                 print('CommModbus() init2: created CommModbus instance for ModbusRTU over RS485 using params '+str(kwargs))
                 
             elif ('port' in kwargs): # both host and port - must be tcp, but possibly rtu over tcp
@@ -89,7 +89,7 @@ class CommModbus(Comm):
                         traceback.print_exc()
                         
                 else: # normal modbustcp
-                    self.type='' # normal modbus
+                    self.type=''
                     self.client = ModbusClient(
                             host = self.host,
                             port = self.port )
@@ -98,41 +98,35 @@ class CommModbus(Comm):
         else: 
             try:
                 self.port = kwargs.get('port')
-                self.do_syncserialclient(port = self.port, speed = self.speed, parity = self.parity) # change params later if needed via set_serial()
+                self.do_syncserialclient() # change params later if needed via set_serial()
                 print('CommModbus() init5: created CommModbus instance for ModbusRTU over RS485 using params '+str(kwargs))
             except:
                 log.warning('failed to create CommModbus instance for ModbusRTU over RS485using params '+str(kwargs))
                 traceback.print_exc()
                 
 
-    def do_syncserialclient(self, port, speed=19200, parity='E', timeout=0.5, bytesize=8, stopbits=1):
+    def do_syncserialclient(self):
         ''' create self.client of correct type for serial connections only '''
         from pymodbus.client.sync import ModbusSerialClient as ModbusClient
-        self.port = port
-        self.speed = speed
-        self.parity = parity
-        self.timeout = timeout
-        self.bytesize = bytesize
-        self.stopbits = stopbits
-        if 'str' in str(type(port)) and 'str' in str(type(parity)) and 'int' in str(type(speed)) and 'int' in str(type(bytesize)):
+        if 'str' in str(type(self.port)) and 'str' in str(type(self.parity)) and 'int' in str(type(self.speed)) and 'int' in str(type(self.bytesize)): # looks like valid serial
             try:
-                self.client = ModbusClient(method='rtu', stopbits=stopbits, bytesize=bytesize, parity=parity, baudrate=speed, timeout=timeout, port=port)
-                print(self.name+' serial ModbusClient (re)created with params '+str(self.port)+', '+str(self.speed)+' '+str(bytesize)+parity+str(stopbits))
+                self.client = ModbusClient(method='rtu', stopbits=self.stopbits, bytesize=self.bytesize, parity=self.parity, baudrate=self.speed, timeout=self.timeout, port=self.port)
+                print(self.name+' serial ModbusClient (re)created with params '+str(self.port)+', '+str(self.speed)+' '+str(self.bytesize)+self.parity+str(self.stopbits))
                 return 0
             except:
-                log.error(self.name+' serial ModbusClient (re)creation FAILED with params '+str(self.port)+', '+str(self.speed)+' '+str(bytesize)+parity+str(stopbits))
+                log.error(self.name+' serial ModbusClient (re)creation FAILED with params '+str(self.port)+', '+str(self.speed)+' '+str(self.bytesize)+self.parity+str(self.stopbits))
                 traceback.print_exc()
                 return 1
         else:
-            log.error(self.name+' INVALID parameters for serial client: '+str(self.port)+', '+str(self.speed)+' '+str(bytesize)+parity+str(stopbits))
+            log.error(self.name+' has INVALID parameters for serial client: '+str(self.port)+', '+str(self.speed)+' '+str(self.bytesize)+self.parity+str(self.stopbits))
             return 1
                 
 
-    def set_serial(self, port='/dev/ttyAPP0', speed=19200, parity = 'E', timeout = 0.5,  bytesize=8, stopbits=1, async=False):
+    def set_serial(self, async=False):
         ''' to change the speed and other params '''
         # FIXME / kontrolli et host jms alusel ikka serial...
         if not async:
-            self.do_syncserialclient(port, speed, parity, timeout, bytesize, stopbits)
+            self.do_syncserialclient()
         
         
     def get_serial(self):

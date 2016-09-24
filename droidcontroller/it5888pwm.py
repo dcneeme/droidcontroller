@@ -1,8 +1,7 @@
 # This Python file uses the following encoding: utf-8
 #-------------------------------------------------------------------------------
-# this is a class to simplify io board it5888 pwm usage
-# 1 oct 2015 started, neeme
-# FIXME  - is dictionary better?
+# this is a class to simplify io board it5888 pwm usage. use one instance per one ioboard!
+# 2015..2016, neeme
 
 import time, traceback
 import logging
@@ -11,10 +10,10 @@ log = logging.getLogger(__name__)
 class IT5888pwm(object):
     ''' Takes new periodical PWM values and resends them if changed. Use external PID instance for value generation. '''
 
-    def __init__(self, d, mbi=0, mba=1, name='IT5888', period=1000, bits=[8], phases=[0], periodics=[], per_reg=150):
+    def __init__(self, d, mbi=0, mba=1, name='IT5888', period=1000, bits=[8], phases=[0], periodics=[True], per_reg=150):
         ''' One instance per I/O-module, as period is shared! Define the PWM channels via the bits list.
             Do not include channels not used in pwm into bits list!
-            The channels in pwm list should not be used for static output via register address 0!
+            The pwm signal channel is inverted if static output bit is active!
         '''
         self.d = d
         self.bits = bits # channel list

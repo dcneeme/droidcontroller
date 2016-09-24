@@ -1,3 +1,5 @@
+# This Python file uses the following encoding: utf-8
+
 # process commands received from uniscada server. to be imported by uniscada.py
 #instance udp should be created.
 # FIXME + regular svc and cmd ERV send out of historical queue!

@@ -602,7 +602,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         found = 0
         ts_created = 0
         for row in cur: # should be one row only
-            #print(repr(row)) # debug
+            #print('get_aivalue debug', repr(row)) # debug
             found=1
             value=int(eval(row[0])) if row[0] != '' and row[0] != None else None ## 9.7.2015
             outlo=int(eval(row[1])) if row[1] != '' and row[1] != None else None
@@ -1085,7 +1085,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         if rowproblemcount == 0: # all members valid
             sendtuple = [sta_reg, status, val_reg, lisa] # sending service to buffer
             #log.info('>>> finished sendtuple: '+str(sendtuple)+', values: '+str(values)) ## 
-            udp.send(sendtuple) # send end result here, possibly the old result was sent once again before 
+            udp.send(sendtuple) # sending end result to buffer, possibly the old result was sent once again before 
             if self.msgbus != None:
                 try:
                     self.msgbus.publish(val_reg, {'values': values, 'status': status})

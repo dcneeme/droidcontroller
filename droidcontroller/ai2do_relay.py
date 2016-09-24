@@ -36,7 +36,7 @@ class Relay(object):
             self.setval = self.ac.get_aivalue(self.set[0], self.set[1])[0] # get_aivalue() returns tuple, lo hi included!
             self.actval = self.ac.get_aivalue(self.act[0], self.act[1])[0]
             self.outval = self.d.get_divalue(self.out[0], self.out[1])
-            print('ai2do_relay readval got setval, actval, outval', self.setval, self.actval, self.outval, 'set',self.set, 'act',self.act) ##
+            #print('ai2do_relay readval got setval, actval, outval', self.setval, self.actval, self.outval, 'set',self.set, 'act',self.act) ##
         except:
             log.info('relay channel '+self.name+ ' readval problem!')
             traceback.print_exc()
