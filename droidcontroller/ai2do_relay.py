@@ -21,6 +21,9 @@ class Relay(object):
         self.act = act # actual value service member
         self.out = out # output service member
         self.hyst = hyst # hysteresis
+        self.setval = None
+        self.actval = None
+        self.outval = None
         if inv:
             self.invbit = 1
         else:
@@ -53,7 +56,7 @@ class Relay(object):
                         log.info('Relay channel '+self.name+' change to '+str(1 ^ self.invbit)+' due to actual '+str(self.actval)+' below setpoint '+str(self.setval)+', hyst '+str(self.hyst))
                 return 0
             else:
-                log.warning('value None from '+str(self.set)+' or '+str(self.set)+' or '+str(self.set)) # may be ok next time
+                log.warning('value None from '+str(self.set)+':'+str(self.setval)+' or '+str(self.act)+':'+str(self.actval)+' or '+str(self.out)+':'+str(self.outval)) # may be ok next time
                 return 1
         except:
             log.info('Relay channel '+self.name+ ' output() problem!')
