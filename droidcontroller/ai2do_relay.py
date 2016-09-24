@@ -26,15 +26,22 @@ class Relay(object):
         else:
             self.invbit = 0
         log.info('Relay instance '+name+' created')
-        
-    def output(self):
-        ''' check input and set output '''
+
+    def readval(self):
+        ''' check input '''
         try:
-            setval = self.ac.get_aivalue(self.set[0], self.set[1])[0] # get_aivalue() returns tuple, lo hi included!
-            actval = self.ac.get_aivalue(self.act[0], self.act[1])[0]
-            outval = self.d.get_divalue(self.out[0], self.out[1])
-            print('set, act, out', setval, actval, outval) ## 
-            
+            self.setval = self.ac.get_aivalue(self.set[0], self.set[1])[0] # get_aivalue() returns tuple, lo hi included!
+            self.actval = self.ac.get_aivalue(self.act[0], self.act[1])[0]
+            self.outval = self.d.get_divalue(self.out[0], self.out[1])
+            print('set, act, out', setval, actval, outval) ##
+        except:
+            log.info('Relay channel '+self.name+ ' readval problem!')
+            traceback.print_exc()
+            return 2
+
+    def output(self):
+        ''' set output '''
+        try:
             if setval != None and actval != None and outval != None:
                 if actval > setval + self.hyst:
                     if outval == (0 ^ self.invbit):
@@ -49,7 +56,12 @@ class Relay(object):
                 log.warning('value None from '+str(self.set)+' or '+str(self.set)+' or '+str(self.set)) # may be ok next time
                 return 1
         except:
-            log.info('Relay channel '+self.name+ ' problem!')
+            log.info('Relay channel '+self.name+ ' output() problem!')
             traceback.print_exc()
             return 2
-        
+
+    def doall(self):
+    ''' do all '''
+        res += self.readval()
+        res += self.output()
+        return res
