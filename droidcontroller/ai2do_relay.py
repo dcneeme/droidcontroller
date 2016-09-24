@@ -10,12 +10,10 @@ log = logging.getLogger(__name__)
 class Relay(object):
     ''' Takes an ai value, compares to setpoint and generates do bit value. Based on services in sql channel tables. '''
 
-    def __init__(self, d, ac, mbi=0, mba=1, name='none', set=['C017W',2], act=['C017W',1], out=['D1W',4], inv=False, hyst = 0):
+    def __init__(self, d, ac, name='none', set=['C017W',2], act=['C017W',1], out=['D1W',4], inv=False, hyst = 0):
         ''' One instance per output channel  '''
         self.d = d
         self.ac = ac
-        self.mbi = mbi # modbus comm instance
-        self.mba = mba # modbus address
         self.name = name
         self.set = set # setpoint service member
         self.act = act # actual value service member
@@ -52,18 +50,18 @@ class Relay(object):
                         self.d.set_dovalue(self.out[0], self.out[1], outval)
                         self.outval = outval
                         log.info('Relay channel '+self.name+' change from '+str(self.outval)+' to '+str(outval)+' due to actual '+str(self.actval)+' above setpoint '+str(self.setval)+', hyst '+str(self.hyst)+', inv '+str(self.invbit))
-                    else: ##
-                        log.info('outval while act hi already '+str(self.outval)+' as calculated new value '+str(outval)) ##
+                    #else: ##
+                    #    log.info('outval while act hi already '+str(self.outval)+' as calculated new value '+str(outval)) ##
                 elif self.actval < self.setval - self.hyst:
                     outval = (1 ^ self.invbit)
                     if outval != self.outval:
                         self.d.set_dovalue(self.out[0], self.out[1], outval)
                         self.outval = outval
                         log.info('Relay channel '+self.name+' change from '+str(self.outval)+' to '+str(outval)+' due to actual '+str(self.actval)+' below setpoint '+str(self.setval)+', hyst '+str(self.hyst)+', inv '+str(self.invbit))
-                    else: ##
-                        log.info('outval while act low already '+str(self.outval)+' as calculated new value '+str(outval)) ##
-                else: ##
-                    log.info('no outval change needed, still '+str(self.outval)) ##
+                    #else: ##
+                    #    log.info('outval while act low already '+str(self.outval)+' as calculated new value '+str(outval)) ##
+                #else: ##
+                #    log.info('no outval change needed, still '+str(self.outval)) ##
                 return 0
             else:
                 log.warning('value None from '+str(self.set)+':'+str(self.setval)+' or '+str(self.act)+':'+str(self.actval)+' or '+str(self.out)+':'+str(self.outval)) # may be ok next time
@@ -75,6 +73,6 @@ class Relay(object):
 
     def doall(self):
         ''' do all '''
-        res += self.readval()
-        res += self.output()
-        return res
+        self.readval()
+        self.output()
+        
