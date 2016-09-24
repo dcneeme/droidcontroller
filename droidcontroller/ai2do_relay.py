@@ -10,7 +10,7 @@ log = logging.getLogger(__name__)
 class Relay(object):
     ''' Takes an ai value, compares to setpoint and generates do bit value. Based on services in sql channel tables. '''
 
-    def __init__(self, d, ac, mbi=0, mba=1, name='none', set=['TCW',1], act=['TCW',2], out=['D1S',8], inv=False, hyst = 0):
+    def __init__(self, d, ac, mbi=0, mba=1, name='none', set=['C017W',2], act=['C017W',1], out=['D1W',4], inv=False, hyst = 0):
         ''' One instance per output channel  '''
         self.d = d
         self.ac = ac
@@ -19,29 +19,29 @@ class Relay(object):
         self.name = name
         self.set = set # setpoint service member
         self.act = act # actual value service member
+        self.out = out # output service member
         self.hyst = hyst # hysteresis
-        self.out = None # initially
-        if inv == True:
-            invbit = 1
+        if inv:
+            self.invbit = 1
         else:
-            invbit = 0
+            self.invbit = 0
         log.info('Relay instance '+name+' created')
         
     def output(self):
         ''' check input and set output '''
         try:
-            setval = self.ac.get_aivalue(set[0], set[1])
-            actval = self.ac.get_aivalue(act[0], act[1])
-            outval = self.d.get_divalue(out[0], out[1])
+            setval = self.ac.get_aivalue(self.set[0], self.set[1])
+            actval = self.ac.get_aivalue(self.act[0], self.act[1])
+            outval = self.d.get_divalue(self.out[0], self.out[1])
             
-            if actval > setval + hyst:
-                if outval == (0 ^ invbit):
-                    self.d.set_dovalue(out[0],out[1],(1 ^ invbit)
-                    log.info('Relay channel '+self.name+' change to '+str(1 ^ invbit)+' due to actual '+str(actval)+' above setpoint '+str(setval)+', hyst '+str(self.hyst))
-            elif actval < setval - hyst:
-                if outval == (1 ^ invbit):
-                    self.d.set_dovalue(out[0],out[1],(0 ^ invbit)
-                    log.info('Relay channel '+self.name+' change to '+str(1 ^ invbit)+' due to actual '+str(actval)+' below setpoint '+str(setval)+', hyst '+str(self.hyst))
+            if actval > setval + self.hyst:
+                if outval == (0 ^ self.invbit):
+                    self.d.set_dovalue(self.out[0], self.out[1],(1 ^ self.invbit))
+                    log.info('Relay channel '+self.name+' change to '+str(1 ^ self.invbit)+' due to actual '+str(actval)+' above setpoint '+str(setval)+', hyst '+str(self.hyst))
+            elif actval < setval - self.hyst:
+                if outval == (1 ^ self.invbit):
+                    self.d.set_dovalue(self.out[0], self.out[1],(0 ^ self.invbit))
+                    log.info('Relay channel '+self.name+' change to '+str(1 ^ self.invbit)+' due to actual '+str(actval)+' below setpoint '+str(setval)+', hyst '+str(self.hyst))
             return 0
             
         except:
