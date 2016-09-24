@@ -1,7 +1,7 @@
 # This Python file uses the following encoding: utf-8
 #-------------------------------------------------------------------------------
-# this is a class to simplify io board it5888 pwm usage. use one instance per one ioboard!
-# 2015..2016, neeme
+# this is a class to switch it5888 do channels according to actual and setpoint ai values, defined by services
+#  neeme sep 2016
 
 import time, traceback
 import logging
@@ -52,14 +52,14 @@ class Relay(object):
                         self.d.set_dovalue(self.out[0], self.out[1], self.outval)
                         log.info('Relay channel '+self.name+' change to '+str(self.outval)+' due to actual '+str(self.actval)+' above setpoint '+str(self.setval)+', hyst '+str(self.hyst)+', inv '+str(self.invbit))
                     else: ##
-                        log.info('outval already '+str(self.outval) ##
+                        log.info('outval already '+str(self.outval)) ##
                 elif self.actval < self.setval - self.hyst:
                     if self.outval != (1 ^ self.invbit):
                         self.outval = (1 ^ self.invbit)
                         self.d.set_dovalue(self.out[0], self.out[1], self.outval)
                         log.info('Relay channel '+self.name+' change to '+str(self.outval)+' due to actual '+str(self.actval)+' below setpoint '+str(self.setval)+', hyst '+str(self.hyst)+', inv '+str(self.invbit))
                     else: ##
-                        log.info('outval already '+str(self.outval) ##
+                        log.info('outval already '+str(self.outval)) ##
                 else: ##
                     log.info('no outval change needed, still '+str(self.outval)) ##
                 return 0
