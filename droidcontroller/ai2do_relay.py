@@ -30,9 +30,10 @@ class Relay(object):
     def output(self):
         ''' check input and set output '''
         try:
-            setval = self.ac.get_aivalue(self.set[0], self.set[1])[0]
+            setval = self.ac.get_aivalue(self.set[0], self.set[1])[0] # get_aivalue() returns tuple, lo hi included!
             actval = self.ac.get_aivalue(self.act[0], self.act[1])[0]
-            outval = self.d.get_divalue(self.out[0], self.out[1])[0]
+            outval = self.d.get_divalue(self.out[0], self.out[1])
+            print('set, act, out', setval, actval, outval) ## 
             
             if actval > setval + self.hyst:
                 if outval == (0 ^ self.invbit):
