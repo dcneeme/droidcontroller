@@ -37,7 +37,7 @@ class Relay(object):
             self.actval = self.ac.get_aivalue(self.act[0], self.act[1])[0]
             self.outval = self.d.get_divalue(self.out[0], self.out[1])
             if self.actval == None:
-                log.error('ai2do_relay readval got setval, actval, outval '+str(self.setval)+', '+self.actval+', '+self.outval+', set '+self.set+', act'+', '+self.act) ##
+                log.error('ai2do_relay readval got setval, actval, outval '+str(self.setval)+', '+str(self.actval)+', '+str(self.outval)+', set '+str(self.set)+', act'+', '+str(self.act)) ##
                 return 1
             else:
                 return 0
