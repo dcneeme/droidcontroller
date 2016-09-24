@@ -38,6 +38,9 @@ class Relay(object):
             self.outval = self.d.get_divalue(self.out[0], self.out[1])
             if self.actval == None:
                 log.error('ai2do_relay readval got setval, actval, outval', self.setval, self.actval, self.outval, 'set',self.set, 'act',self.act) ##
+                return 1
+            else:
+                return 0
         except:
             log.info('relay channel '+self.name+ ' readval problem!')
             traceback.print_exc()
