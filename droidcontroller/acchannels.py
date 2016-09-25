@@ -1042,8 +1042,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     ############# h, c, r or i processing done #######
 
                 else: # raw == None !!!!
-                    pass # value = None
-                    log.warning('SKIPPED svc '+val_reg+'.'+str(member)+' value update due to raw None!  chk regadd '+str(mbi)+'.'+str(mba)+'.'+str(regadd))
+                    pass ## value = None,  infot ei joua registrisse!
+                    #log.warning('SKIPPED svc '+val_reg+'.'+str(member)+' value update due to raw None!  chk regadd '+str(mbi)+'.'+str(mba)+'.'+str(regadd))
 
             elif 's' in regtype: # setup value
                 value = ovalue # use the value in table without conversion or influence on status
@@ -1055,7 +1055,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             if lisa != '': # not the first member
                 lisa += ' ' # separator between member values
                 
-            try: # what if None? exception?
+            
+            try: ## DATA QUALITY CHECK ## 
                 if value != None:
                     #lisa += str(int(round(value,0))) # adding member values into one string
                     #values.append(int(round(value,0))) # for msgbus
@@ -1063,7 +1064,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     values.append(value) # for msgbus
                     
                 else:
-                    log.warning('invalid value None from regtype '+regtype+', reg '+val_reg+', member '+str(member))
+                    log.error('invalid value None from regtype '+regtype+', reg '+val_reg+', member '+str(member)+', chk regadd '+str(mbi)+'.'+str(mba)+'.'+str(regadd))
+                    rowproblemcount = 1
             except:
                 msg = 'invalid value '+str(value)+' found for service '+val_reg+'.'+str(member)
                 traceback.print_exc()
@@ -1079,7 +1081,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
             chk = len(lisa.split(' '))
             if chk != mcount: # member(s) missing!
-                log.error('invalid new sendtuple member count '+str(chk)+', should be '+str(mcount)+', skipping notifying svc '+val_reg)
+                log.error('invalid new sendtuple member count '+str(chk)+' for svc '+val_reg+', should be '+str(mcount))
                 rowproblemcount += 1
                 
         # service members done, check if all of them valid to use in svc tuple
@@ -1096,9 +1098,10 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         traceback.print_exc()
             else:
                 log.info('skipping sending to buffer due to send False')
+            return 0 ## OK
         else:
             log.warning(val_reg+' had '+str(rowproblemcount)+' problematic members')
-            
+        return rowproblemcount ## should be 0 if all OK    
 
     def value2status(self,value,cfg,outlo,outhi,ostatus=0,hyst=0):
         ''' Returns svc member status based on value and limits, taking cfg and previous status into account.
