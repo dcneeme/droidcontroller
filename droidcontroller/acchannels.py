@@ -305,12 +305,12 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 if mb[mbi]:
                     result = mb[mbi].read(mba, regadd, count=count, type=regtype) # client.read_holding_registers(address=regadd, count=1, unit=mba)
                     msg += ', raw: '+str(result)
+                    log.debug(msg) 
                     if self.msgbus != None:
                         self.msgbus.publish('ai_grp_result', {'mbi': mbi, 'mba': mba, 'regadd': regadd, 'result': result})
                 else:
                     msg += ' -- no mb[]!'
-
-                log.info(msg) ###
+                    log.error(msg) 
 
             except:
                 msg += ' -- FAILED!'
@@ -1097,7 +1097,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                     except:
                         traceback.print_exc()
             else:
-                log.info('skipping sending to buffer due to send False')
+                log.debug('skipping sending to buffer due to send False')
             return 0 ## OK
         else:
             log.warning(val_reg+' had '+str(rowproblemcount)+' problematic members')
