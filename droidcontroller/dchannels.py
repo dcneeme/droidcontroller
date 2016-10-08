@@ -53,7 +53,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
 
 
     #def sqlread(self, table):
-    #    self.sqlread(table) # restore dichannels from file,  available from parent
+    #    self.sqlread(table) # restore dichannels from file,  available from parent (sqlgeneral)
 
     def Initialize(self): # before using this create s=SQLgeneral()
         ''' initialize delta t variables, create tables and modbus connection '''
@@ -722,8 +722,12 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         ''' Setting member value using sqlgeneral set_membervalue. adding sql table below for that '''
         log.info('writing output bit for '+svc+'.'+str(member)+' to become '+str(value))
         #return s.setby_dimember_do(svc, member, value) # s.set_membervalue(svc,member,value,self.out_sql)
-        return self.setby_dimember_do(svc, member, value) # s.set_membervalue(svc,member,value,self.out_sql)
-
+        res = self.setby_dimember_do(svc, member, value) # s.set_membervalue(svc,member,value,self.out_sql)
+        if self.get_divalue(svc,member) != value:
+            log.error('FAILED to set output bit to '+str(value)+' for svc '+str(svc)+'.'+str(member))
+            res = 2
+        return res
+        
     def set_doword(self,mba,regadd,value,mbi=0): # sets holding register without services involvment
         ''' Setting holding register (like pwm channel for pulse or pwm) '''
         log.info('writing output register mbi '+str(mbi)+', mba '+str(mba)+', regadd '+str(regadd)+' with word '+str(hex(value)))
