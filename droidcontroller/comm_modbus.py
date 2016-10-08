@@ -9,6 +9,9 @@ from pymodbus.transaction import * # needed for ModbusRtuFramer but also ModbusT
 #from pymodbus.transaction import ModbusRtuFramer
 from pymodbus.register_read_message import ReadHoldingRegistersResponse, ReadInputRegistersResponse
 from pymodbus.register_write_message import WriteMultipleRegistersResponse, WriteSingleRegisterResponse
+from pymodbus.constants import Defaults
+Defaults.Timeout = 5 # s, modbustcp jaoks, vent
+
 import traceback
 import subprocess # could not use p.subexec()
 import sys # to return sys.exc_info()[1])
