@@ -118,8 +118,11 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
                         regtype=row[5] # 'h' 'i' 's!'
 
-                        if sqlvalue != value and ((regtype == 'h' and value == 0 or value > sqlvalue) or (regtype == 's!')) and (cfg&2048) == 0:
-                            # replace actual counters only if bigger than existing or zero and not 1wire channel, no limits for setup type 's!'
+                        if sqlvalue != value and 
+                            (regtype == 'h' and 
+                                ((cfg&1024) and (value == 0 or value > sqlvalue)) or (not (cfg&2048) and not (cfg&1024))) 
+                            or (regtype == 's!'):
+                            # replace sqlvalue
                             member = valmember+1
 
                             log.info('going to replace '+key+' member '+str(member)+' value '+str(sqlvalue)+' with '+str(value)) # debug
