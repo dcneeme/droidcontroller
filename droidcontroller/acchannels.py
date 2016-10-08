@@ -119,9 +119,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                         regtype=row[5] # 'h' 'i' 's!'
 
                         if sqlvalue != value and 
-                            (regtype == 'h' and 
-                                ((cfg&1024) and (value == 0 or value > sqlvalue)) or (not (cfg&2048) and not (cfg&1024))) 
-                            or (regtype == 's!'):
+                            ((regtype == 's!') or (regtype == 'h' and 
+                                ((cfg&1024) and (value == 0 or value > sqlvalue)) or (not (cfg&2048) and not (cfg&1024)))):
                             # replace sqlvalue
                             member = valmember+1
 
