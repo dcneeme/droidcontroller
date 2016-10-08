@@ -1,6 +1,8 @@
 # This Python file uses the following encoding: utf-8
 
 #to be imported into modbus_sql. needs mb and conn
+# piisab yhest mittevastavusest do di teenuste vahel et kogu sync_do ebnaonnestuks! FIXME! vii setbit... sqlgeneral seest dchannels sisse!
+
 '''  Creates multiple modbus access channels for various access channels defined in devices.sql.
     Also creates communication channel to uniscada server, statekeeper and gpioled instances.
  '''
@@ -61,7 +63,7 @@ except:
         if ':' in row[1]: # over tcp
             mb.append(CommModbus(host=row[1].split(':')[0], port=int(row[1].split(':')[1]), name='mbi_'+str(row[0]))) # modbustcp over tcp
         elif '|' in row[1]: # serial with speed and parity defined
-            parity = 'E'
+            parity = 'E' # if parity missing
             if len(row[1]) == 3:
                 parity = row[1].split('|')[2] if row[1].split('|')[2] == 'N' or row[1].split('|')[2] == 'O' else 'E' # must be N or E or O
             mb.append(CommModbus(host=row[1].split('|')[0], speed=int(row[1].split('|')[1]), parity = parity, name='mbi_'+str(row[0]))) # modbustcp over tcp
@@ -537,27 +539,27 @@ class SQLgeneral(UDPchannel): # parent class for ACchannels, Dchannels
 
     def setby_dimember_do(self, svc, member, value): # to set an output channel in dochannels by the DI service name and member (defined in dichannels)
         '''Sets  output channel by the service name and member using service name defined for this output in dichannels table '''
+        ## must commit for setbit_do()!
         ##make it complain if dochannels misconfigured! or better test it in the beginning once...
         if value == None or value > 1 or value < 0:
-            log.warning('INVALID value for setby_dimember_do(): '+str(value))
+            log.error('INVALID value for setby_dimember_do(): '+str(value))
             return 2
             
         cur=conn.cursor()
-        #Cmd="BEGIN IMMEDIATE TRANSACTION" # conn, et ei saaks muutuda lugemise ajal
-        #conn.execute(Cmd)
+        Cmd="BEGIN IMMEDIATE TRANSACTION" # conn, et ei saaks muutuda lugemise ajal
+        conn.execute(Cmd)
         Cmd="select mba,regadd,bit,mbi from dichannels where val_reg='"+svc+"' and member='"+str(member)+"'"
         cur.execute(Cmd)
-        conn.commit()
-        #log.info(Cmd +' done') ##
+        ##conn.commit()
         
-        mba=None
-        reg=None
-        bit=None
-        mbi=0
+        mba = None
+        reg = None
+        bit = None
+        mbi = 0
         found = 0
         for row in cur: # should be one row only
             #log.info('setby_dimember row '+str(repr(row))) ##
-            found =1 
+            found = 1 
             try:
                 value = (value & 1) # only 0 or 1 allowed
                 mba = int(row[0]) if row[0] != '' else 0 # flag illegal if 0
@@ -565,27 +567,29 @@ class SQLgeneral(UDPchannel): # parent class for ACchannels, Dchannels
                 bit = int(row[2]) if row[0] != '' else None
                 mbi = int(row[3]) if row[0] != '' else None
                 if mba > 0:
-                    res = self.setbit_do(bit,value,mba,reg,mbi=mbi) # sets using physical channel parameters
-                    #log.info('setbit_do result '+str(res)+', params ' +str((bit,value,mba,reg,mbi))) ##
+                    res = self.setbit_do(bit, value, mba, reg, mbi = mbi) ## sets using physical channel parameters, no commit there!
+                    log.info('setbit_do result '+str(res)+', params (bit, value, mba, reg, mbi): ' +str((bit,value,mba,reg,mbi))) ##
                 else:
                     log.warning('invalid parameters for setby_dimember_do()? '+str((bit,value,mba,reg,mbi)))
-                    return 1
+                    res = 1 #return 1
                 
                 if res == 0: # ok
                     log.info('setbit_do() done with params bit,value,mba,reg,mbi '+str((bit,value,mba,reg,mbi))+' based on svc '+svc+'.'+str(member))
-                    return 0
+                    #return 0
                 else:
-                    log.warning('setby_dimember_do: could not get returncode 0 from setbit_do() with params bit,value,mba,reg,mbi '+str(bit,value,mba,reg,mbi))
-                return 1
+                    log.error('setby_dimember_do: could not get returncode 0 from setbit_do() with params bit,value,mba,reg,mbi '+str(bit,value,mba,reg,mbi))
+                    res = 1 #return 1
             except:
                 msg='setbit_do FAILED for bit '+str(bit)+'!'
-                log.warning(msg)
-                udp.syslog(msg)
+                log.error(msg)
+                #udp.syslog(msg)
                 traceback.print_exc() # debug
-                return 1
+                res = 1 #return 1
         if found == 0:
             log.warning('NO match in dichannels for '+Cmd)
-
+        conn.commit() ## commit here for setbit_do() as well!
+        return res
+        
 
     def bit_replace(self, word, bit, value): # changing word with single bit value
         ''' Replaces bit in word. Examples:

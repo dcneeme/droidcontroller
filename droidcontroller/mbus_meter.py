@@ -1,7 +1,7 @@
 # neeme 2016 universaalne, mbus_heatmeter alusel, peaks kolbama molema asemele
 # marko libmbus, python-mbus
 ## find out secondary address> mbus-serial-scan-secondary -b 2400 /dev/ttyUSB0
-#1501372977041407 koogu 20 water
+#1501372977041407 koogu 20 water # FIXME ASYNC!
 
 import sys, traceback, time # , tornado
 #from droidcontroller.mbus import * # neeme old
@@ -37,7 +37,8 @@ m.get_flow()
 
 class MbusMeter(object):
     ''' Publish values to services via msgbus '''  # FIXME use IOloop too
-    def __init__(self, msgbus=None, port='/dev/ttyUSB0', model='kamstrup402', svclist=[['XYW',1,1,'undefined']], primary=254, secondary=''): # svc2publish, member, id, name
+    def __init__(self, msgbus=None, port='/dev/ttyUSB0', model='kamstrup402', svclist=[['XYW',1,1,'undefined']], primary=254, secondary='', debug=False): # svc2publish, member, id, name
+        self.debug = debug
         self.primary = primary # 254 is broadcast address, usable for single meter on the line
         self.secondary = secondary # hex string, primary addresses can be the same, if secondary addresses
         self.msgbus = msgbus # all communication via msgbus, not to ac  directly!
@@ -50,7 +51,7 @@ class MbusMeter(object):
         try:
             self.mbus = MBus(device=port) ##
             self.mbus.connect() ##
-            log.info('mbus instance created, output to msgbus: '+str(svclist))
+            log.info('mbus instance created for meter model '+str(self.model)+', debug '+str(self.debug)+', output to msgbus: '+str(svclist))
         except:
             log.error('Mbus connection NOT possible, probably no suitable USB port found!')
             traceback.print_exc()
@@ -80,7 +81,7 @@ class MbusMeter(object):
         else:
             sec = False
 
-        if debug:
+        if debug or self.debug:
             if sec:
                 logadd = 'secondary address '+self.secondary
             else:
@@ -98,7 +99,7 @@ class MbusMeter(object):
             reply = self.mbus.recv_frame()
             reply_data = self.mbus.frame_data_parse(reply)
             self.xml = self.mbus.frame_data_xml(reply_data)
-            if debug:
+            if debug or self.debug:
                 print(self.xml)
         except:
             log.error('FAILED to get data from mbus')
@@ -134,7 +135,7 @@ class MbusMeter(object):
 
         found = 0
         for x in dict['MBusData']['DataRecord']:
-            if debug == True:
+            if debug or self.debug:
                 print(x)
             for svc in self.svclist:
                 if int(x['@id']) == svc[2]:

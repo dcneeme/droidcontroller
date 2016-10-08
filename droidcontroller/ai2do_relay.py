@@ -37,12 +37,13 @@ class Relay(object):
             self.actval = self.ac.get_aivalue(self.act[0], self.act[1])[0]
             self.outval = self.d.get_divalue(self.out[0], self.out[1])
             if self.actval == None:
-                log.error('ai2do_relay readval got setval, actval, outval '+str(self.setval)+', '+str(self.actval)+', '+str(self.outval)+', set '+str(self.set)+', act'+', '+str(self.act)) ##
+                log.error('ai2do_relay readval got no actval! setval, outval '+str(self.setval)+', '+str(self.outval))
                 return 1
             else:
+                #log.info('ai2do_relay readval got setval, actval, outval '+str(self.setval)+', '+str(self.actval)+', '+str(self.outval)+', set '+str(self.set)+', act'+', '+str(self.act)+', out'+', '+str(self.out)) ##
                 return 0
         except:
-            log.info('relay channel '+self.name+ ' readval problem!')
+            log.error('relay channel '+self.name+ ' readval problem!')
             traceback.print_exc()
             return 2
 
@@ -51,23 +52,23 @@ class Relay(object):
         try:
             if self.setval != None and self.actval != None and self.outval != None:
                 if self.actval > self.setval + self.hyst:
-                    outval = (0 ^ self.invbit)
+                    outval = (0 ^ self.invbit) # selline peab olema kui act liiga suur
                     if outval != self.outval:
                         self.d.set_dovalue(self.out[0], self.out[1], outval)
-                        self.outval = outval
-                        log.info('Relay channel '+self.name+' change from '+str(self.outval)+' to '+str(outval)+' due to actual '+str(self.actval)+' above setpoint '+str(self.setval)+', hyst '+str(self.hyst)+', inv '+str(self.invbit))
+                        log.info('Relay channel '+self.name+' outval change from '+str(self.outval)+' to '+str(outval)+' due to actual '+str(self.actval)+' above setpoint '+str(self.setval)+', hyst '+str(self.hyst)+', inv '+str(self.invbit))
+                        ##self.outval = outval # et kohe uuesti ei teeks, self.outval uuendamine tegelikuga / KAS ON VAJA?
                     #else: ##
                     #    log.info('outval while act hi already '+str(self.outval)+' as calculated new value '+str(outval)) ##
                 elif self.actval < self.setval - self.hyst:
                     outval = (1 ^ self.invbit)
                     if outval != self.outval:
                         self.d.set_dovalue(self.out[0], self.out[1], outval)
-                        self.outval = outval
-                        log.info('Relay channel '+self.name+' change from '+str(self.outval)+' to '+str(outval)+' due to actual '+str(self.actval)+' below setpoint '+str(self.setval)+', hyst '+str(self.hyst)+', inv '+str(self.invbit))
+                        log.info('Relay channel '+self.name+' outval change from '+str(self.outval)+' to '+str(outval)+' due to actual '+str(self.actval)+' below setpoint '+str(self.setval)+', hyst '+str(self.hyst)+', inv '+str(self.invbit))
+                        ##self.outval = outval
                     #else: ##
                     #    log.info('outval while act low already '+str(self.outval)+' as calculated new value '+str(outval)) ##
-                #else: ##
-                #    log.info('no outval change needed, still '+str(self.outval)) ##
+                else: ##
+                    pass # log.info('no outval change needed, still '+str(self.outval)) ##
                 return 0
             else:
                 log.warning('value None from '+str(self.set)+':'+str(self.setval)+' or '+str(self.act)+':'+str(self.actval)+' or '+str(self.out)+':'+str(self.outval)) # may be ok next time

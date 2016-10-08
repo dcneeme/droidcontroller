@@ -1,5 +1,6 @@
 # This Python file uses the following encoding: utf-8
 
+# piisab yhest mittevastavusest do di teenuste vahel et kogui sync_do ebnaonnestuks! FIXME! vii setvbit... sqlgeneral seest dchannels sisse!
 
 ''' mb[mbi].read(mba, reg, count = 1, type = 'h'):  # modbus read example
 
@@ -487,23 +488,20 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
     def sync_do(self): # synchronizes DO bits (output channels) with data in dochannels table, checking actual values via dichannels table
         # find out which do channels need to be changed based on dichannels and dochannels value differencies
         # and use write_register() write modbus registers (not coils) to get the desired result (all do channels must be also defined as di channels in dichannels table!)
-        ##log.info('--do_sync start')
-        respcode=0
-        omba=-1 # lokaalne siin
+        #log.info('--do_sync start') ##
+        respcode = 0
+        omba = -1 # lokaalne siin
         #omba=0 # previous value
-        ombi=-1
-        oregadd=-1
-        obit=-1
+        ombi = -1
+        oregadd = -1
+        obit = -1
         #ombi=0
-        val_reg=''
+        val_reg = ''
         #desc=''
         #value = 0
         word = 0 # 16 bit register value
         #comment=''
         mcount = 0
-        #Cmd1=''
-        #Cmd3=''
-        #Cmd4=''
         ts_created = self.ts # selle loeme teenuse ajamargiks
         cur = conn.cursor()
         res = 0 # returncode 0 1 2 = nochg chg error
@@ -524,10 +522,10 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         #print(Cmd)
         try:
             cur.execute(Cmd)
-            bit_dict={} # alusta tyhjaga allpool! bit:do_value
-            reg_dict={} # {reg:bit_dict} 
-            mba_dict={} # {mba:reg_dict)
-            mbi_dict={} # {mbi: mba_dict}
+            bit_dict = {} # alusta tyhjaga allpool! bit:do_value
+            reg_dict = {} # {reg:bit_dict} 
+            mba_dict = {} # {mba:reg_dict)
+            mbi_dict = {} # {mbi: mba_dict}
             found = False
             
 
@@ -594,7 +592,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                     #udp.syslog(msg)
                     traceback.print_exc()
 
-                log.info('final bit_dict for mbi '+str(mbi)+', mba '+str(mba)+', reg '+str(regadd)+': '+str(bit_dict))
+                log.info('bit_dict for mbi '+str(mbi)+', mba '+str(mba)+', reg '+str(regadd)+': '+str(bit_dict))
             
             # loop finished, finalize dictionaries
             if found:
@@ -602,9 +600,9 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                 mba_dict.update({mba : reg_dict})
                 mbi_dict.update({mbi : mba_dict})
             
-            # nested "do_change" dictionary ready, let's process
-            if mbi_dict != {}:
-                log.info('final mbi_dict: '+str(mbi_dict)) # make changes to these do channels at this time
+                # nested "do_change" dictionary ready, let's process
+            #if mbi_dict != {}:
+                log.info('mbi_dict: '+str(mbi_dict)) # make changes to these do channels at this time
                 for mbi in mbi_dict.keys(): # this key is string!
                     for mba in mbi_dict[mbi]: # this key is string!
                         for regadd in mbi_dict[mbi][mba]: # chk all output registers defined in dochannels table
@@ -612,7 +610,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                             for bit in mbi_dict[mbi][mba][regadd]: # chk all output registers defined in dochannels table
                                 bitvalue = mbi_dict[mbi][mba][regadd][bit]
                                 #word = s.bit_replace(word,bit,bitvalue) # change the necessary bit in the word directly!
-                                word = self.bit_replace(word,bit,bitvalue) # from the parent
+                                word = self.bit_replace(word, bit, bitvalue) # from the parent
 
                             respcode = mb[mbi].write(mba, regadd, value=word)
                             if respcode == 0:
@@ -623,19 +621,21 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
                                 msg = 'sync_do() FAILED to write register '+str(mba)+'.'+str(regadd)+', value '+str(value)+', respcode '+str(respcode)
                                 log.error(msg)
                                 res = (res | 2) # error bit
-                                return 2
-
+                                #return 2
+            #else:
+            #    log.info('sync_do found no diff between values in di, do tables') ##
+            
 
         except:
             msg = 'problem with dichannel grp select in write_do_channels! '+str(sys.exc_info()[1])
-            log.warning(msg)
+            log.error(msg)
             traceback.print_exc() # debug
             sys.stdout.flush()
             time.sleep(1)
             return 2
 
         conn.commit() # transaction end, perhaps not even needed - 2 reads, no writes...
-        #log.info('--do_sync end')
+        #log.info('--do_sync end') ##
         return res
 
 
@@ -723,6 +723,7 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         log.info('writing output bit for '+svc+'.'+str(member)+' to become '+str(value))
         #return s.setby_dimember_do(svc, member, value) # s.set_membervalue(svc,member,value,self.out_sql)
         res = self.setby_dimember_do(svc, member, value) # s.set_membervalue(svc,member,value,self.out_sql)
+        self.sync_do() ## prooviks
         if self.get_divalue(svc,member) != value:
             log.error('FAILED to set output bit to '+str(value)+' for svc '+str(svc)+'.'+str(member))
             res = 2

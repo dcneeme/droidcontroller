@@ -130,6 +130,10 @@ class MbusWaterMeter(object):
         self.async_reply(result)
 
     def async_reply(self, result):
-        print("    mbus result: " + str(result))
-        self.parse()
+        if result != None:
+            log.info("  mbus result: " + str(result))
+            self.parse()
+        else:
+            log.error("  mbus result: None!")
+        
 
