@@ -279,12 +279,18 @@ class PID:
             Added oct 2015: noint value other than 0 will stop integration in both directions.
 
             If actual and/or setpoint is not given, these should be defined and updated via set_actual(), setSetpoint() !
+        FIXME: add input values check / not list or none....
         '''
         if setpoint != None:
-            self.setPoint = setpoint # replacing setpoint if given
+            if 'int' in str(type(setpoint)) or 'float' in str(type(setpoint)):
+                self.setPoint = setpoint # replacing setpoint if given
+            else:
+                log.error('INVALID setpoint '+str(setpoint)+' for '+self.name)
         if actual != None:
-        #    da = actual - self.actual if self.actual != None else 0
-            self.actual = actual
+            if 'int' in str(type(actual)) or 'float' in str(type(actual)):
+                    self.actual = actual # replacing actual if given
+                else:
+                    log.error('INVALID actual '+str(actual)+' for '+self.name)
         self.extnoint = noint
         direction = ['down','','up'] # up or down / FIXME use enum here! add Limit class! reusable for everybody...
         try:
@@ -380,7 +386,7 @@ class PID:
             log.warning(self.name+' lo out and onlimit values do not match! out='+str(out)+', outMin='+str(self.outMin)+', onlimit='+str(self.onLimit))
             self.onLimit = -1 # fix possible self.error
 
-        log.debug(self.name+' sp '+str(round(self.setPoint))+', actual '+str(actual)+', out'+str(round(out))+', p '+str(round(self.Cp))+', i '+str(round(self.Ki * self.Ci))+', d '+str(round(self.Kd * self.Cd))+', onlimit'+str(self.onLimit))
+        log.debug(self.name+' sp '+str(round(self.setPoint))+', actual '+str(actual)+', out'+str(round(out))+', p '+str(round(self.Cp))+', i '+str(round(self.Ki * self.Ci))+', d '+str(round(self.Kd * self.Cd))+', onlimit'+str(self.onLimit)) # FIXME!
 
         if self.out != None:
             pout = round(out)
