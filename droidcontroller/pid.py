@@ -288,9 +288,9 @@ class PID:
                 log.error('INVALID setpoint '+str(setpoint)+' for '+self.name)
         if actual != None:
             if 'int' in str(type(actual)) or 'float' in str(type(actual)):
-                    self.actual = actual # replacing actual if given
-                else:
-                    log.error('INVALID actual '+str(actual)+' for '+self.name)
+                self.actual = actual # replacing actual if given
+            else:
+                log.error('INVALID actual '+str(actual)+' for '+self.name)
         self.extnoint = noint
         direction = ['down','','up'] # up or down / FIXME use enum here! add Limit class! reusable for everybody...
         try:
