@@ -102,6 +102,7 @@ class PID:
         ''' Sets proportional gain  '''
         if invar != None:
             self.Kp = invar
+            log.info(self.name+' Kp set to '+str(self.Kp))
         else:
             log.warning('ignored illegal Kp value None! keeping '+str(self.Kp))
 
@@ -115,6 +116,7 @@ class PID:
                 #self.Initialize() # enam pole vaja, sest meeles peame integraali Ki ja errori korrutisest  14.8.2016
             else:
                 self.Ki = invar
+                log.info(self.name+' Ki set to '+str(self.Ki))
         except:
             self.Ki = invar # no init needed
 
@@ -123,6 +125,7 @@ class PID:
         ''' Set derivative gain  '''
         if invar != None:
             self.Kd = invar
+            log.info(self.name+' Kd set to '+str(self.Kd))
         else:
             log.warning('ignored illegal Kd value None! keeping '+str(self.Kd))
 
