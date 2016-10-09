@@ -108,17 +108,11 @@ class PID:
 
     def setKi(self, invar):
         ''' Set integral gain and modify integral accordingly to avoid related jumps '''
-        try:
-            #print('trying to set new setKi '+str(invar)+' while existing Ki='+str(self.Ki)) # debug
-            if self.Ki > 0 and invar > 0 and self.Ki != invar:
-                log.info('setKi with initialize')
-                self.Ki = invar
-                #self.Initialize() # enam pole vaja, sest meeles peame integraali Ki ja errori korrutisest  14.8.2016
-            else:
-                self.Ki = invar
-                log.info(self.name+' Ki set to '+str(self.Ki))
-        except:
-            self.Ki = invar # no init needed
+        if invar != None:
+            self.Ki = invar
+            log.info(self.name+' Ki set to '+str(self.Ki))
+        else:
+            log.warning('ignored illegal Ki value None! keeping '+str(self.Ki))
 
 
     def setKd(self, invar):
