@@ -723,10 +723,10 @@ class Dchannels(SQLgeneral): # handles aichannels and aochannels tables
         log.info('writing output bit for '+svc+'.'+str(member)+' to become '+str(value))
         #return s.setby_dimember_do(svc, member, value) # s.set_membervalue(svc,member,value,self.out_sql)
         res = self.setby_dimember_do(svc, member, value) # s.set_membervalue(svc,member,value,self.out_sql)
-        self.sync_do() ## prooviks
-        if self.get_divalue(svc,member) != value:
-            log.error('FAILED to set output bit to '+str(value)+' for svc '+str(svc)+'.'+str(member))
-            res = 2
+        #self.sync_do() ## prooviks
+        #if self.get_divalue(svc,member) != value:
+        #    log.error('FAILED to set output bit to '+str(value)+' for svc '+str(svc)+'.'+str(member)) # KAHTLANE!
+        #    res = 2
         return res
         
     def set_doword(self,mba,regadd,value,mbi=0): # sets holding register without services involvment
