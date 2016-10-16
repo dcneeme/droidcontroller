@@ -13,14 +13,16 @@ log = logging.getLogger(__name__)
 class AI2pwm(object):
     ''' Takes an ai value, compares to setpoint and generates do bit value. Based on services in sql channel tables. '''
 
-    def __init__(self, ac, name='none', set=['C02W',2], act=['C02W',1], out=['V1W',1] min=20, max=95, inv=False): # svc - name, member
-        ''' One instance per pwm channel. Outpus pwm value to be used with it5888pwm  '''
+    def __init__(self, ac, name='none', set=['C02W',2], act=['C02W',1], out=['V1W',1], min=20, max=95, inv=False, bias=0xc000, deadband=1): # svc - name, member. 
+        ''' One instance per pwm channel. Generate pwm value to be used with it5888pwm. Based on services, no mbi mba regadd knowledge needed.
+            in order to modify the pid parameters, use set...  methods in PID class. Parameter bias is for it5888pwm periodics and phase control.
+        '''
         self.ac = ac
         self.name = name
         self.set = set # setpoint service member
         self.act = act # actual value service member
         self.out = out # output service member
-        self.hyst = hyst # hysteresis
+        self.deadband = deadband # hysteresis
         self.setval = None
         self.actval = None
         self.outval = None
@@ -34,6 +36,7 @@ class AI2pwm(object):
             self.ac.make_svc(self.act[0], send=False) # no svc send to monitoring
             self.setval = self.ac.get_aivalue(self.set[0], self.set[1])[0] # get_aivalue() returns tuple, lo hi included!
             self.actval = self.ac.get_aivalue(self.act[0], self.act[1])[0]
+            self.outval = self.d.get_divalue(self.out[0], self.out[1]) # current value without bias
             log.info(self.name+' readval got setval, actval '+str(self.setval)+', '+str(self.actval)+', set '+str(self.set)+', act'+', '+str(self.act)) ##
             return 0
         except:
@@ -45,10 +48,23 @@ class AI2pwm(object):
         ''' return output '''
         try:
             if self.setval != None and self.actval != None and self.outval != None:
-                return self.pid.output(self.actval, self.setval)
+                output = self.pid.output(self.actval, self.setval)
+                if output > self.outval + self.deadband or output < self.outval + self.deadband:
+                    log.info(self.name+' new pwm value '+str(output))
+                    self.ac.set_aosvc(self.out[0], self.out[1], output, raw = True) # svc, member, value, raw
+                    
         except:
             log.info(self.name+ ' output() problem!')
             traceback.print_exc()
             return None
+
+    def doall(self):
+        ''' do everythng to compare actual with setpoint and change the pwm value '''
+        res1 = self.readval()
+        res2 = self.output()
+        if res1 == 0 and res2 == 0:
+            return 0
+        else:
+            return 1
 
       
