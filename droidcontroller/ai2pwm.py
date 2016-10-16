@@ -34,18 +34,22 @@ class AI2pwm(object):
         ''' check input '''
         try:
             self.ac.make_svc(self.set[0], send=False) # generates values based on raw, does not send (otherwise about 3 min delay in true value!)
-            self.ac.make_svc(self.act[0], send=False) # no svc send to monitoring
             self.setval = self.ac.get_aivalue(self.set[0], self.set[1])[0] # get_aivalue() returns tuple, lo hi included!
             if 'list' in str(type(self.act)):  # one act channel
+                self.ac.make_svc(self.act[0], send=False) # no svc send to monitoring
                 self.actval = self.ac.get_aivalue(self.act[0], self.act[1])[0]
             elif 'tuple' in str(type(self.act)):  # more than one act, select the one with biggest abs value
                 actval = 0; self.actval = 0
                 for i in range(len(self.act)):
+                    self.ac.make_svc(self.act[0][0], send=False) # no svc send to monitoring
                     actval = self.ac.get_aivalue(self.act[0], self.act[i][1])[0]
                     if abs(actval) > abs(self.actval):
                         self.actval = actval
                 log.info(self.name+' selected self.actval '+str(self.actval)) ##
-            
+            else:
+                log.error(self.name+' act invalid type')
+                return 2
+                
             self.outval = self.d.get_divalue(self.out[0], self.out[1]) # current value without bias
             log.info(self.name+' readval got setval, actval '+str(self.setval)+', '+str(self.actval)+', set '+str(self.set)+', act'+', '+str(self.act)) ##
             return 0
