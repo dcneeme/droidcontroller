@@ -1,4 +1,5 @@
 # neeme 2016 universaalne, mbus_heatmeter alusel, peaks kolbama molema asemele
+# neeme 2016 universaalne, mbus_heatmeter alusel, peaks kolbama molema asemele
 # marko libmbus, python-mbus
 ## find out secondary address> mbus-serial-scan-secondary -b 2400 /dev/ttyUSB0
 #1501372977041407 koogu 20 water # FIXME ASYNC!
@@ -57,15 +58,18 @@ class MbusMeter(object):
             traceback.print_exc()
             time.sleep(3)
         self.modeldata = {} # define only  what's important, based on xml
+        self.modeldata.update({'kamstrup402old':
+            {1:['Energy (kWh)',1,'kWh'], 2:['Volume (m^3)',0.01,'m3'], 4:['Flow temperature (1e-1 deg C)',0.1,'ddegC'],
+            5:['Return temperature (1e-1 deg C)',0.1,'ddegC'], 6:['Temperature Difference (1e-1 deg C)',0.1,'ddegC'], 7:['Power (W)',100,'W'], 9:['Volume flow (l/h)',1,'l/h']}})
         self.modeldata.update({'kamstrup402':
-            {1:['Energy (kWh)',1,'kWh'], 2:['Volume (1e-2  m^3)',0.01,'m3'], 4:['Flow temperature (1e-2 deg C)',0.1,'ddegC'],
-            5:['Return temperature (1e-2 deg C)',0.1,'ddegC'], 6:['Temperature Difference (1e-2 deg C)',0.1,'ddegC'], 7:['Power (100 W)',100,'W'], 9:['Volume flow (m m^3/h)',1,'l/h']}})
+            {1:['Energy (kWh)',1,'kWh'], 2:['Volume (10 l)',1,'Dl'], 4:['Flow temperature (1e-1 deg C)',1,'ddegC'],
+            5:['Return temperature (1e-1 deg C)',1,'ddegC'], 6:['Temperature Difference (1e-1 deg C)',1,'ddegC'], 7:['Power (W)',100,'W'], 9:['Volume flow (l/h)',1,'l/h']}}) # tapsem
         self.modeldata.update({'kamstrup602':
             {1:['Energy (kWh)',1,'kWh'], 2:['Volume (1e-2  m^3)',0.01,'m3'], 4:['Flow temperature (1e-2 deg C)',0.1,'ddegC'],
-            5:['Return temperature (1e-2 deg C)',0.1,'ddegC'], 7:['Power (100 W)',100,'W'], 9:['Volume flow (m m^3/h)',1,'l/h']}})
+            5:['Return temperature (1e-1 deg C)',0.1,'ddegC'], 7:['Power (100 W)',100,'W'], 9:['Volume flow (l/h)',1,'l/h']}})
         self.modeldata.update({'axisSKU03':
             {5:['Energy (kWh)',1,'kWh'], 6:['Volume (l)',0.001,'m3'], 9:['Flow temperature (deg C)',10,'ddegC'],
-            10:['Return temperature (deg C)',10,'ddegC'], 7:['Power (W)',1000,'W'], 8:['Volume flow (l/h)',1000,'l/h']}})
+            10:['Return temperature ( 1e-1 deg C)',10,'ddegC'], 7:['Power (W)',1000,'W'], 8:['Volume flow (l/h)',1000,'l/h']}})
         self.modeldata.update({'cyble': {4:['Volume (l)',1,'l']}}) # water meter koogu20
         self.modeldata.update({'APA': {2:['Volume (l)',1,'l'], 3:['Volume flow (l/h))',1,'l']}}) # water meter vaatsakool
 
@@ -168,10 +172,10 @@ class MbusMeter(object):
         self.parse(result)
 
     ######## compatibility with main_karla, use this without msgbus  ####
-    def read(self): # into self.dict, sync!
+    def read(self, debug = False): # into self.dict, sync!
         ''' stores info self.dict variable. use read() before get_all() '''
         try:
-            res = self.read_sync()
+            res = self.read_sync(debug = debug)
             if res == 0:
                 self.nodes = self.dom.getElementsByTagName('Value')
                 return 0
@@ -183,11 +187,12 @@ class MbusMeter(object):
             return 2
 
     def parse1(self, id):
-        ''' Return one Value with matching id from self.nodes '''
+        ''' Return one Value with matching id from self.nodes AND SCALE! '''
         try:
             value = int(round(float(self.nodes[id].firstChild.nodeValue) * self.modeldata[self.model][id][1],0))
         except:
-            value = self.nodes[id].firstChild.nodeValue
+            log.error('parse1 failure using nodevalue '+str(self.nodes[id].firstChild.nodeValue)+'  and coeff '+str(self.modeldata[self.model][id][1],0))
+            value = None
         return value
 
     def find_id(self, name): # name is 'Energy', 'Volume flow' or smthg...
@@ -260,9 +265,11 @@ class MbusMeter(object):
         return None
 
 
-    def get_all(self): # kogu info nagemiseks vt self.xml
+    def get_all(self, debug = False): # kogu info nagemiseks vt self.xml
         out = {}
         conf = self.modeldata[self.model]
+        if debug or self.debug:
+            print(self.xml)
         if self.xml != '':
             for id in conf:
                 name = ''
