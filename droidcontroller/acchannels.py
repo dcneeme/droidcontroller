@@ -520,7 +520,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
     def sync_ao(self):
-        ''' Synchronizes AI registers with data in aochannels table '''
+        ''' Synchronizes raw if exists else value in aicochannels with data in aochannels table '''
         #print('write_aochannels start') # debug
         # and use write_register() write modbus registers  to get the desired result (all ao channels must be also defined in aichannels table!)
         respcode=0
@@ -544,7 +544,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             # 0      1   2    3        4      5    6      7
             #mba,regadd,bit,bootvalue,value,rule,desc,comment
 
-            Cmd="select "+self.out_sql+".mba,"+self.out_sql+".regadd,"+self.out_sql+".value,"+self.out_sql+".mbi from "+self.out_sql+" left join "+self.in_sql+" \
+            Cmd="select "+self.out_sql+".mba,"+self.out_sql+".regadd,"+self.out_sql+".raw,"+self.out_sql+".value,"+self.out_sql+".mbi from "+self.out_sql+" left join "+self.in_sql+" \
                 on "+self.out_sql+".mba = "+self.in_sql+".mba AND "+self.out_sql+".mbi = "+self.in_sql+".mbi AND "+self.out_sql+".regadd = "+self.in_sql+".regadd \
                 where "+self.out_sql+".value != "+self.in_sql+".value" #
             # the command above retrieves mba, regadd and value where values for mba, reagsdd, mbi do not match in aicochannels and aochannels
@@ -558,8 +558,12 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
                 mba = int(eval(row[0])) if row[0] != '' else None  #  0 # must be a number
                 regadd = int(eval(row[1])) if row[1] != '' else 0 # must be a number
-                value = int(eval(row[2])) if row[2] != '' else 0  # komaga nr voib olla, teha int!
-                mbi = row[3] if row[3] != None else 0  # mbi on num!
+                raw = int(eval(row[2])) if row[2] != '' else None  # kasuta sisendina raw, mitte value! value voib olla skaleeritud.
+                value = int(eval(row[3])) if row[3] != '' else 0  # kasuta ainult siis kui raw ''
+                mbi = row[3] if row[4] != None else 0  # mbi on num!
+                
+                if raw != None:
+                    value = raw # kasutame hoopis seda, et voimalik skaleeeritud tulemus jaaks monitooringu jaoks. s! teenustel aga value seadmine, siis raw=''! 
 
                 try:
                     if mb[mbi] and mba: # alpha innotek kasutab mba 0! modbustcp puhul voimalik
@@ -710,31 +714,34 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         #return s.set_membervalue(svc,member,value,self.in_sql,raw=True) # set raw, value will be calc by make_
         return self.set_membervalue(svc, member, value, self.in_sql, raw=True) # set raw, value will be calc by make_
 
-    def set_aovalue(self, value, mba, reg, mbi = 0):
+    def set_aovalue(self, value, mba, reg, mbi = 0, raw = False):
         ''' Write value to follow into aochannels table.
             The according modbus holding register will be written by sync_ao() until the according
-            aicochannels register contain the same value.
+            aicochannels register contain the same value. Updates raw instead of value if raw == True!
         '''
         #(mba,regadd,bootvalue,value,ts,rule,desc,comment)
         Cmd="BEGIN IMMEDIATE TRANSACTION" # conn
         conn.execute(Cmd)
-        Cmd="update "+self.out_sql+" set value='"+str(value)+"' where regadd='"+str(reg)+"' and mba='"+str(mba)+"' and mbi="+str(mbi) # mbi int
-        #print(Cmd)
+        if raw:
+            Cmd="update "+self.out_sql+" set raw='"+str(value)+"' where regadd='"+str(reg)+"' and mba='"+str(mba)+"' and mbi="+str(mbi) # raw update
+        else:
+            Cmd="update "+self.out_sql+" set value='"+str(value)+"' where regadd='"+str(reg)+"' and mba='"+str(mba)+"' and mbi="+str(mbi) # value update
+        #log.debug(Cmd)
         try:
             conn.execute(Cmd)
             conn.commit()
-            log.debug('set_aovalue value '+str(value)+' mba '+str(mba)+' regadd '+str(reg)) ##
+            #log.debug('set_aovalue value '+str(value)+' mba '+str(mba)+' regadd '+str(reg)) ##
             return 0
         except:
             msg='set_aovalue failure: '+str(sys.exc_info()[1])
             log.warning(msg)
-            #udp.syslog(msg)
             return 1  # update failure
 
 
-    def set_aosvc(self, svc, member, value): # to set a readable output channel by the service name and member using aicochannels table
-        ''' Set service member value by service name and member number, to be synced into holding register.
-            The aicochannels table must contain a similar input channel, to compare the result with.
+    def set_aosvc(self, svc, member, value, raw=False): # to set a readable output channel by the service name and member using aicochannels table
+        ''' Set service member value by service name and member number, to be synced into holding register. use for pwm too, adding 0xc000 to the pwm value in ms.
+            Both the aochannels and aicochannels tables must contain an according input channel (same mbi, mba, regadd), to compare the result with.
+            If raw == True then raw is set instead of value! use then make_svc(send=False) to sync value with raw.
         '''
         #(mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,comment,type integer) # ai
         Cmd = "BEGIN IMMEDIATE TRANSACTION"
@@ -751,7 +758,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 reg = int(row[1])
                 mbi = row[2]
                 log.debug('found mbi '+str(mbi)+', mba '+str(mba)+', reg '+str(reg)+' for svc '+svc+' member '+str(member)) ##
-                self.set_aovalue(value, mba, reg, mbi) # FIXME  mbi?  ON VAJA TEGELIKULT!
+                self.set_aovalue(value, mba, reg, mbi, raw=raw) # pwm puhul kasuta raw! value on nihkes vanemate bittide tottu!
                 conn.commit()
                 return 0
             except:
@@ -759,7 +766,6 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                 log.warning(msg)
                 #udp.syslog(msg)
                 return 1
-
 
 
     def report_all(self, svc = ''): # send the aico service messages to the monitoring server (only if fresh enough, not older than 2xappdelay). all or just one svc.
