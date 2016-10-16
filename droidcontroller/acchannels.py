@@ -978,7 +978,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                     raw = raw - (2**(wcount * 16))
                                     log.debug('converted to negative: '+str(raw)) # debug
 
-                            newvalue = self.scale(x1, x2, y1, y2, raw = raw)
+                            value = self.scale(x1, x2, y1, y2, raw = raw)
                             if value == None:
                                 log.error('val_reg '+val_reg+' member '+str(member)+', raw '+str(raw)+' ai2scale conversion NOT DONE!')
                                 rowproblem = 1 # this service will not be used in notification
@@ -1201,7 +1201,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         return mstatus
 
         
-    def scale(self, x1, x2, x3, x4, value = None, raw = None):
+    def scale(self, x1, x2, y1, y2, value = None, raw = None):
         ''' Returns value if raw != None and raw if value != None '''
         if x1 == x2 or y1 == y2 or x1 == None or x2 == None or y1 == None or y2 == None: # invalid svc setup
             log.warning('cannot scale, chk x1 '+str(x1)+', x2 '+str(x2)+', y1 '+str(y1)+', y2 '+str(y1))
