@@ -205,7 +205,7 @@ class PID:
     def setMax(self, invar):
         ''' Set upper limit for output    '''
         if invar != None and ('float' in str(type(invar)) or 'int' in str(type(invar))):
-            log.info('outMin set to '+str(invar))
+            log.info('outMax set to '+str(invar))
             self.outMax = invar
         else:
             log.error('INVALID value for outMax: '+str(invar))
