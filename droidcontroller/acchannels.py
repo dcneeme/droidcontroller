@@ -520,7 +520,7 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
     def sync_ao(self):
-        ''' Synchronizes raw if exists else value in aicochannels with data in aochannels table '''
+        ''' Writes aochannels value to io until the aicochannels raw value with the same mbi, mba, regadd equals to it '''
         #print('write_aochannels start') # debug
         # and use write_register() write modbus registers  to get the desired result (all ao channels must be also defined in aichannels table!)
         respcode=0
@@ -541,12 +541,12 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             Cmd="BEGIN IMMEDIATE TRANSACTION"
             conn.execute(Cmd)
 
-            # 0      1   2    3        4      5    6      7
-            #mba,regadd,bit,bootvalue,value,rule,desc,comment
-
-            Cmd="select "+self.out_sql+".mba,"+self.out_sql+".regadd,"+self.out_sql+".raw,"+self.out_sql+".value,"+self.out_sql+".mbi from "+self.out_sql+" left join "+self.in_sql+" \
+            #Cmd="select "+self.out_sql+".mba,"+self.out_sql+".regadd,"+self.out_sql+".value,"+self.out_sql+".mbi from "+self.out_sql+" left join "+self.in_sql+" \
+            #    on "+self.out_sql+".mba = "+self.in_sql+".mba AND "+self.out_sql+".mbi = "+self.in_sql+".mbi AND "+self.out_sql+".regadd = "+self.in_sql+".regadd \
+            #    where "+self.out_sql+".value != "+self.in_sql+".value" #
+            Cmd="select "+self.out_sql+".mba,"+self.out_sql+".regadd,"+self.out_sql+".value,"+self.out_sql+".mbi from "+self.out_sql+" left join "+self.in_sql+" \
                 on "+self.out_sql+".mba = "+self.in_sql+".mba AND "+self.out_sql+".mbi = "+self.in_sql+".mbi AND "+self.out_sql+".regadd = "+self.in_sql+".regadd \
-                where "+self.out_sql+".value != "+self.in_sql+".value" #
+                where "+self.out_sql+".value != "+self.in_sql+".raw" # syncing aico raw instead of former value!
             # the command above retrieves mba, regadd and value where values for mba, reagsdd, mbi do not match in aicochannels and aochannels
             #print "Cmd=",Cmd
             cur.execute(Cmd)
@@ -558,9 +558,8 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
                 mba = int(eval(row[0])) if row[0] != '' else None  #  0 # must be a number
                 regadd = int(eval(row[1])) if row[1] != '' else 0 # must be a number
-                raw = int(eval(row[2])) if row[2] != '' else None  # kasuta sisendina raw, mitte value! value voib olla skaleeritud.
-                value = int(eval(row[3])) if row[3] != '' else 0  # kasuta ainult siis kui raw ''
-                mbi = row[3] if row[4] != None else 0  # mbi on num!
+                value = int(eval(row[2])) if row[2] != '' else 0  # tegelikult raw
+                mbi = row[3] if row[3] != None else 0  # mbi on num!
                 
                 if raw != None:
                     value = raw # kasutame hoopis seda, et voimalik skaleeeritud tulemus jaaks monitooringu jaoks. s! teenustel aga value seadmine, siis raw=''! 
@@ -574,10 +573,10 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                             log.warning('FAILED write to modbus device mbi '+str(mbi)+', mba '+str(mba)+' regadd '+str(regadd))
                             return 1
                 except:
-                    log.warning('FAILED write to modbus device mbi '+str(mbi)+', mba '+str(mba)+' not defined in devices.sql?')
+                    log.warning('FAILED write to modbus device mbi '+str(mbi)+', mba '+str(mba))
                     return 2
 
-            conn.commit()  #  transaction end - why?
+            conn.commit()  #  transaction end 
             return 0
         except:
             msg = 'problem with sync_ao()!'
@@ -714,18 +713,15 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
         #return s.set_membervalue(svc,member,value,self.in_sql,raw=True) # set raw, value will be calc by make_
         return self.set_membervalue(svc, member, value, self.in_sql, raw=True) # set raw, value will be calc by make_
 
-    def set_aovalue(self, value, mba, reg, mbi = 0, raw = False):
+    def set_aovalue(self, value, mba, reg, mbi = 0):
         ''' Write value to follow into aochannels table.
             The according modbus holding register will be written by sync_ao() until the according
-            aicochannels register contain the same value. Updates raw instead of value if raw == True!
+            aicochannels register contain the same value.
         '''
         #(mba,regadd,bootvalue,value,ts,rule,desc,comment)
         Cmd="BEGIN IMMEDIATE TRANSACTION" # conn
         conn.execute(Cmd)
-        if raw:
-            Cmd="update "+self.out_sql+" set raw='"+str(value)+"' where regadd='"+str(reg)+"' and mba='"+str(mba)+"' and mbi="+str(mbi) # raw update
-        else:
-            Cmd="update "+self.out_sql+" set value='"+str(value)+"' where regadd='"+str(reg)+"' and mba='"+str(mba)+"' and mbi="+str(mbi) # value update
+        Cmd="update "+self.out_sql+" set raw='"+str(value)+"' where regadd='"+str(reg)+"' and mba='"+str(mba)+"' and mbi="+str(mbi) # raw update
         #log.debug(Cmd)
         try:
             conn.execute(Cmd)
@@ -739,26 +735,37 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
 
 
     def set_aosvc(self, svc, member, value, raw=False): # to set a readable output channel by the service name and member using aicochannels table
-        ''' Set service member value by service name and member number, to be synced into holding register. use for pwm too, adding 0xc000 to the pwm value in ms.
+        ''' Set service member value by service name and member number, to be synced into holding register. 
+            use for pwm too, adding 0xc000 or anything defined in svc scaling (x1, x2, y1, y2) to the pwm value.
             Both the aochannels and aicochannels tables must contain an according input channel (same mbi, mba, regadd), to compare the result with.
-            If raw == True then raw is set instead of value! use then make_svc(send=False) to sync value with raw.
+            Use scaling in aicochannels, as the raw will be compared to the value written in sync_ao()!
         '''
         #(mba,regadd,val_reg,member,cfg,x1,x2,y1,y2,outlo,outhi,avg,block,raw,value,status,ts,desc,comment,type integer) # ai
         Cmd = "BEGIN IMMEDIATE TRANSACTION"
         conn.execute(Cmd)
-        Cmd = "select mba, regadd, mbi from "+self.in_sql+" where val_reg='"+svc+"' and member='"+str(member)+"'"
+        Cmd = "select mba, regadd, mbi, x1, x2, y1, y2 from "+self.in_sql+" where val_reg='"+svc+"' and member='"+str(member)+"'"
         cur = conn.cursor()
         cur.execute(Cmd)
         mba = None
         reg = None
         mbi = None
+        x1 = None
+        x2 = None
+        y1 = None
+        y2 = None
         for row in cur: # should be one row only
             try:
                 mba = int(row[0])
                 reg = int(row[1])
                 mbi = row[2]
+                x1 = row[3]
+                x2 = row[4]
+                y1 = row[5]
+                y2 = row[6]
+                value = self.scale(x1, x2, y1, y2, value = value) # recalc to be raw
                 log.debug('found mbi '+str(mbi)+', mba '+str(mba)+', reg '+str(reg)+' for svc '+svc+' member '+str(member)) ##
-                self.set_aovalue(value, mba, reg, mbi, raw=raw) # pwm puhul kasuta raw! value on nihkes vanemate bittide tottu!
+                self.set_aovalue(value, mba, reg, mbi) # pwm puhul kasuta raw! value on nihkes vanemate bittide tottu!
+                log.info('ao value set to '+str(value)+' based on '+svc+'.'+str(member)+' value/raw scaling')
                 conn.commit()
                 return 0
             except:
@@ -971,16 +978,11 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
                                     raw = raw - (2**(wcount * 16))
                                     log.debug('converted to negative: '+str(raw)) # debug
 
-
-                            if x1 != x2 and y1 != y2: # seems like normal input data, also not state from power
-                                value = (raw - x1) * (y2 - y1) / (x2 - x1)
-                                value = int(round(y1 + value)) # integer values to be reported only
-                            else:
-                                #log.debug('val_reg '+val_reg+' member '+str(member)+', raw '+str(raw)+' ai2scale conversion NOT DONE! using value = raw ='+str(raw))
+                            newvalue = self.scale(x1, x2, y1, y2, raw = raw)
+                            if value == None:
                                 log.error('val_reg '+val_reg+' member '+str(member)+', raw '+str(raw)+' ai2scale conversion NOT DONE!')
-                                ##value = None # do not change previous data until stalled
                                 rowproblem = 1 # this service will not be used in notification
-                                ## binary services defined in aicochannels must have x1 x2 y1 y2! 0 1 0 1
+                                ## binary services if defined in aicochannels must have x1 x2 y1 y2! 0 1 0 1
 
 
                         if value != None and avg != None and ovalue != None:
@@ -1198,7 +1200,26 @@ class ACchannels(SQLgeneral): # handles aichannels and counters, modbus register
             pass
         return mstatus
 
+        
+    def scale(self, x1, x2, x3, x4, value = None, raw = None):
+        ''' Returns value if raw != None and raw if value != None '''
+        if x1 == x2 or y1 == y2 or x1 == None or x2 == None or y1 == None or y2 == None: # invalid svc setup
+            log.warning('cannot scale, chk x1 '+str(x1)+', x2 '+str(x2)+', y1 '+str(y1)+', y2 '+str(y1))
+            return None
+            
+        if value == None and raw != None:
+            value = (raw - x1) * (y2 - y1) / (x2 - x1)
+            value = int(round(y1 + value)) # integer values to be reported only
+            return value
+        elif value != None and raw == None:
+            raw = (value - y1) * (x2 - x1) / (y2 - y1)
+            raw = int(round(x1 + raw)) # integer values to be reported only
+            return raw
+        else:
+            print.warning('invalid parameters to scale(), value '+str(value)+', raw '+str(raw))
+            return None
 
+            
     def doall(self): # do this regularly, executes only if time is right
         ''' Does everything that is regularly needed in this class on time if executed often enough.
             Do not report too after early, counters may get restored from server.
