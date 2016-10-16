@@ -13,7 +13,7 @@ class IT5888pwm(object):
     def __init__(self, d, mbi=0, mba=1, name='IT5888', period=1000, bits=[8], phases=[0], periodics=[True], per_reg=150):
         ''' One instance per I/O-module, as period is shared! Define the PWM channels via the bits list.
             Do not include channels not used in pwm into bits list!
-            The pwm signal channel is inverted if static output bit is active!
+            NB! The pwm signal channel is inverted if static output bit (in reg 0) is active!
         '''
         self.d = d
         self.bits = bits # channel list
